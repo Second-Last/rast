@@ -127,13 +127,13 @@ indicates `3` units of potential should be passed to f.
 
 ```
 % ... \n
-\(* ... *\)  (multiline, properly nested)
+(* ... *)  (multiline, properly nested)
 ```
 
 ### Syntax
 
-```
-<id_start> = [a-zA-Z_$?!\']
+```verbatim
+<id_start> = [a-zA-Z_$?!']
 <id> = <id_start> (<id_start> | [0-9])*
 <nat> = ([0-9])*
 <binop> = + | - | *
@@ -155,8 +155,8 @@ indicates `3` units of potential should be passed to f.
          | | [<idx>] > <type>   % Provide potential <arith> (default: 1)
          | < [<idx>] | <type>   % Obtain potential <arith> (default: 1)
          | <id> <idx_seq>
-         | ? <con>. <type>      % Provider send \'proof\' of <prop>
-         | ! <con>. <type>      % Provider receives \'proof\' of <prop>
+         | ? <con>. <type>      % Provider send 'proof' of <prop>
+         | ! <con>. <type>      % Provider receives 'proof' of <prop>
 
 <idx_seq> ::=  | <idx> <idx_seq>
 
@@ -187,8 +187,8 @@ indicates `3` units of potential should be passed to f.
 
         | delay [<idx>] ; <exp> % delay by one clock tick
         | tick ; <exp>          % one clock tick in cost model
-        | when<dir> ; <exp>     % wait for \'now\' message
-        | now<dir> ; <exp>      % send \'now\' message
+        | when<dir> ; <exp>     % wait for 'now' message
+        | now<dir> ; <exp>      % send 'now' message
 
         | work [<idx>] ; <exp>          % spend one token
         | get<dir> [<idx>] ; <exp>      % receive one token
