@@ -6,57 +6,62 @@ numbers in Presburger arithmetic and termination checking.
 
 This is the subsingleton version of recent ICFP and LICS papers, see
 
-http://www.cs.cmu.edu/~fp/papers/icfp18.pdf
-http://www.cs.cmu.edu/~fp/papers/lics18.pdf
+[Parallel Complexity Analysis with Temporal Session Types](http://www.cs.cmu.edu/~fp/papers/icfp18.pdf)
+[Work Analysis with Resource-Aware Session Types](http://www.cs.cmu.edu/~fp/papers/lics18.pdf)
 
 Authors:
-  Ankush Das
-  Farzaneh Derakhshan
-  Frank Pfenning
+- Ankush Das
+- Farzaneh Derakhshan
+- Frank Pfenning
+
+## Building ss
 
 Requires Standard ML, mlton to build binaries
 
 For building a binary (with mlton):
 
+```
+% cd src
 % make ss
 % ./ss ../examples/icfp18/sec7i.ss
 % ./ss -h
+```
 
 or for interactive top level (with SML/NJ):
 
+```
 % sml
 - CM.make "sources.cm";
 - Top.ss "../examples/icfp18/sec7i.ss";
 
 % make clean
+```
 
 For regression testing:
 
+```
 % make ss-test
 % ./ss-test ../tests/*/*.ss ../examples/*/*.ss
 % ./ss-test -h
+```
 
-Examples
-========
+## Examples
 
-icfp18/*.ss    - mostly temporal, see http://www.cs.cmu.edu/~fp/papers/icfp18.pdf
-lics18/*.ss    - mostly ergometric, see http://www.cs.cmu.edu/~fp/papers/lics18.pdf
-binarith/*.ss  - binary arithmetic
-modarith/*.ss  - modular binary arithmetic
-turing/*.ss    - some primitive recursive functions as Turing machines
+- `icfp18/*.ss`    - mostly temporal, see http://www.cs.cmu.edu/~fp/papers/icfp18.pdf
+- `lics18/*.ss`    - mostly ergometric, see http://www.cs.cmu.edu/~fp/papers/lics18.pdf
+- `binarith/*.ss`  - binary arithmetic
+- `modarith/*.ss`  - modular binary arithmetic
+- `turing/*.ss`    - some primitive recursive functions as Turing machines
 
-Tests
-=====
+## Tests
 
-types/*.ss       - testing the type checker
-termination/*.ss - testing the termination checker
+- `types/*.ss`       - testing the type checker
+- `termination/*.ss` - testing the termination checker
+- `ztests/*/*.ss`  - tests that fail due to various restriction and sources of incompleteness
 
-ztests/*/*.ss  - tests that fail due to various restriction and sources of
-                 incompleteness
+## Options to ./ss
 
-Options to ./ss
-===============
-
+```
 -q quiet   (verbosity = 0) 
 -v verbose (verbosity = 1)
 -d debug   (verbosity = 2)
@@ -80,28 +85,31 @@ Options to ./ss
 --terminate=none   perform no termination checking (default)
 --terminate=equi   will perform termination checking on equirecursive code
 --terminate=iso    will perform termination checking on isorecursive code
+```
 
 Currently, the implementation cannot perform both time
-and work reconstruction on the same source: with --syntax=implicit
-either time or work must be 'none'
+and work reconstruction on the same source: with `--syntax=implicit`
+either time or work must be `none`
 
-=======
-Grammar 
-=======
+## Grammar 
 
-typed cut '{<type>}' or untyped cut '||'
+typed cut `{<type>}` or untyped cut `||`
 are right associative and bind more
-tightly than ';'
+tightly than `;`
 
+```
    L.a ; L.b ; f || R.c ; g
 => L.a ; (L.b ; (f || (R.c ; g)))
 
    L.a ; L.b ; <-> {A} R.c ; g
 => L.a ; (L.b ; (<-> {A} (R.c ; g)))
+```
 
 In arithmetic expressions, operator precedence is as follows.
 
+```
 * > + = -
+```
 
 All operators are left associative.
 
@@ -111,18 +119,19 @@ internal choice type
 
 A typed cut may be annotated with the
 potential of the process on the left.  For example
-f {|{3}- bits} g
-indicates 3 units of potential should be passed to f.
+`f {|{3}- bits} g`
+indicates `3` units of potential should be passed to f.
 
-Comment syntax
-==============
+### Comment syntax
 
+```
 % ... \n
 (* ... *)  (multiline, properly nested)
+```
 
-Identifiers
-===========
+### Syntax
 
+```
 <id_start> = [a-zA-Z_$?!']
 <id> = <id_start> (<id_start> | [0-9])*
 <nat> = ([0-9])*
@@ -209,3 +218,4 @@ Identifiers
            | #test <outcome>\n'
 
 <prog> ::= <pragma>* <decl>*
+```
