@@ -98,7 +98,7 @@ typed cut `{<type>}` or untyped cut `||`
 are right associative and bind more
 tightly than `;`
 
-```
+```text
    L.a ; L.b ; f || R.c ; g
 => L.a ; (L.b ; (f || (R.c ; g)))
 
@@ -108,7 +108,7 @@ tightly than `;`
 
 In arithmetic expressions, operator precedence is as follows.
 
-```
+```text
 * > + = -
 ```
 
@@ -125,97 +125,99 @@ indicates `3` units of potential should be passed to f.
 
 ### Comment syntax
 
-```
+```text
 % ... \n
 (* ... *)  (multiline, properly nested)
 ```
 
 ### Syntax
 
-    <id_start> = [a-zA-Z_$?!']
-    <id> = <id_start> (<id_start> | [0-9])*
-    <nat> = ([0-9])*
-    <binop> = + | - | *
-    <arith> = <nat> | <id> | <arith> <binop> <arith> | (<arith>)
-    <rel> = > | >= | = | <= | <
-    <prop> = <arith> <rel> <arith>
+```text
+<id_start> = [a-zA-Z_$?!']
+<id> = <id_start> (<id_start> | [0-9])*
+<nat> = ([0-9])*
+<binop> = + | - | *
+<arith> = <nat> | <id> | <arith> <binop> <arith> | (<arith>)
+<rel> = > | >= | = | <= | <
+<prop> = <arith> <rel> <arith>
 
-    <idx> ::= { <arith> }
+<idx> ::= { <arith> }
 
-    <con> ::= { <prop> }
+<con> ::= { <prop> }
 
-    <type> ::= 1
-             | + { <choices> }
-             | & { <choices> }
-             | ( [<idx>] ) <type>   % Next
-             | ` <type>             % Next, from cost model
-             | [ ] <type>           % Always
-             | < > <type>           % Eventually
-             | | [<idx>] > <type>   % Provide potential <arith> (default: 1)
-             | < [<idx>] | <type>   % Obtain potential <arith> (default: 1)
-             | <id> <idx_seq>
-             | ? <con>. <type>      % Provider send 'proof' of <prop>
-             | ! <con>. <type>      % Provider receives 'proof' of <prop>
+<type> ::= 1
+         | + { <choices> }
+         | & { <choices> }
+         | ( [<idx>] ) <type>   % Next
+         | ` <type>             % Next, from cost model
+         | [ ] <type>           % Always
+         | < > <type>           % Eventually
+         | | [<idx>] > <type>   % Provide potential <arith> (default: 1)
+         | < [<idx>] | <type>   % Obtain potential <arith> (default: 1)
+         | <id> <idx_seq>
+         | ? <con>. <type>      % Provider send 'proof' of <prop>
+         | ! <con>. <type>      % Provider receives 'proof' of <prop>
 
-    <idx_seq> ::=  | <idx> <idx_seq>
+<idx_seq> ::=  | <idx> <idx_seq>
 
-    <choices> ::= <label> : <type>
-                | <label> : <type>, <choices>
+<choices> ::= <label> : <type>
+            | <label> : <type>, <choices>
 
-    <type_opt> ::= <type>
-                 | .
+<type_opt> ::= <type>
+             | .
 
-    <turnstile> ::= |-              % zero potential
-                  | | <idx> -       % with potential <arith>
-    <dir> ::= L | R
-    <sr>  ::= ! | ?
+<turnstile> ::= |-              % zero potential
+              | | <idx> -       % with potential <arith>
+<dir> ::= L | R
+<sr>  ::= ! | ?
 
-    <exp> ::= <exp> [ [<turnstile>] <type> ] <exp> % typed cut
-            | <exp> || <exp>        % spawn, left exp must be <id>
-            | <->
-            | <dir>.<label> ; <exp>
-            | case<dir> ( <branches> )
-            | closeR
-            | waitL ; <exp>
+<exp> ::= <exp> [ [<turnstile>] <type> ] <exp> % typed cut
+        | <exp> || <exp>        % spawn, left exp must be <id>
+        | <->
+        | <dir>.<label> ; <exp>
+        | case<dir> ( <branches> )
+        | closeR
+        | waitL ; <exp>
 
-            | <id> <idx_seq>
-            | assert<dir> <con> ; <exp> 
-            | impossible<dir> <con>
-            | assume<dir> <con> ; <exp>
-            | ( <exp> )
+        | <id> <idx_seq>
+        | assert<dir> <con> ; <exp> 
+        | impossible<dir> <con>
+        | assume<dir> <con> ; <exp>
+        | ( <exp> )
 
-            | delay [<idx>] ; <exp> % delay by one clock tick
-            | tick ; <exp>          % one clock tick in cost model
-            | when<dir> ; <exp>     % wait for 'now' message
-            | now<dir> ; <exp>      % send 'now' message
+        | delay [<idx>] ; <exp> % delay by one clock tick
+        | tick ; <exp>          % one clock tick in cost model
+        | when<dir> ; <exp>     % wait for 'now' message
+        | now<dir> ; <exp>      % send 'now' message
 
-            | work [<idx>] ; <exp>          % spend one token
-            | get<dir> [<idx>] ; <exp>      % receive one token
-            | pay<dir> [<idx>] ; <exp>      % send one token
+        | work [<idx>] ; <exp>          % spend one token
+        | get<dir> [<idx>] ; <exp>      % receive one token
+        | pay<dir> [<idx>] ; <exp>      % send one token
 
-    % not implemented
-    %        | unfold<sr><dir> ; <exp>  % send or receive unfold
+% not implemented
+%        | unfold<sr><dir> ; <exp>  % send or receive unfold
 
-    <branches> ::= <label> => <exp>
-                 | <label> => <exp> | <branches>
+<branches> ::= <label> => <exp>
+             | <label> => <exp> | <branches>
 
-    <var> ::= _ | <id>
+<var> ::= _ | <id>
 
-    <var_seq> ::=
-               | { <var> } <var_seq>
-               | { <var> | <prop> } <var_seq>
+<var_seq> ::=
+           | { <var> } <var_seq>
+           | { <var> | <prop> } <var_seq>
 
-    <decl> ::= type <id> <var_seq> = <type>
-             | eqtype <id> <idx_seq> = <id> <idx_seq>
-             | proc <id> <var_seq> : [ <type_opt> <turnstile> ] <type>
-             | proc <id> <var_seq> = <exp>
-             | exec <id>
+<decl> ::= type <id> <var_seq> = <type>
+         | eqtype <id> <idx_seq> = <id> <idx_seq>
+         | proc <id> <var_seq> : [ <type_opt> <turnstile> ] <type>
+         | proc <id> <var_seq> = <exp>
+         | exec <id>
 
-    <outcome> ::= error
-                | success
+<outcome> ::= error
+            | success
 
-    <pragma> ::= #options <command line option>\n
-               | #test <outcome>\n
+<pragma> ::= #options <command line option>\n
+           | #test <outcome>\n
 
-    <prog> ::= <pragma>* <decl>*
+<prog> ::= <pragma>* <decl>*
+```
 
