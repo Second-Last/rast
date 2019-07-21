@@ -94,7 +94,7 @@ either time or work must be `none`
 
 ## Grammar 
 
-typed cut `{<type>}` or untyped cut `||`
+typed cut `[<type>]` or untyped cut `||`
 are right associative and bind more
 tightly than `;`
 
@@ -102,8 +102,8 @@ tightly than `;`
    L.a ; L.b ; f || R.c ; g
 => L.a ; (L.b ; (f || (R.c ; g)))
 
-   L.a ; L.b ; <-> {A} R.c ; g
-=> L.a ; (L.b ; (<-> {A} (R.c ; g)))
+   L.a ; L.b ; <-> [A] R.c ; g
+=> L.a ; (L.b ; (<-> [A] (R.c ; g)))
 ```
 
 In arithmetic expressions, operator precedence is as follows.
@@ -120,7 +120,7 @@ internal choice type
 
 A typed cut may be annotated with the
 potential of the process on the left.  For example
-`f {|{3}- bits} g`
+`f [|{3}- bits] g`
 indicates `3` units of potential should be passed to f.
 
 ### Comment syntax
