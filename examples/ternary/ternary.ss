@@ -44,7 +44,6 @@ proc dbl = caseL ( m1 => R.p1 ; dbl || dec
                  | e => R.e ; <-> )
 
 proc eight : ternary
-% proc eight = zero || inc || inc || inc || inc || inc || inc || inc || inc
 proc eight = one || dbl || dbl || dbl
 exec eight
 
@@ -113,3 +112,49 @@ exec nineteen_3
 proc what : binary
 proc what = m_eight || tern2bin
 exec what
+
+type sbin = +{ pos : binary, zero : binary, neg : binary }
+
+% 3*(+n) = +(3*n)
+% 3*($0) = $(3*0)
+% 3*(-n) = -(3*n)
+proc stimes3 : sbin |- sbin
+proc stimes3 = caseL ( pos => R.pos ; times3
+                     | zero => R.zero ; <->    % or R.zero ; times3
+                     | neg => R.neg ; times3 )
+
+% requires: if input = +n then n > 1
+% (+n)-1 = +(n-1) for n > 1
+% ($0)-1 = -(0+1)
+% (-n)-1 = -(n+1)
+proc spred : sbin |- sbin
+proc spred = caseL ( pos => R.pos ; pred
+                   | zero => R.neg ; succ
+                   | neg => R.neg ; succ )
+
+% requires: if input = -n, then n > 1
+% (+n)+1 = +(n+1)
+% ($0)+1 = +(0+1)
+% (-n)+1 = -(n-1) for n > 1
+proc ssucc : sbin |- sbin
+proc ssucc = caseL ( pos => R.pos ; succ
+                   | zero => R.pos ; succ
+                   | neg => R.neg ; pred )
+
+% $0
+proc szero : sbin
+proc szero = R.zero ; R.e ; closeR
+
+proc tern2sbin : ternary |- sbin
+proc tern2sbin = caseL ( m1 => tern2sbin || stimes3 || spred
+                       | z0 => tern2sbin || stimes3
+                       | p1 => tern2sbin || stimes3 || ssucc
+                       | e => waitL ; szero )
+
+proc nineteen_s2 : sbin
+proc nineteen_s2 = nineteen_3 || tern2sbin
+exec nineteen_s2
+
+proc m_eight_s2 : sbin
+proc m_eight_s2 = m_eight || tern2sbin
+exec m_eight_s2
