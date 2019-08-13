@@ -67,7 +67,7 @@ proc succ = caseL ( b0 => R.b1 ; <->
                   | e => R.b1 ; R.e ; <-> )
 
 proc pred = caseL ( b0 => R.b1 ; pred  % (2n+0)-1 = 2(n-1)+1
-                  | b1 => R.b0 ; <->
+                  | b1 => R.b0 ; <->  % may create leading b0
                   | e => R.e ; <-> )  % 0-1 = 0, by definition
 
 % 3*(2n+0) = 6*n   = 2(3*n)+0
@@ -116,7 +116,7 @@ exec what
 type sbin = +{ pos : binary, zero : binary, neg : binary }
 
 % 3*(+n) = +(3*n)
-% 3*($0) = $(3*0)
+% 3*($0) = $0
 % 3*(-n) = -(3*n)
 proc stimes3 : sbin |- sbin
 proc stimes3 = caseL ( pos => R.pos ; times3
@@ -158,3 +158,18 @@ exec nineteen_s2
 proc m_eight_s2 : sbin
 proc m_eight_s2 = m_eight || tern2sbin
 exec m_eight_s2
+
+% could also split bin2tern into bin2tern_pos and bin2tern_neg
+proc sbin2tern : sbin |- ternary
+proc sbin2tern = caseL ( pos => bin2tern
+                       | zero => bin2tern
+                       | neg => bin2tern || neg )
+
+proc sneg : sbin |- sbin
+proc sneg = caseL ( pos => R.neg ; <->
+                  | zero => R.zero ; <->
+                  | neg => R.pos ; <-> )
+
+proc m_nineteen : ternary
+proc m_nineteen = nineteen_s2 || sneg || sbin2tern
+exec m_nineteen
