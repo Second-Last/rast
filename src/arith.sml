@@ -33,6 +33,7 @@ sig
     exception NotClosed
 
     (* contexts and variables *)
+    val anon : string -> bool
     val closed : ctx -> arith -> bool
     val closed_prop : ctx -> prop -> bool
 
@@ -56,9 +57,11 @@ sig
 
     (* Presburger arithmetic *)
     exception NonLinear
+    (* Anonymous variables *)
+    exception Anonymous
 
     type nnf = prop                   (* propositions in negation normal form *)
-    val nnf : prop -> nnf             (* may raise NonLinear *)
+    val nnf : prop -> nnf             (* may raise NonLinear or Anonymous *)
     val elim : varname -> prop -> nnf (* elim x F = G where (exists x. F) <=> G *)
     val elim_nnf : varname -> nnf -> nnf
     val elim_vars : varname list -> nnf -> nnf
@@ -110,11 +113,13 @@ type ctx = varname list
 type subst = (varname * arith) list
 exception NotClosed
 
+fun anon v = String.sub (v,0) = #"_"
+
 fun closed ctx (Int(n)) = true
   | closed ctx (Add(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed ctx (Sub(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed ctx (Mult(e1,e2)) = closed ctx e1 andalso closed ctx e2
-  | closed ctx (Var(v)) = List.exists (fn v' => v = v') ctx
+  | closed ctx (Var(v)) = anon v orelse List.exists (fn v' => v = v') ctx
 
 fun closed_list ctx nil = true
   | closed_list ctx (e::es) = closed ctx e andalso closed_list ctx es
@@ -163,6 +168,7 @@ fun zip ctx es = ListPair.zipEq (ctx, es)
 (* assumed sg : ctx and ctx |- v' nat *)
 fun find ((v,e)::sg) v' =
     if (v = v') then e else find sg v'
+  | find nil v' = if anon v' then Var(v') else raise Match
 
 (* apply sg e = [sg]e *)
 (* assumes sg : ctx and ctx |- e : int *)
@@ -265,6 +271,7 @@ end (* structure Print *)
 
 type nnf = prop
 exception NonLinear
+exception Anonymous
 
 (* is_prod (k*x) where integer k may be 0 *)
 (* write p for products *)
@@ -331,7 +338,8 @@ fun linearize (s as Int(k)) = s
   | linearize (Add(s,t)) = add (linearize s) (linearize t)
   | linearize (Sub(s,t)) = sub (linearize s) (linearize t)
   | linearize (Mult(s,t)) = mult (linearize s) (linearize t)
-  | linearize (Var(x)) = Add(Mult(Int(1),Var(x)), Int(0))
+  | linearize (Var(x)) = if anon x then raise Anonymous
+                         else Add(Mult(Int(1),Var(x)), Int(0))
 
 (* isolating a variable x in a term *)
 
@@ -502,7 +510,7 @@ fun subst_prop x t (Lt(Add(Mult(Int(k),Var(x')),s), z)) = (* x = x', z = 0 *)
   | subst_prop x t (Divides(n,Add(Mult(Int(k),Var(x')),s))) = (* x = x' *)
     if k = 0 then Divides(n, s)
     else Divides(n, add (mult_const k t) s) (* k = 1 or k = -1 *)
-  | subst_prop x t (Not(F)) = Not(subst_prop x t F)
+  | subst_prop x t (Not(F)) = Not(subst_prop x t F) (* F = (n | s) *)
   | subst_prop x t (True) = True
   | subst_prop x t (False) = False
   | subst_prop x t (Or(F,G)) = Or(subst_prop x t F, subst_prop x t G)

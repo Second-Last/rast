@@ -1,5 +1,5 @@
 #options --time=free --syntax=explicit
-#test success
+#test approx success
 
 (* Balanced ternary representation with parallel time,
  * achieved by bounding the size of ternary numbers.

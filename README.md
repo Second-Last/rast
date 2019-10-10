@@ -214,6 +214,8 @@ indicates `3` units of potential should be passed to f.
 
 <outcome> ::= error
             | success
+            | approx success
+            | approx error
 
 <pragma> ::= #options <command line option>\n
            | #test <outcome>\n

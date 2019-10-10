@@ -75,6 +75,10 @@ fun entails ctx con phi =
                  ; true )
              else (* no: definitely not valid *)
                  false
+            | R.Anonymous =>
+                ( TextIO.print ("Constraint: " ^ pp_jhold con phi ^ "\n")
+                ; approx := true
+                ; true )
     )
 
 (* hardentails ctx con phi = true if ctx ; con |= phi *)
@@ -85,7 +89,8 @@ fun entails ctx con phi =
 fun hardentails ctx con phi =
     ( if !Flags.verbosity >= 3 then TextIO.print ("Testing: " ^ pp_jhold con phi ^ "\n") else ()
     ; R.valid ctx con phi
-      handle R.NonLinear => false        
+      handle R.NonLinear => false
+           | R.Anonymous => false        
     )
 
 (* constraint equivalence, called in type equality *)
@@ -111,6 +116,10 @@ fun contradictory ctx con phi =
                  ; true )
              else (* no: definitely not contradictory *)
                  false
+           | R.Anonymous =>
+              ( TextIO.print ("Constraint: " ^ pp_junsat con phi ^ "\n")
+              ; approx := true
+              ; true )
     )
 
 end (* structure Constraints *)
