@@ -128,12 +128,13 @@ fun drop_anon (Int(n)) = Int(n)
 fun drop_anon_prop (Eq(e1,e2)) = Eq(drop_anon e1, drop_anon e2)
   | drop_anon_prop (Lt(e1,e2)) = Lt(drop_anon e1, drop_anon e2)
   | drop_anon_prop (Gt(e1,e2)) = Gt(drop_anon e1, drop_anon e2)
-  | drop_anon_prop (Ge(e1,e2)) = Ge(drop_anon e1, drop_anon e2)
   | drop_anon_prop (Le(e1,e2)) = Le(drop_anon e1, drop_anon e2)
+  | drop_anon_prop (Ge(e1,e2)) = Ge(drop_anon e1, drop_anon e2)
   | drop_anon_prop (Divides(n,e)) = Divides(n, drop_anon e)
   | drop_anon_prop (True) = True
   | drop_anon_prop (False) = False
   | drop_anon_prop (Or(F,G)) = Or(drop_anon_prop F, drop_anon_prop G)
+  | drop_anon_prop (And(F,G)) = And(drop_anon_prop F, drop_anon_prop G)
   | drop_anon_prop (Implies(F,G)) = Implies(drop_anon_prop F, drop_anon_prop G)
   | drop_anon_prop (Not(F)) = Not(drop_anon_prop F)
 
@@ -149,12 +150,13 @@ fun closed_list ctx nil = true
 fun closed_prop ctx (Eq(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed_prop ctx (Lt(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed_prop ctx (Gt(e1,e2)) = closed ctx e1 andalso closed ctx e2
-  | closed_prop ctx (Ge(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed_prop ctx (Le(e1,e2)) = closed ctx e1 andalso closed ctx e2
+  | closed_prop ctx (Ge(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed_prop ctx (Divides(n,e)) = closed ctx e
   | closed_prop ctx (True) = true
   | closed_prop ctx (False) = false
   | closed_prop ctx (Or(F,G)) = closed_prop ctx F andalso closed_prop ctx G
+  | closed_prop ctx (And(F,G)) = closed_prop ctx F andalso closed_prop ctx G
   | closed_prop ctx (Implies(F,G)) = closed_prop ctx F andalso closed_prop ctx G
   | closed_prop ctx (Not(F)) = closed_prop ctx F
 
@@ -337,7 +339,7 @@ fun mult_prod_prod (Mult(Int(0), _)) (Mult _) = Int(0) (* save linearity *)
 (* mult_prod p t = lin(p * t) *)
 (* raises NonLinear if result is not linear *)
 fun mult_prod p (Add(p',t)) = add (mult_prod_prod p p') (mult_prod p t)
-  | mult_prod (Mult(Int(k),Var(x))) (Int(k')) = Mult(Int(k*k'),Var(x))
+  | mult_prod (Mult(Int(k),Var(x))) (Int(k')) = Add(Mult(Int(k*k'),Var(x)),Int(0))
 
 (* mult s t = lin(s * t), raises NonLinear if result is not linear *)
 fun mult (Add(p,s)) t = add (mult_prod p t) (mult s t)

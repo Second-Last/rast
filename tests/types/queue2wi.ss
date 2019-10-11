@@ -3,7 +3,7 @@
 
 type bits = +{b0 : bits, b1 : bits, $ : 1}
 
-type queue{n} = &{enq : &{b0 : <{2*n}| queue{n+1}, b1 : <{2*n}| queue{n+1}},
+type queue{n} = &{enq : &{b0 : <{n*2}| queue{n+1}, b1 : <{2*n}| queue{n+1}},
                   deq : <{2}| +{none : ?{n = 0}. 1,
                                 some : ?{n > 0}. +{b0 : queue{n-1}, b1 : queue{n-1}}}}
 
