@@ -57,6 +57,20 @@ fun qcheck (v::vs) sigma con rhs_pred phi =
 fun quick_check_valid ctx con phi = qcheck ctx nil con (fn b => b) phi (* phi true *)
 fun quick_check_unsat ctx con phi = qcheck ctx nil con (fn b => not b) phi (* phi false *)
 
+fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,NONE) else v) ctx
+
+fun anoncheck con phi =
+  let val ctx = R.free_prop phi []
+      val ctx = R.free_prop con ctx
+      val ctx = drop_anon_ctx ctx
+      val tcon = R.drop_anon_prop con
+      val tphi = R.drop_anon_prop phi
+  in
+  TextIO.print ("Checking: " ^ pp_jhold tcon tphi ^ "\n") ;
+  R.valid ctx tcon tphi
+    handle R.NonLinear => false
+  end
+
 (* constraint entailment, called in type-checking *)
 
 (* entails ctx con phi = true if ctx ; con |= phi *)
@@ -76,7 +90,12 @@ fun entails ctx con phi =
              else (* no: definitely not valid *)
                  false
             | R.Anonymous =>
-                ( TextIO.print ("Constraint: " ^ pp_jhold con phi ^ "\n")
+              if anoncheck con phi
+              then
+                ( TextIO.print ("Constraint!: " ^ pp_jhold con phi ^ "\n")
+                ; true )
+              else
+                ( TextIO.print ("Constraint?: " ^ pp_jhold con phi ^ "\n")
                 ; approx := true
                 ; true )
     )
@@ -90,7 +109,7 @@ fun hardentails ctx con phi =
     ( if !Flags.verbosity >= 3 then TextIO.print ("Testing: " ^ pp_jhold con phi ^ "\n") else ()
     ; R.valid ctx con phi
       handle R.NonLinear => false
-           | R.Anonymous => false        
+           | R.Anonymous => anoncheck con phi        
     )
 
 (* constraint equivalence, called in type equality *)
@@ -117,9 +136,14 @@ fun contradictory ctx con phi =
              else (* no: definitely not contradictory *)
                  false
            | R.Anonymous =>
-              ( TextIO.print ("Constraint: " ^ pp_junsat con phi ^ "\n")
-              ; approx := true
-              ; true )
+              if anoncheck con phi
+              then
+                ( TextIO.print ("Constraint!: " ^ pp_jhold con phi ^ "\n")
+                ; true )
+              else
+                ( TextIO.print ("Constraint?: " ^ pp_jhold con phi ^ "\n")
+                ; approx := true
+                ; true )
     )
 
 end (* structure Constraints *)

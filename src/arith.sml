@@ -34,12 +34,16 @@ sig
 
     (* contexts and variables *)
     val anon : string -> bool
+    val drop_anon : arith -> arith
+    val drop_anon_prop : prop -> prop
+
     val closed : ctx -> arith -> bool
     val closed_prop : ctx -> prop -> bool
 
     val free_vars : arith -> ctx -> ctx
     val free_varlist : arith list -> ctx -> ctx
     val free_prop : prop -> ctx -> ctx
+
 
     val zip : ctx -> arith list -> subst               (* x1,...,xn\e1,...,en *)
                                                        (* may raise ListPair.UnequalLengths *)
@@ -114,6 +118,24 @@ type subst = (varname * arith) list
 exception NotClosed
 
 fun anon v = String.sub (v,0) = #"_"
+
+fun drop_anon (Int(n)) = Int(n)
+  | drop_anon (Add(e1,e2)) = Add(drop_anon e1, drop_anon e2)
+  | drop_anon (Sub(e1,e2)) = Sub(drop_anon e1, drop_anon e2)
+  | drop_anon (Mult(e1,e2)) = Mult(drop_anon e1, drop_anon e2)
+  | drop_anon (Var(v)) = if anon v then Var(String.extract (v,1,NONE)) else Var(v)
+
+fun drop_anon_prop (Eq(e1,e2)) = Eq(drop_anon e1, drop_anon e2)
+  | drop_anon_prop (Lt(e1,e2)) = Lt(drop_anon e1, drop_anon e2)
+  | drop_anon_prop (Gt(e1,e2)) = Gt(drop_anon e1, drop_anon e2)
+  | drop_anon_prop (Ge(e1,e2)) = Ge(drop_anon e1, drop_anon e2)
+  | drop_anon_prop (Le(e1,e2)) = Le(drop_anon e1, drop_anon e2)
+  | drop_anon_prop (Divides(n,e)) = Divides(n, drop_anon e)
+  | drop_anon_prop (True) = True
+  | drop_anon_prop (False) = False
+  | drop_anon_prop (Or(F,G)) = Or(drop_anon_prop F, drop_anon_prop G)
+  | drop_anon_prop (Implies(F,G)) = Implies(drop_anon_prop F, drop_anon_prop G)
+  | drop_anon_prop (Not(F)) = Not(drop_anon_prop F)
 
 fun closed ctx (Int(n)) = true
   | closed ctx (Add(e1,e2)) = closed ctx e1 andalso closed ctx e2
