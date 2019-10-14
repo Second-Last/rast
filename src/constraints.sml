@@ -66,7 +66,6 @@ fun anoncheck con phi =
       val tcon = R.drop_anon_prop con
       val tphi = R.drop_anon_prop phi
   in
-  TextIO.print ("Checking: " ^ pp_jhold tcon tphi ^ "\n") ;
   R.valid ctx tcon tphi
     handle R.NonLinear => false
   end
