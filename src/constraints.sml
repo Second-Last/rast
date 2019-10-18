@@ -24,6 +24,9 @@ sig
 
     (* if true, judgment could not be established or refuted *)
     val approx : bool ref
+
+    val global_prop : Arith.prop ref
+    val solve_global : unit -> unit
 end
 
 structure Constraints :> CONSTRAINTS =
@@ -32,7 +35,7 @@ struct
 structure R = Arith
 structure RP = R.Print
 structure PP = PPrint
-(* structure N = Normalize *)
+structure N = Normalize
 
 val approx = ref false
 
@@ -59,6 +62,22 @@ fun quick_check_unsat ctx con phi = qcheck ctx nil con (fn b => not b) phi (* ph
 
 fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,NONE) else v) ctx
 
+val global_prop = ref R.True
+
+fun elim_exists [] F = F
+  | elim_exists (v::vs) F = elim_exists vs (R.exists v F)
+
+fun solve_global () =
+  let val ctx = R.free_prop (!global_prop) []
+      val phi = elim_exists ctx (R.nnf (!global_prop))
+  in
+  case phi of
+      R.True => TextIO.print ("global constraints satisfiable\n")
+    | R.False => TextIO.print ("global constraints UNsatisfiable\n")
+    | _ => TextIO.print ("unsimplified constraint\n")
+  end
+
+
 fun anoncheck con phi =
   let val ctx = R.free_prop phi []
       val ctx = R.free_prop con ctx
@@ -66,8 +85,28 @@ fun anoncheck con phi =
       val tcon = R.drop_anon_prop con
       val tphi = R.drop_anon_prop phi
   in
-  R.valid ctx tcon tphi
-    handle R.NonLinear => false
+  (if R.valid ctx tcon tphi then true
+  else
+    let val () = global_prop := R.And(!global_prop, R.Implies(tcon,tphi))
+    in
+      false
+    end)
+    handle R.NonLinear =>
+      case tphi of
+          R.Eq(e1,e2) =>
+            let val e1n = N.normalize e1
+                val e2n = N.normalize e2
+            in
+            N.compare e1n e2n
+            end
+        | R.Ge(e1,e2) =>
+            let val e1n = N.normalize e1
+                val e2n = N.normalize e2
+                val () = TextIO.print (PP.pp_prop (R.Ge(e1n,e2n)) ^ "\n")
+            in
+            false
+            end
+        | _ => false
   end
 
 (* constraint entailment, called in type-checking *)
@@ -91,8 +130,7 @@ fun entails ctx con phi =
             | R.Anonymous =>
               if anoncheck con phi
               then
-                ( TextIO.print ("Constraint!: " ^ pp_jhold con phi ^ "\n")
-                ; true )
+                ( true )
               else
                 ( TextIO.print ("Constraint?: " ^ pp_jhold con phi ^ "\n")
                 ; approx := true

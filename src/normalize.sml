@@ -86,6 +86,7 @@ struct
                                                 else add_right (R.Mult(a2,p2)) (addin (a1,p1) s2)
     | addin (a1,p1) (R.Mult(a2,p2)) = if (p1 = p2) then mult_left (add_coeff a1 a2) p1
                                       else add_right (R.Mult(a2,p2)) (mult_left a1 p1)
+    | addin (a1,p1) (R.Int(0)) = R.Mult(a1,p1)
 
   fun sreduce (R.Add(p,s)) =
       let val s' = sreduce s

@@ -186,6 +186,7 @@ fun test args =
         val () = List.app process_option options
         val env = load nil filenames (* env after elaboration *)
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
+        val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)
             handle Exec.SoftError => exit_failure "% execution failed (soft)"
                  | Exec.HardError => exit_failure "% execution failed (hard)"
