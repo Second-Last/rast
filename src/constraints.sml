@@ -64,19 +64,40 @@ fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,N
 
 val global_prop = ref R.True
 
-fun elim_exists [] F = F
-  | elim_exists (v::vs) F = elim_exists vs (R.exists v F)
+val threshold = 10
+
+fun attach v n [] = [[(v,R.Int(n))]]
+  | attach v n [x] = [(v,R.Int(n))::x]
+  | attach v n (x::xs) = ((v,R.Int(n))::x)::(attach v n xs)
+
+fun all_one v n l =
+  if n > threshold
+  then []
+  else (attach v n l) @ (all_one v (n+1) l)
+
+fun all [] = []
+  | all (v::vs) = all_one v 0 (all vs) 
+
+exception Unsat
+
+fun try_sols (subst::substs) =
+  let val phi = R.apply_prop subst (!global_prop)
+  in
+  if R.valid nil (R.True) phi
+  then subst
+  else try_sols (substs)
+  end
+  | try_sols [] = raise Unsat
 
 fun solve_global () =
-  let val ctx = R.free_prop (!global_prop) []
-      val phi = elim_exists ctx (R.nnf (!global_prop))
+  let val ctx = R.free_prop (!global_prop) nil
+      val substs = all ctx
+      val subst = try_sols substs
+      val () = TextIO.print ("Solution: " ^ (List.foldr (fn ((v,n),s) => s ^ " " ^ v ^ " => " ^ (PP.pp_arith n)) "" subst) ^ "\n")
   in
-  case phi of
-      R.True => TextIO.print ("global constraints satisfiable\n")
-    | R.False => TextIO.print ("global constraints UNsatisfiable\n")
-    | _ => TextIO.print ("unsimplified constraint\n")
+  ()
   end
-
+  handle Unsat => TextIO.print ("Unsatisfiable\n")
 
 fun anoncheck con phi =
   let val ctx = R.free_prop phi []
