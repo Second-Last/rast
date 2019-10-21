@@ -106,13 +106,6 @@ fun solve_global () =
   end
 
 fun anoncheck con phi =
-  let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
-  in
-  false
-  end
-
-(*
-fun anoncheck con phi =
   let val ctx = R.free_prop phi []
       val ctx = R.free_prop con ctx
       val ctx = drop_anon_ctx ctx
@@ -131,18 +124,20 @@ fun anoncheck con phi =
             let val e1n = N.normalize e1
                 val e2n = N.normalize e2
             in
-            N.compare e1n e2n
+              if N.compare e1n e2n
+              then true
+              else let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
+              in
+              false
+              end
             end
         | R.Ge(e1,e2) =>
-            let val e1n = N.normalize e1
-                val e2n = N.normalize e2
-                val () = TextIO.print (PP.pp_prop (R.Ge(e1n,e2n)) ^ "\n")
+            let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
             in
             false
             end
         | _ => false
   end
-*)
 
 (* constraint entailment, called in type-checking *)
 
