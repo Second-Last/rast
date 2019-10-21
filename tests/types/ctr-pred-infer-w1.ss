@@ -1,5 +1,5 @@
 #options --work=send --syntax=implicit
-#test success
+#test approx success
 
 type ctr = &{inc : <{_a}| ctr, dec : <{_b}| hd}
 type hd = +{s : |{_c}> ctr, z : 1}

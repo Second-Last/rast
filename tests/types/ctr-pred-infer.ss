@@ -1,5 +1,5 @@
-#options
-#test
+#options --work=none --syntax=implicit
+#test success
 
 type ctr = &{inc : ctr, dec : hd}
 type hd = +{s : ctr, z : 1}

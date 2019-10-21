@@ -43,7 +43,7 @@ sig
     val free_vars : arith -> ctx -> ctx
     val free_varlist : arith list -> ctx -> ctx
     val free_prop : prop -> ctx -> ctx
-
+    val free_anon_prop : prop -> ctx -> ctx
 
     val zip : ctx -> arith list -> subst               (* x1,...,xn\e1,...,en *)
                                                        (* may raise ListPair.UnequalLengths *)
@@ -185,6 +185,30 @@ fun free_prop (Eq(e1,e2)) ctx = free_vars e2 (free_vars e1 ctx)
   | free_prop (Implies(phi1,phi2)) ctx = free_prop phi2 (free_prop phi1 ctx)
   | free_prop (Not(phi)) ctx = free_prop phi ctx
 
+fun free_anon_vars (Int(n)) ctx = ctx
+  | free_anon_vars (Add(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
+  | free_anon_vars (Sub(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
+  | free_anon_vars (Mult(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
+  | free_anon_vars (Var(v)) ctx =
+    if List.exists (fn v' => v = v') ctx
+    then ctx
+    else if anon v
+    then v::ctx
+    else ctx
+
+fun free_anon_prop (Eq(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
+  | free_anon_prop (Lt(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
+  | free_anon_prop (Gt(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
+  | free_anon_prop (Le(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
+  | free_anon_prop (Ge(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
+  | free_anon_prop (Divides(_,e)) ctx = free_anon_vars e ctx
+  | free_anon_prop (True) ctx = ctx
+  | free_anon_prop (False) ctx = ctx
+  | free_anon_prop (Or(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
+  | free_anon_prop (And(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
+  | free_anon_prop (Implies(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
+  | free_anon_prop (Not(phi)) ctx = free_anon_prop phi ctx
+
 (* requires: length ctx = length es; raises ListPair.UnequalLengths otherwise *)
 fun zip ctx es = ListPair.zipEq (ctx, es)
 
@@ -192,7 +216,7 @@ fun zip ctx es = ListPair.zipEq (ctx, es)
 (* assumed sg : ctx and ctx |- v' nat *)
 fun find ((v,e)::sg) v' =
     if (v = v') then e else find sg v'
-  | find nil v' = if anon v' then Var(v') else raise Match
+  | find nil v' = Var(v')
 
 (* apply sg e = [sg]e *)
 (* assumes sg : ctx and ctx |- e : int *)

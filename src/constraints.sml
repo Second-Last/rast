@@ -64,7 +64,7 @@ fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,N
 
 val global_prop = ref R.True
 
-val threshold = 10
+val threshold = 5
 
 fun attach v n [] = [[(v,R.Int(n))]]
   | attach v n [x] = [(v,R.Int(n))::x]
@@ -82,23 +82,36 @@ exception Unsat
 
 fun try_sols (subst::substs) =
   let val phi = R.apply_prop subst (!global_prop)
+      val ctx = R.free_prop phi nil
   in
-  if R.valid nil (R.True) phi
+  if R.valid ctx (R.True) phi
   then subst
-  else try_sols (substs)
+  else try_sols substs
   end
   | try_sols [] = raise Unsat
 
 fun solve_global () =
-  let val ctx = R.free_prop (!global_prop) nil
-      val substs = all ctx
-      val subst = try_sols substs
-      val () = TextIO.print ("Solution: " ^ (List.foldr (fn ((v,n),s) => s ^ " " ^ v ^ " => " ^ (PP.pp_arith n)) "" subst) ^ "\n")
+  let val ctx = R.free_anon_prop (!global_prop) nil
   in
-  ()
+  if List.length ctx > 0
+  then
+    let val substs = all ctx
+        val subst = try_sols substs
+        val () = TextIO.print ("Solution: " ^ (List.foldr (fn ((v,n),s) => s ^ " " ^ v ^ " => " ^ (PP.pp_arith n)) "" subst) ^ "\n")
+    in
+    ()
+    end
+    handle Unsat => TextIO.print ("Unsatisfiable\n")
+  else ()
   end
-  handle Unsat => TextIO.print ("Unsatisfiable\n")
 
+fun anoncheck con phi =
+  let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
+  in
+  false
+  end
+
+(*
 fun anoncheck con phi =
   let val ctx = R.free_prop phi []
       val ctx = R.free_prop con ctx
@@ -108,7 +121,7 @@ fun anoncheck con phi =
   in
   (if R.valid ctx tcon tphi then true
   else
-    let val () = global_prop := R.And(!global_prop, R.Implies(tcon,tphi))
+    let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
     in
       false
     end)
@@ -129,6 +142,7 @@ fun anoncheck con phi =
             end
         | _ => false
   end
+*)
 
 (* constraint entailment, called in type-checking *)
 

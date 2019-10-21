@@ -21,13 +21,7 @@ proc empty   = caseR ( enq => caseR ( b0 => empty || bit0{0}
                                     | b1 => empty || bit1{0} )
                      | deq => R.none ; closeR )
 
-proc ex11 : . |{_f}- queue{4}
-proc ex11 = empty || L.enq ; L.b1 ; L.enq ; L.b0 ; L.enq ; L.b1 ; L.enq ; L.b1 ; <->
-
 proc pop{n} : queue{n+1} |{_g}- queue{n}
 proc pop{n} = L.deq ;
               caseL ( (* insert this branch ----> none => impossibleL {n+1 = 0} *)
                       some => caseL ( b0 => <-> | b1 => <-> ) )
-
-proc ex12 : . |{_h}- queue{2}
-proc ex12 = empty || L.enq ; L.b1 ; L.enq ; L.b0 ; pop{1} || L.enq ; L.b1 ; <->
