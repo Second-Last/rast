@@ -203,7 +203,7 @@ fun contradictory ctx con phi =
              else (* no: definitely not contradictory *)
                  false
            | R.Anonymous =>
-              if anoncheck con phi
+              if anoncheck (R.And(con,phi)) R.False
               then
                 ( TextIO.print ("Constraint!: " ^ pp_jhold con phi ^ "\n")
                 ; true )
