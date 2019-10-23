@@ -64,7 +64,7 @@ fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,N
 
 val global_prop = ref R.True
 
-val threshold = 5
+val threshold = 3
 
 fun attach v n [] = [[(v,R.Int(n))]]
   | attach v n [x] = [(v,R.Int(n))::x]

@@ -9,15 +9,16 @@ proc bit0 : ctr |{_d}- ctr
 proc bit0' : hd |{_e}- hd
 proc bit1 : ctr |{_f}- ctr
 
-proc empty = caseR ( inc => empty || bit1
-                   | dec => R.z ; closeR )
-proc bit0 = caseR ( inc => bit1
-                  | dec => L.dec ; bit0' )
-proc bit0' = caseL ( s => R.s ; bit1 
-                   | z => R.z ; waitL ; closeR )
-proc bit1 = caseR ( inc => L.inc ; bit0
-                  | dec => R.s ; bit0 )
+proc empty = caseR ( inc => work {_g}; empty || bit1
+                   | dec => work {_h}; R.z ; closeR )
+proc bit0 = caseR ( inc => work {_i}; bit1
+                  | dec => L.dec ; work {_j}; bit0' )
+proc bit0' = caseL ( s => R.s ; work{_k}; bit1 
+                   | z => R.z ; work{_l}; waitL ; closeR )
+proc bit1 = caseR ( inc => L.inc ; work{_m}; bit0
+                  | dec => R.s ; work{_n}; bit0 )
 
+(*
 proc decr : ctr |{_g}- ctr
 proc decr = L.dec ;
             caseL ( s => <->
@@ -25,6 +26,7 @@ proc decr = L.dec ;
 
 proc c3 : . |{_h}- ctr
 proc c3 = empty || L.inc ; L.inc ; L.inc ; <->
+*)
 
 (* for testing purposes *)
 (*
