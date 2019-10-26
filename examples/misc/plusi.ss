@@ -41,3 +41,19 @@ proc thm4{n}{k} = <->
 proc thm5{n}{k} : nat{n} |- plus{n}{k}{n+k}
 proc thm5{n}{k} = caseL ( zero => R.plus0 ; <->
                         | succ => R.pluss ; thm5{n-1}{k} )
+
+type mult{x}{y}{z} = +{mult0 : ?{x = 0}. ?{z = 0}. 1,        % 0 * y = 0
+                       mults : ?{x > 0}. ?{z >= y}. mult{x-1}{y}{z-y}}  % (x-1)*y = x*y - y
+
+(* n * 0 = 0 *)
+proc thm6{n} : nat{n} |- mult{n}{0}{0}
+proc thm6{n} = caseL ( zero => R.mult0 ; <->
+                     | succ => R.mults ; thm6{n-1} )
+
+(* n * (k+1) = n * k + n *)
+proc thm7{n}{k}{nk} : mult{n}{k}{nk} |- mult{n}{k+1}{nk + n}
+proc thm7{n}{k}{nk} =
+  caseL ( mult0 => R.mult0 ; <->
+        | mults => thm7{n-1}{k}{nk-k} ||
+                   R.mults ;
+                   <-> )
