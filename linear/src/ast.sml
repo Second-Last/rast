@@ -27,33 +27,29 @@ datatype tp =
        | Dot                       (* pseudo-type for empty context *)
 type choices = (label * tp) list
 
+type chan = string
+type chan_tp = chan * tp
+type context = chan_tp list
+
 (* Process Expressions *)
 datatype exp =
        (* judgmental constructs *)
-         Id                                    (* <-> *)
-       | Cut of exp * pot * tp * exp           (* P [A] Q  or  P [|{p}- A] Q *)
-       | Spawn of exp * exp                    (* P || Q *)
-       | ExpName of expname * Arith.arith list (* f, f{...} *)
+         Id of chan * chan                          (* x <- y *)
+       | Cut of chan * exp * pot * tp * exp         (* x : A <- P ; Q *)
+       | Spawn of exp * exp                         (* x <- f <- xs ; Q *)
+       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
 
-       (* internal choice +{...} *)
-       | LabR of label * exp                   (* R.k ; P *)
-       | CaseL of (label * ext * exp) list     (* caseL (...) *)
-
-       (* external choice &{...} *)
-       | CaseR of (label * ext * exp) list     (* caseR (...) *)
-       | LabL of label * exp                   (* L.k ; P *)
+       (* internal/external choice +{...} *)
+       | Lab of chan * label * exp                   (* x.k ; P *)
+       | Case of chan * (label * ext * exp) list     (* case x (...) *)
 
        (* termination 1 *)
-       | CloseR                                (* closeR *)
-       | WaitL of exp                          (* waitL ; P *)
+       | Close of chan                               (* closeR *)
+       | Wait of chan * exp                          (* waitL ; P *)
 
        (* existential quantifier ?{phi}. A *)
-       | AssertR of Arith.prop * exp           (* assertR{phi} ; P *)
-       | AssumeL of Arith.prop * exp           (* assumeL{phi} ; P *)
-
-       (* universal quantifier !{phi}. A *)
-       | AssumeR of Arith.prop * exp           (* assumeR{phi} ; P *)
-       | AssertL of Arith.prop * exp           (* assertL{phi} ; P *)
+       | Assert of chan * Arith.prop * exp           (* assertR{phi} ; P *)
+       | Assume of chan * Arith.prop * exp           (* assumeL{phi} ; P *)
 
        (* impossibility; no concrete syntax for now *)
        | Imposs                                (* impossible *)             
@@ -62,32 +58,20 @@ datatype exp =
        | Work of pot * exp                     (* work ; P or work{p} ; P *)
 
        (* pay potential |>A *)
-       | PayR of pot * exp                     (* payR ; P or payR{p} ; P *)
-       | GetL of pot * exp                     (* getL ; P or getL{p} ; P *)
-
-       (* get potential <|A *)
-       | GetR of pot * exp                     (* getR ; P or getR{p} ; P *)
-       | PayL of pot * exp                     (* payL ; P or payL{p} ; P *)
+       | Pay of chan * pot * exp                     (* payR ; P or payR{p} ; P *)
+       | Get of chan * pot * exp                     (* getL ; P or getL{p} ; P *)
 
        (* next time ()A *)
        | Delay of time * exp                   (* delay ; P or delay{t} ; P *)
 
        (* some future time <>A *)
-       | NowR of exp                           (* nowR ; P *)
-       | WhenL of exp                          (* whenL ; P *)
-
-       (* all future times []A *)
-       | WhenR of exp                          (* whenR ; P *)
-       | NowL of exp                           (* nowL ; P *)
+       | Now of chan * exp                           (* nowR ; P *)
+       | When of chan * exp                          (* whenL ; P *)
 
        (* mark with source region *)
        | Marked of exp Mark.marked
 
 type branches = (label * ext * exp) list       (* (l1 => P1 | ... | ln => Pn) *)
-
-type chan = string
-type chan_tp = chan * tp
-type context = chan_tp list
 
 (* Declarations *)
 datatype decl =
