@@ -34,9 +34,9 @@ type context = chan_tp list
 (* Process Expressions *)
 datatype exp =
        (* judgmental constructs *)
-         Id of chan * chan                          (* x <- y *)
-       | Cut of chan * exp * pot * tp * exp         (* x : A <- P ; Q *)
-       | Spawn of exp * exp                         (* x <- f <- xs ; Q *)
+         Id of chan * chan                                             (* x <- y *)
+       | Cut of chan * exp * pot * tp * chan list * exp                (* x : A <- (P) <- xs ; Q *)
+       | Spawn of chan * exp * chan list * exp                         (* x <- f <- xs ; Q *)
        | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
 
        (* internal/external choice +{...} *)
@@ -52,17 +52,17 @@ datatype exp =
        | Assume of chan * Arith.prop * exp           (* assumeL{phi} ; P *)
 
        (* impossibility; no concrete syntax for now *)
-       | Imposs                                (* impossible *)             
+       | Imposs                                      (* impossible *)             
 
        (* work *)
-       | Work of pot * exp                     (* work ; P or work{p} ; P *)
+       | Work of pot * exp                           (* work ; P or work{p} ; P *)
 
        (* pay potential |>A *)
        | Pay of chan * pot * exp                     (* payR ; P or payR{p} ; P *)
        | Get of chan * pot * exp                     (* getL ; P or getL{p} ; P *)
 
        (* next time ()A *)
-       | Delay of time * exp                   (* delay ; P or delay{t} ; P *)
+       | Delay of time * exp                         (* delay ; P or delay{t} ; P *)
 
        (* some future time <>A *)
        | Now of chan * exp                           (* nowR ; P *)
@@ -185,9 +185,9 @@ type context = chan_tp list
 
 datatype exp =
        (* judgmental constructs *)
-         Id of chan * chan                          (* x <- y *)
-       | Cut of chan * exp * pot * tp * exp         (* x : A <- P ; Q *)
-       | Spawn of exp * exp                         (* x <- f <- xs ; Q *)
+         Id of chan * chan                                             (* x <- y *)
+       | Cut of chan * exp * pot * tp * chan list * exp                (* x : A <- (P) <- xs ; Q *)
+       | Spawn of chan * expname * Arith.arith list * chan list * exp  (* x <- f, f{...} <- xs ; Q *)
        | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
 
        (* internal/external choice +{...} *)
@@ -203,17 +203,17 @@ datatype exp =
        | Assume of chan * Arith.prop * exp           (* assumeL{phi} ; P *)
 
        (* impossibility; no concrete syntax for now *)
-       | Imposs                                (* impossible *)             
+       | Imposs                                      (* impossible *)             
 
        (* work *)
-       | Work of pot * exp                     (* work ; P or work{p} ; P *)
+       | Work of pot * exp                           (* work ; P or work{p} ; P *)
 
        (* pay potential |>A *)
        | Pay of chan * pot * exp                     (* payR ; P or payR{p} ; P *)
        | Get of chan * pot * exp                     (* getL ; P or getL{p} ; P *)
 
        (* next time ()A *)
-       | Delay of time * exp                   (* delay ; P or delay{t} ; P *)
+       | Delay of time * exp                         (* delay ; P or delay{t} ; P *)
 
        (* some future time <>A *)
        | Now of chan * exp                           (* nowR ; P *)
@@ -256,29 +256,21 @@ and apply_choices sg choices = List.map (fn (l,Al) => (l, apply_tp sg Al)) choic
 fun apply_chan_tp sg (x,A) = (x,apply_tp sg A)
 fun apply_context sg D = List.map (fn xA => apply_chan_tp sg xA) D
 
-fun apply_exp sg (Cut(P,p,B,Q)) = Cut(apply_exp sg P, R.apply sg p, apply_tp sg B, apply_exp sg Q)
-  | apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
-  | apply_exp sg (Id) = Id
-  | apply_exp sg (LabR(k,P)) = LabR(k, apply_exp sg P)
-  | apply_exp sg (CaseL(branches)) = CaseL(apply_branches sg branches)
-  | apply_exp sg (LabL(k,Q)) = LabL(k, apply_exp sg Q)
-  | apply_exp sg (CaseR(branches)) = CaseR(apply_branches sg branches)
-  | apply_exp sg (CloseR) = CloseR
-  | apply_exp sg (WaitL(Q)) = WaitL(apply_exp sg Q)
+fun apply_exp sg (Cut(x,P,p,B,xs,Q)) = Cut(x,apply_exp sg P, R.apply sg p, apply_tp sg B, xs, apply_exp sg Q)
+  | apply_exp sg (Spawn(x,f,xs,Q)) = Spawn(x,f,xs, apply_exp sg Q)
+  | apply_exp sg (Id(x,y)) = Id(x,y)
+  | apply_exp sg (Lab(x,k,P)) = Lab(x,k, apply_exp sg P)
+  | apply_exp sg (Case(x,branches)) = Case(x,apply_branches sg branches)
+  | apply_exp sg (Close(x)) = Close(x)
+  | apply_exp sg (Wait(x,Q)) = Wait(x,apply_exp sg Q)
   | apply_exp sg (Delay(t,Q)) = Delay(R.apply sg t, apply_exp sg Q)
-  | apply_exp sg (WhenR(Q)) = WhenR(apply_exp sg Q)
-  | apply_exp sg (NowL(Q)) = NowL(apply_exp sg Q)
-  | apply_exp sg (WhenL(Q)) = WhenL(apply_exp sg Q)
-  | apply_exp sg (NowR(Q)) = NowR(apply_exp sg Q)
+  | apply_exp sg (When(x,Q)) = When(x,apply_exp sg Q)
+  | apply_exp sg (Now(x,Q)) = Now(x,apply_exp sg Q)
   | apply_exp sg (Work(p,P)) = Work(R.apply sg p, apply_exp sg P)
-  | apply_exp sg (PayR(p,P)) = PayR(R.apply sg p, apply_exp sg P)
-  | apply_exp sg (PayL(p,P)) = PayL(R.apply sg p, apply_exp sg P)
-  | apply_exp sg (GetR(p,P)) = GetR(R.apply sg p, apply_exp sg P)
-  | apply_exp sg (GetL(p,P)) = GetL(R.apply sg p, apply_exp sg P)
-  | apply_exp sg (AssertR(phi,P)) = AssertR(R.apply_prop sg phi, apply_exp sg P)
-  | apply_exp sg (AssertL(phi,Q)) = AssertL(R.apply_prop sg phi, apply_exp sg Q)
-  | apply_exp sg (AssumeR(phi,P)) = AssumeR(R.apply_prop sg phi, apply_exp sg P)
-  | apply_exp sg (AssumeL(phi,Q)) = AssumeL(R.apply_prop sg phi, apply_exp sg Q)
+  | apply_exp sg (Pay(x,p,P)) = Pay(x,R.apply sg p, apply_exp sg P)
+  | apply_exp sg (Get(x,p,P)) = Get(x,R.apply sg p, apply_exp sg P)
+  | apply_exp sg (Assert(x,phi,P)) = Assert(x,R.apply_prop sg phi, apply_exp sg P)
+  | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
   | apply_exp sg (ExpName(f,es)) = ExpName(f, R.apply_list sg es)
   | apply_exp sg (Marked(marked_P)) = Marked(Mark.mark' (Mark.data marked_P, Mark.ext marked_P))
@@ -292,8 +284,8 @@ fun lookup_tp (TpDef(a',vs,con,A,_)::env') a  =
   | lookup_tp (_ ::env') a = lookup_tp env' a
   | lookup_tp (nil) a = NONE
 
-fun lookup_expdec (ExpDec(f',vs,con,(A, pot, C),_)::env') f =
-    if f = f' then SOME(vs,con,(A,pot,C)) else lookup_expdec env' f
+fun lookup_expdec (ExpDec(f',vs,con,(D, pot, C),_)::env') f =
+    if f = f' then SOME(vs,con,(D,pot,C)) else lookup_expdec env' f
   | lookup_expdec (_::env') f = lookup_expdec env' f
   | lookup_expdec nil f = NONE
 
