@@ -100,8 +100,10 @@ fun test_file2 expected filename =
     let val env = Top.load nil [filename]
             handle ErrorMsg.Error => raise Outcome(expected, StaticError)
         val () = Top.run env env
+            (*
             handle Exec.SoftError => raise Outcome(expected, if !Constraints.approx then ApproxDynError else DynamicError)
                  | Exec.HardError => raise Outcome(expected, DynamicError)
+            *)
     in
         raise Outcome(expected, if !Constraints.approx then ApproxDynSuccess else Success)
     end handle e as Outcome(expected, actual) => raise e

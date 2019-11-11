@@ -465,7 +465,7 @@ and p_exp ST = case first ST of
   | T.IMPOSSIBLER => ST |> shift >> p_con >> p_exp
   | T.IMPOSSIBLEL => ST |> shift >> p_con >> p_exp
   (* infix cut or spawn *)
-  | T.LBRACKET => ST |> shift >> p_cut
+  (*| T.LBRACKET => ST |> shift >> p_cut *)
   | T.DOUBLEBAR => ST |> shift >> reduce r_spawn >> p_exp
   (* end of expression; do not consume token *)
   | t => ST |> reduce r_exp
@@ -486,15 +486,18 @@ and p_con ST = case first ST of
     T.LBRACE => ST |> shift >> p_prop >> p_terminal T.RBRACE >> reduce r_con >> reduce r_exp_atomic
 
 (* <turnstile> ']' <exp>, postfix of cut *)
+
+(*
 and p_cut ST = case first ST of
     T.TURNSTILE => ST |> shift >> p_type >> p_terminal T.RBRACKET >> reduce r_cut >> p_exp
   | T.BAR => ST |> shift >> p_idx >> p_terminal T.MINUS >> p_type >> p_terminal T.RBRACKET >> reduce r_cut >> p_exp
   | _ => ST |> push (Tok(T.TURNSTILE,here ST)) >> p_type >> p_terminal T.RBRACKET >> reduce r_cut >> p_exp
+*)
 
 (* reduce <exp>, possibly multiple actions, cuts, or expressions *)
 (* stack ends with Action, Cut, or Exp items *)
 and r_exp (S $ Action(act,r1) $ Exp(exp,r2)) = r_exp (S $ Exp(act(exp), join r1 r2))
-  | r_exp (S $ Exp(exp1,r1) $ Infix(Cut(pot,tp),_) $ Exp(exp2,r2)) = r_exp (S $ Exp(m_exp(A.Cut(exp1,pot,tp,exp2),join r1 r2), join r1 r2))
+  | r_exp (S $ Exp(exp1,r1) $ Infix(Cut(pot,tp),_) $ Exp(exp2,r2)) = parse_error  (join r1 r2, "cannot parse a cut")
   | r_exp (S $ Exp(exp1,r1) $ Infix(Spawn,_) $ Exp(exp2,r2)) = r_exp (S $ Exp(m_exp(A.Spawn(exp1,exp2),join r1 r2), join r1 r2))
   | r_exp (S $ Infix(_,r1) $ Infix(_,r2)) = parse_error (join r1 r2, "consecutive cuts")
   | r_exp (S $ Action(act,r1) $ Infix(_,r2)) = parse_error (join r1 r2, "incomplete action immediately before cut")
@@ -507,65 +510,68 @@ and r_exp (S $ Action(act,r1) $ Exp(exp,r2)) = r_exp (S $ Exp(act(exp), join r1 
   | r_exp (S $ Exp(exp,r)) = S $ Exp(exp,r)
 
 (* reduce <exp>, where <exp> has no continuation (atomic expressions) *)
-and r_exp_atomic (S $ Tok(T.LRARROW,r)) = S $ Exp(m_exp(A.Id,r),r)
-  | r_exp_atomic (S $ Tok(T.CLOSER,r)) = S $ Exp(m_exp(A.CloseR,r),r)
-  | r_exp_atomic (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Exp(m_exp(A.ExpName(id,l),join r1 r2),join r1 r2)
+and r_exp_atomic (S $ Tok(T.LRARROW,r)) = S $ Exp(m_exp(A.Id("R","L"),r),r)
+  | r_exp_atomic (S $ Tok(T.CLOSER,r)) = S $ Exp(m_exp(A.Close("R"),r),r)
+  | r_exp_atomic (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Exp(m_exp(A.ExpName("R",id,l,["L"]),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.LPAREN,r1) $ Exp(exp,r) $ Tok(T.RPAREN,r2)) = S $ Exp(exp,join r1 r2)
   | r_exp_atomic (S $ Tok(T.CASER,r1) $ Tok(T.LPAREN,_) $ Branches(branches) $ Tok(T.RPAREN,r2)) =
-    S $ Exp(m_exp(A.CaseR(branches),join r1 r2),join r1 r2)
+    S $ Exp(m_exp(A.Case("R",branches),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.CASEL,r1) $ Tok(T.LPAREN,_) $ Branches(branches) $ Tok(T.RPAREN,r2)) =
-    S $ Exp(m_exp(A.CaseL(branches),join r1 r2),join r1 r2)
+    S $ Exp(m_exp(A.Case("L",branches),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IMPOSSIBLER,r1) $ Prop(phi,r2)) =
-    S $ Exp(m_exp(A.AssumeR(phi,A.Imposs),join r1 r2),join r1 r2)
+    S $ Exp(m_exp(A.Assume("R",phi,A.Imposs),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IMPOSSIBLEL,r1) $ Prop(phi,r2)) =
-    S $ Exp(m_exp(A.AssumeL(phi,A.Imposs),join r1 r2),join r1 r2)
+    S $ Exp(m_exp(A.Assume("L",phi,A.Imposs),join r1 r2),join r1 r2)
   (* should be the only atomic expressions *)
 
 (* reduce <exp> '[' [<turnstile>] <type> ']' *)
+(*
 and r_cut (S $ Tok(T.LBRACKET,r1) $ Tok(T.TURNSTILE,r) $ Tp(tp,_) $ Tok(T.RBRACKET,r2)) =
     S $ Infix(Cut(R.Int(0), tp), join r1 r2)
   | r_cut (S $ Tok(T.LBRACKET,r1) $ Tok(T.BAR,_) $ Arith(pot,_) $ Tok(T.MINUS,_) $ Tp(tp,_) $ Tok(T.RBRACKET,r2)) =
     S $ Infix(Cut(pot, tp), join r1 r2)
   (* should be the only possibility *)
+*)
+
 and r_spawn (S $ Tok(T.DOUBLEBAR,r)) = S $ Infix(Spawn, r)
 
 (* reduce action prefix of <exp> *)
 and r_action (S $ Tok(T.R,r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.LabR(id,K),join r1 r2)), join r1 r3)
+    S $ Action((fn K => m_exp(A.Lab("R",id,K),join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.L,r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.LabL(id,K), join r1 r2)), join r1 r3)
+    S $ Action((fn K => m_exp(A.Lab("L",id,K), join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.WAITL,r1) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.WaitL(K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Wait("L",K),r1)), join r1 r2)
   | r_action (S $ Tok(T.DELAY,r1) $ Arith(t,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(t,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.TICK,r1) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(R.Int(1),K),r1)), join r1 r2)
   | r_action (S $ Tok(T.WHENR,r1) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.WhenR(K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.When("R",K),r1)), join r1 r2)
   | r_action (S $ Tok(T.WHENL,r1) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.WhenL(K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.When("L",K),r1)), join r1 r2)
   | r_action (S $ Tok(T.NOWR,r1) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.NowR(K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Now("R",K),r1)), join r1 r2)
   | r_action (S $ Tok(T.NOWL,r1) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.NowL(K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Now("L",K),r1)), join r1 r2)
   | r_action (S $ Tok(T.WORK,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Work(pot,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.PAYR,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.PayR(pot,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Pay("R",pot,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.PAYL,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.PayL(pot,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Pay("L",pot,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.GETR,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.GetR(pot,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Get("R",pot,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.GETL,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.GetL(pot,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Get("L",pot,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.ASSERTR,r1) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.AssertR(phi,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Assert("R",phi,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.ASSERTL,r1) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.AssertL(phi,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Assert("L",phi,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.ASSUMER,r1) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.AssumeR(phi,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Assume("R",phi,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.ASSUMEL,r1) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.AssumeL(phi,K),r1)), join r1 r2)
+    S $ Action((fn K => m_exp(A.Assume("L",phi,K),r1)), join r1 r2)
 
 (* <branches> *)
 and p_branches ST = case first ST of

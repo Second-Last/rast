@@ -163,6 +163,7 @@ fun init_pot env f =
 fun measure Flags.None = false
   | measure _ = true
 
+(*
 fun run env (A.Exec(f,ext)::decls) =
     let val () = if !Flags.verbosity >= 1
                  then TextIO.print (PP.pp_decl env (A.Exec(f,ext)) ^ "\n")
@@ -178,6 +179,9 @@ fun run env (A.Exec(f,ext)::decls) =
     end
   | run env (_::decls) = run env decls
   | run env nil = ()
+*)
+
+fun run env decls = ()
 
 fun test args =
     let val () = Flags.reset()
@@ -188,8 +192,10 @@ fun test args =
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
         val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)
+            (*
             handle Exec.SoftError => exit_failure "% execution failed (soft)"
                  | Exec.HardError => exit_failure "% execution failed (hard)"
+            *)
     in
         exit_success (if !Constraints.approx then "% approx success" else "% success")
     end handle OS_SUCCESS => OS.Process.success

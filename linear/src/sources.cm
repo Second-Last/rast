@@ -25,6 +25,8 @@ Group is
       typecheck.sml
 
       recon-sig.sml
+
+      (*
       arecon.sml
       brecon.sml
       qrecon.sml
@@ -35,9 +37,12 @@ Group is
       tqrecon.sml
 
       termination.sml
+      *)
+
       elab.sml
-
+      (*
       exec.sml
-
+      *)
+      
       top.sml
       test.sml

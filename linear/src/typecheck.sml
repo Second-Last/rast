@@ -546,7 +546,8 @@ fun check_explist_pos ctx con (nil) ext = ()
     else check_explist_pos ctx con es ext
 
 fun eq_context env ctx con nil nil = true
-  | eq_context env ctx con [(x,A)] [(x',A')] = eq_tp' env ctx con nil A A'
+  | eq_context env ctx con ((x,A)::D) ((x',A')::D') =
+      eq_tp' env ctx con nil A A' andalso eq_context env ctx con D D'
   | eq_context env ctx con _ _ = false
 
 fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
@@ -597,8 +598,8 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
 
 and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
     (case (expd_expdec_check env (f,es) ext, A.lookup_expdef env f)
-      of ((con',(D',pot',(z',C'))), SOME _) =>
-         let val cutD = gen_context env xs D ext
+      of ((con',(D',pot',(z',B))), SOME _) =>
+         let val cutD = if List.length D' = 0 then [] else gen_context env xs D ext
              val () = if eq_context env ctx con cutD D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
              val () = if not (C.entails ctx con (R.Ge(pot, pot')))
@@ -612,10 +613,13 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
          in
-         check_exp' trace env ctx con ((x,C')::(remove_chans xs D)) (R.minus(pot,pot')) Q zC ext
+         check_exp' trace env ctx con (("L",B)::(remove_chans xs D)) (R.minus(pot,pot')) Q zC ext
          end
        | (_, NONE) => E.error_undeclared (f, ext)
     )
+  | spawn trace env ctx con D pot (A.Spawn(A.Marked(marked_P),Q)) zC ext =
+    spawn trace env ctx con D pot (A.Spawn(Mark.data marked_P,Q)) zC (Mark.ext marked_P)
+
 
 and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
     (* verify the type, but also make sure f is defined somewhere *)

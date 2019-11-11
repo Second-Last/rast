@@ -35,6 +35,7 @@ structure A = Ast
 structure PP = PPrint
 structure C = Constraints
 structure TC = TypeCheck
+(*
 structure AR = ARecon
 structure BR = BRecon
 structure QR = QRecon
@@ -42,6 +43,7 @@ structure WR = WRecon
 structure TR = TRecon
 structure TRBT = TReconBT
 structure TQR = TQRecon
+*)
 val ERROR = ErrorMsg.ERROR
 
 fun postponed (A.Exec _) = "% "
@@ -57,10 +59,11 @@ fun valid_con env ctx con ext =
 
 (* valid left types are either empty (A.Dot)
  * or closed and valid *)
-fun validL env ctx con A.Dot ext = ()
-  | validL env ctx con A ext =
+fun validL env ctx con [] ext = ()
+  | validL env ctx con ((x,A)::D) ext =
     ( TC.closed_tp ctx A ext
-    ; TC.valid env ctx con TC.Zero A ext )
+    ; TC.valid env ctx con TC.Zero A ext
+    ; validL env ctx con D ext )
 
 (* valid right types are closed and valid *)
 fun validR env ctx con A ext =
@@ -71,6 +74,7 @@ fun pp_costs () =
     "--work=" ^ Flags.pp_cost (!Flags.work) ^ " "
     ^ "--time=" ^ Flags.pp_cost (!Flags.time)
 
+(*
 (* quantifier reconstruction: first do approximate type checking *)
 fun qrecon env ctx con A pot P C ext =
     let val P' = AR.recon env ctx con A pot P C ext (* P' = P *)
@@ -107,6 +111,7 @@ fun twrecon env ctx con A pot P C ext =
         val P' = TR.recon env ctx con A pot P C ext
         val _ = TRBT.recon env ctx con A pot P C ext (* redundant; to check backtracking reconstruction *)
     in P' end
+*)
 
 (* reconstruct syntax work time A pot P C ext = P'
  * where P' is the reconstructed version of P
@@ -116,11 +121,15 @@ fun twrecon env ctx con A pot P C ext =
  * We assume the cost model has already been applied
  *)
 fun reconstruct Flags.Explicit _          _          env ctx con A pot P C ext = Cost.apply_cost_model P
+  | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = ERROR ext ("only explicit syntax allowed")
+(*
   | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = qrecon env ctx con A pot P C ext
 (*  | reconstruct Flags.Implicit Flags.None _          env ctx con A pot P C ext = trecon env ctx con A pot P C ext *)
   | reconstruct Flags.Implicit Flags.None _          env ctx con A pot P C ext = tqrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          Flags.None env ctx con A pot P C ext = wrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = twrecon env ctx con A pot P C ext
+*)
+
 
 (* dups vs = true if there is a duplicate variable in vs *)
 fun dups (nil:R.varname list) = false
@@ -194,11 +203,11 @@ and tp_name_subtp' ctx con (A as A.TpName(_,_)) env = (A, env)
 
 (* subst es (vs,con,(A,pot,C)) = [es/vs](con,(A,pot,C)) *)
 (* requires |es| = |vs| *)
-fun subst es (vs,con,(A,pot,C)) =
+fun subst es (vs,con,(D,pot,(z,C))) =
     let
         val sg = R.zip vs es
     in
-        (R.apply_prop sg con, (A.apply_tp sg A, R.apply sg pot, A.apply_tp sg C))
+        (R.apply_prop sg con, (A.apply_context sg D, R.apply sg pot, (z,A.apply_tp sg C)))
     end
 
 (* elab_tps env decls = env'
@@ -242,12 +251,12 @@ fun elab_tps env nil = nil
     in
         decl'::elab_tps env decls
     end
-  | elab_tps env ((decl as A.ExpDec(f,vs,con,(A,pot,C),ext))::decls) =
+  | elab_tps env ((decl as A.ExpDec(f,vs,con,(D,pot,(z,C)),ext))::decls) =
     (* do not print process declaration so they are printed close to their use *)
     let
         val () = if dups vs then ERROR ext ("duplicate index variable in process declaration") else ()
         val () = valid_con env vs con ext
-        val () = validL env vs con A ext
+        val () = validL env vs con D ext
         val () = validR env vs con C ext
         val () = TC.closed vs pot ext
     in
@@ -290,41 +299,41 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.ExpDec _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
-  | elab_exps env ((decl as A.ExpDef(f,vs,P,ext))::decls) =
+  | elab_exps env ((decl as A.ExpDef(f,vs,(xs,P,x),ext))::decls) =
     (case A.lookup_expdec env f
       of NONE => ERROR ext ("process " ^ f ^ " undeclared")
-       | SOME(vs',con',(A',pot',C')) =>
+       | SOME(vs',con',(D',pot',C')) =>
          let 
              val () = if dups vs then ERROR ext ("duplicate index variable in process definition") else ()
              val () = if List.length vs = List.length vs' then ()
                       else ERROR ext ("process defined with " ^ Int.toString (List.length vs) ^ " indices and "
                                       ^ "declared with " ^ Int.toString (List.length vs'))
-             val (con, (A,pot,C)) = subst (R.create_idx vs) (vs',con',(A',pot',C'))
+             val (con, (D,pot,C)) = subst (R.create_idx vs) (vs',con',(D',pot',C'))
              val () = TC.closed_exp vs P ext
              (* val P' = Cost.apply_cost_model P *) (* cost model now applied during reconstruction *)
-             val P' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con A pot P C ext
+             val P' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con D pot P C ext
              val () = case !Flags.syntax                     (* print reconstructed term *)
                        of Flags.Implicit =>                  (* if syntax implicit *)
                           if !Flags.verbosity >= 2           (* and verbose *)
                           then ( TextIO.print ("% after reconstruction with cost model " ^ pp_costs () ^ "\n")
-                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,P',ext)) ^ "\n") )
+                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,(xs,P',x),ext)) ^ "\n") )
                           else ()
                         | Flags.Explicit => (* maybe only if there is a cost model... *)
                           if !Flags.verbosity >= 2
                           then ( TextIO.print ("% with cost model " ^ pp_costs () ^ "\n")
-                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,P',ext)) ^ "\n") )
+                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,(xs,P',x),ext)) ^ "\n") )
                           else ()
              (* is necessary for implicit syntax, since reconstruction is approximate *)
-             val () = TC.check_exp false env vs con A pot P' C ext (* type check *)
+             val () = TC.check_exp false env vs con D pot P' C ext (* type check *)
                  handle ErrorMsg.Error =>
                         (* if verbosity >= 2, type-check again, this time with tracing *)
                         if !Flags.verbosity >= 2
                         then ( TextIO.print ("% tracing type checking...\n")
-                             ; TC.check_exp true env vs con A pot P' C ext ) (* will re-raise ErrorMsg.Error *)
+                             ; TC.check_exp true env vs con D pot P' C ext ) (* will re-raise ErrorMsg.Error *)
                         else raise ErrorMsg.Error (* re-raise if not in verbose mode *)
              val P' = A.strip_exts P' (* always strip extents whether implicit or explicit syntax *)
          in
-             A.ExpDef(f,vs,P',ext)::elab_exps' env decls
+             A.ExpDef(f,vs,(xs,P',x),ext)::elab_exps' env decls
          end)
   | elab_exps env ((decl as A.Exec(f,ext))::decls) =
     (case A.lookup_expdef env f
@@ -345,9 +354,11 @@ fun elab_decls env decls =
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'
+        (*
         val () = case !Flags.terminate
                   of NONE => ()
                    | SOME(recursion) => Termination.terminates env'' env'' (* check termination on elaborated form *)
+        *)
     in
         SOME(env'')
     end
