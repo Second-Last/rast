@@ -35,8 +35,7 @@ type context = chan_tp list
 datatype exp =
        (* judgmental constructs *)
          Id of chan * chan                                             (* x <- y *)
-       | Cut of chan * exp * pot * tp * chan list * exp                (* x : A <- (P) <- xs ; Q *)
-       | Spawn of chan * exp * chan list * exp                         (* x <- f <- xs ; Q *)
+       | Spawn of exp * exp                                            (* P || Q *)
        | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
 
        (* internal/external choice +{...} *)
@@ -79,9 +78,9 @@ datatype decl =
        | TpDef of tpname * Arith.ctx * Arith.prop * tp * ext (* type a = A *)
        | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a = b *)
        | ExpDec of expname * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
-                                                             (* proc f : Delta |- C *)
+                                                             (* proc f : Delta |{pot}- C *)
        | ExpDef of expname * Arith.ctx * (chan list * exp * chan) * ext
-                                                             (* proc f = P *)
+                                                             (* proc x <- f <- xs = P *)
        | Exec of expname * ext                               (* exec f *)
 
 type env = decl list
@@ -103,7 +102,7 @@ val lookup_branch : branches -> label -> exp option
 (* Definitions and Declarations *)
 val expd_tp : env -> tpname * Arith.arith list -> tp  (* must exist, by some invariant *)
 val expd_expdec : env -> expname * Arith.arith list -> (Arith.prop * (context * pot * chan_tp)) option
-val expd_expdef : env -> expname * Arith.arith list -> (chan list * exp * chan) option
+val expd_expdef : env -> expname * Arith.arith list -> exp option
 
 (* Operational Semantics *)
 val strip_exts : exp -> exp     (* remove all marks to support pattern matching *)
@@ -186,8 +185,7 @@ type context = chan_tp list
 datatype exp =
        (* judgmental constructs *)
          Id of chan * chan                                             (* x <- y *)
-       | Cut of chan * exp * pot * tp * chan list * exp                (* x : A <- (P) <- xs ; Q *)
-       | Spawn of chan * expname * Arith.arith list * chan list * exp  (* x <- f, f{...} <- xs ; Q *)
+       | Spawn of exp * exp                                            (* P || Q *)
        | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
 
        (* internal/external choice +{...} *)
@@ -256,8 +254,7 @@ and apply_choices sg choices = List.map (fn (l,Al) => (l, apply_tp sg Al)) choic
 fun apply_chan_tp sg (x,A) = (x,apply_tp sg A)
 fun apply_context sg D = List.map (fn xA => apply_chan_tp sg xA) D
 
-fun apply_exp sg (Cut(x,P,p,B,xs,Q)) = Cut(x,apply_exp sg P, R.apply sg p, apply_tp sg B, xs, apply_exp sg Q)
-  | apply_exp sg (Spawn(x,f,xs,Q)) = Spawn(x,f,xs, apply_exp sg Q)
+fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (Id(x,y)) = Id(x,y)
   | apply_exp sg (Lab(x,k,P)) = Lab(x,k, apply_exp sg P)
   | apply_exp sg (Case(x,branches)) = Case(x,apply_branches sg branches)
@@ -272,7 +269,7 @@ fun apply_exp sg (Cut(x,P,p,B,xs,Q)) = Cut(x,apply_exp sg P, R.apply sg p, apply
   | apply_exp sg (Assert(x,phi,P)) = Assert(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
-  | apply_exp sg (ExpName(f,es)) = ExpName(f, R.apply_list sg es)
+  | apply_exp sg (ExpName(x,f,es,xs)) = ExpName(x,f, R.apply_list sg es, xs)
   | apply_exp sg (Marked(marked_P)) = Marked(Mark.mark' (Mark.data marked_P, Mark.ext marked_P))
 
 and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P)) branches
@@ -284,13 +281,13 @@ fun lookup_tp (TpDef(a',vs,con,A,_)::env') a  =
   | lookup_tp (_ ::env') a = lookup_tp env' a
   | lookup_tp (nil) a = NONE
 
-fun lookup_expdec (ExpDec(f',vs,con,(D, pot, C),_)::env') f =
-    if f = f' then SOME(vs,con,(D,pot,C)) else lookup_expdec env' f
+fun lookup_expdec (ExpDec(f',vs,con,(D, pot, zC),_)::env') f =
+    if f = f' then SOME(vs,con,(D,pot,zC)) else lookup_expdec env' f
   | lookup_expdec (_::env') f = lookup_expdec env' f
   | lookup_expdec nil f = NONE
 
-fun lookup_expdef (ExpDef(f',vs,P,_)::env') f =
-    if f = f' then SOME(vs,P) else lookup_expdef env' f
+fun lookup_expdef (ExpDef(f',vs,(xs,P,x),_)::env') f =
+    if f = f' then SOME(vs,(xs,P,x)) else lookup_expdef env' f
   | lookup_expdef (_::env') f = lookup_expdef env' f
   | lookup_expdef nil f = NONE
 
@@ -319,15 +316,15 @@ fun expd_tp env (a,es) =
 
 fun expd_expdec env (f,es) =
     (case lookup_expdec env f
-      of SOME(vs,con,(A,pot,C)) =>
+      of SOME(vs,con,(D,pot,(z,C))) =>
          let val sg = R.zip vs es (* requires |vs| = |es| *)
-         in SOME(R.apply_prop sg con, (apply_tp sg A, R.apply sg pot, apply_tp sg C))
+         in SOME(R.apply_prop sg con, (apply_context sg D, R.apply sg pot, (z,apply_tp sg C)))
          end
        | NONE => NONE)
 
 fun expd_expdef env (f,es) =
   (case lookup_expdef env f of
-    SOME(vs,P) => SOME(apply_exp (R.zip vs es) P) (* requires |vs| = |es| *)
+    SOME(vs,(xs,P,x)) => SOME(apply_exp (R.zip vs es) P) (* requires |vs| = |es| *)
   | NONE => NONE)
 
 (*************************)
@@ -337,31 +334,22 @@ fun expd_expdef env (f,es) =
 (* strip_exts P = P' strips all source location information from P
  * This helps in writing the operational rules by pattern matching
  *)
-fun strip_exts (Id) = Id
-  | strip_exts (Cut(P,pot,A,Q)) = Cut(strip_exts P, pot, A, strip_exts Q)
+fun strip_exts (Id(x,y)) = Id(x,y)
   | strip_exts (Spawn(P,Q)) = Spawn(strip_exts P,strip_exts Q)
-  | strip_exts (ExpName(f,es)) = ExpName(f,es)
-  | strip_exts (LabR(k,P)) = LabR(k, strip_exts P)
-  | strip_exts (CaseL(branches)) = CaseL(strip_exts_branches branches)
-  | strip_exts (CaseR(branches)) = CaseR(strip_exts_branches branches)
-  | strip_exts (LabL(k,Q)) = LabL(k, strip_exts Q)
-  | strip_exts (CloseR) = CloseR
-  | strip_exts (WaitL(Q)) = WaitL(strip_exts Q)
-  | strip_exts (AssertR(phi,P)) = AssertR(phi, strip_exts P)
-  | strip_exts (AssumeL(phi,Q)) = AssumeL(phi, strip_exts Q)
-  | strip_exts (AssumeR(phi,P)) = AssumeR(phi, strip_exts P)
-  | strip_exts (AssertL(phi,Q)) = AssertL(phi, strip_exts Q)
+  | strip_exts (ExpName(x,f,es,xs)) = ExpName(x,f,es,xs)
+  | strip_exts (Lab(x,k,P)) = Lab(x,k, strip_exts P)
+  | strip_exts (Case(x,branches)) = Case(x,strip_exts_branches branches)
+  | strip_exts (Close(x)) = Close(x)
+  | strip_exts (Wait(x,Q)) = Wait(x,strip_exts Q)
+  | strip_exts (Assert(x,phi,P)) = Assert(x,phi, strip_exts P)
+  | strip_exts (Assume(x,phi,Q)) = Assume(x,phi, strip_exts Q)
   | strip_exts (Imposs) = Imposs
   | strip_exts (Work(p,P)) = Work(p,strip_exts P)
-  | strip_exts (PayR(p,P)) = PayR(p,strip_exts P)
-  | strip_exts (GetL(p,P)) = GetL(p,strip_exts P)
-  | strip_exts (GetR(p,P)) = GetR(p,strip_exts P)
-  | strip_exts (PayL(p,P)) = PayL(p,strip_exts P)
+  | strip_exts (Pay(x,p,P)) = Pay(x,p,strip_exts P)
+  | strip_exts (Get(x,p,P)) = Get(x,p,strip_exts P)
   | strip_exts (Delay(t,P)) = Delay(t,strip_exts P)
-  | strip_exts (NowR(P)) = NowR(strip_exts P)
-  | strip_exts (WhenL(Q)) = WhenL(strip_exts Q)
-  | strip_exts (WhenR(P)) = WhenR(strip_exts P)
-  | strip_exts (NowL(Q)) = NowL(strip_exts Q)
+  | strip_exts (Now(x,P)) = Now(x,strip_exts P)
+  | strip_exts (When(x,Q)) = When(x,strip_exts Q)
   | strip_exts (Marked(marked_P)) = strip_exts (Mark.data marked_P)
 and strip_exts_branches nil = nil
   | strip_exts_branches ((l,ext,P)::branches) =
@@ -426,31 +414,26 @@ and pp_choice nil = ""
   | pp_choice ((l,A)::choices) =
     l ^ " : " ^ pp_tp A ^ ", " ^ pp_choice choices
 
-fun pp_exp (Cut(P,pot,A,Q)) = "(" ^ pp_exp P ^ " [|" ^ pp_pot pot ^ "- " ^ pp_tp A ^ "] " ^ pp_exp Q ^ ")"
-  | pp_exp (Spawn(P,Q)) = "(" ^ pp_exp P ^ " || " ^ pp_exp Q ^ ")"
-  | pp_exp (Id) = "<->"
-  | pp_exp (LabR(k,P)) = "R." ^ k ^ " ; " ^ pp_exp P
-  | pp_exp (CaseL(branches)) = "caseL (" ^ pp_branches branches ^ ")"
-  | pp_exp (CaseR(branches)) = "caseR (" ^ pp_branches branches ^ ")"
-  | pp_exp (LabL(k,Q)) = "L." ^ k ^ " ; " ^ pp_exp Q
-  | pp_exp (CloseR) = "closeR"
-  | pp_exp (WaitL(Q)) = "waitL ; " ^ pp_exp Q
+fun pp_chanlist [] = ""
+  | pp_chanlist [x] = x
+  | pp_chanlist (x::l) = x ^ " " ^ pp_chanlist l
+
+fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
+  | pp_exp (Id(x,y)) = x ^ " <- " ^ y
+  | pp_exp (Lab(x,k,P)) = x ^ "." ^ k ^ " ; " ^ pp_exp P
+  | pp_exp (Case(x,branches)) = "case " ^ x ^ " (" ^ pp_branches branches ^ ")"
+  | pp_exp (Close(x)) = "close " ^ x
+  | pp_exp (Wait(x,Q)) = "wait " ^ x ^ " ; " ^ pp_exp Q
   | pp_exp (Delay(t,P)) = "delay " ^ pp_time t ^ " ; " ^ pp_exp P
-  | pp_exp (WhenR(P)) = "whenR ; " ^ pp_exp P
-  | pp_exp (NowL(Q)) = "nowL ; " ^ pp_exp Q
-  | pp_exp (WhenL(Q)) = "whenL ; " ^ pp_exp Q
-  | pp_exp (NowR(P)) = "nowR ; " ^ pp_exp P
+  | pp_exp (When(x,P)) = "when? " ^ x ^ " ; " ^ pp_exp P
+  | pp_exp (Now(x,Q)) = "now! " ^ x ^ " ; " ^ pp_exp Q
   | pp_exp (Work(p,P)) = "work " ^ pp_potpos p ^ " ; " ^ pp_exp P
-  | pp_exp (PayL(p,P)) = "payL " ^ pp_potpos p ^ " ; " ^ pp_exp P
-  | pp_exp (PayR(p,Q)) = "payR " ^ pp_potpos p ^ " ; " ^ pp_exp Q
-  | pp_exp (GetL(p,P)) = "getL " ^ pp_potpos p ^ " ; " ^ pp_exp P
-  | pp_exp (GetR(p,Q)) = "getR " ^ pp_potpos p ^ " ; " ^ pp_exp Q
-  | pp_exp (AssertR(phi,P)) = "assertR " ^ pp_prop phi ^ " ; " ^ pp_exp P
-  | pp_exp (AssertL(phi,Q)) = "assertL " ^ pp_prop phi ^ " ; " ^ pp_exp Q
-  | pp_exp (AssumeR(phi,P)) = "assumeR " ^ pp_prop phi ^ " ; " ^ pp_exp P
-  | pp_exp (AssumeL(phi,Q)) = "assumeL " ^ pp_prop phi ^ " ; " ^ pp_exp Q
+  | pp_exp (Pay(x,p,P)) = "pay " ^ x ^ " " ^ pp_potpos p ^ " ; " ^ pp_exp P
+  | pp_exp (Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potpos p ^ " ; " ^ pp_exp P
+  | pp_exp (Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
+  | pp_exp (Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
   | pp_exp (Imposs) = "impossible"
-  | pp_exp (ExpName(f,es)) = f ^ pp_idx es
+  | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ pp_chanlist xs
   | pp_exp (Marked(marked_exp)) = pp_exp (Mark.data marked_exp)
 and pp_branches (nil) = ""
   | pp_branches ((l,_,P)::nil) = l ^ " => " ^ pp_exp P
