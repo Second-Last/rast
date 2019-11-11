@@ -30,7 +30,7 @@ sig
     val eq_tp : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.tp -> bool
 
     (* operations on approximately typed expressions (see arecon.sml) *)
-    val syn_cut : Ast.env -> Ast.exp * Ast.exp ->  Ast.ext -> Ast.exp
+    (* val syn_cut : Ast.env -> Ast.exp * Ast.exp ->  Ast.ext -> Ast.exp *)
     val syn_call : Ast.env -> Ast.exp -> Ast.ext -> Ast.context * Ast.pot * Ast.exp * Ast.chan_tp
     val synR : Ast.env -> Ast.expname * Arith.arith list -> Ast.chan_tp
     val synL : Ast.env -> Ast.expname * Arith.arith list -> Ast.context
@@ -88,45 +88,32 @@ and closed_choice ctx nil ext = ()
   | closed_choice ctx ((l,Al)::choices) ext =
     ( closed_tp ctx Al ext ; closed_choice ctx choices ext )
 
-fun closed_exp ctx (A.Id) ext = ()
-  | closed_exp ctx (A.Cut(P,lpot,B,Q)) ext =
-    ( closed_exp ctx P ext
-    ; closed ctx lpot ext
-    ; closed_tp ctx B ext
-    ; closed_exp ctx Q ext )
+fun closed_exp ctx (A.Id _) ext = ()
   | closed_exp ctx (A.Spawn(P,Q)) ext =
     ( closed_exp ctx P ext
     ; closed_exp ctx Q ext )
-  | closed_exp ctx (A.ExpName(f,es)) ext = List.app (fn e => closed ctx e ext) es
+  | closed_exp ctx (A.ExpName(x,f,es,xs)) ext = List.app (fn e => closed ctx e ext) es
 
-  | closed_exp ctx (A.LabR(k,P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.CaseL(branches)) ext = closed_branches ctx branches ext
+  | closed_exp ctx (A.Lab(x,k,P)) ext = closed_exp ctx P ext
+  | closed_exp ctx (A.Case(x,branches)) ext = closed_branches ctx branches ext
 
-  | closed_exp ctx (A.CaseR(branches)) ext = closed_branches ctx branches ext
-  | closed_exp ctx (A.LabL(k,Q)) ext = closed_exp ctx Q ext
-
-  | closed_exp ctx (A.CloseR) ext = ()
-  | closed_exp ctx (A.WaitL(Q)) ext = closed_exp ctx Q ext
+  | closed_exp ctx (A.Close _) ext = ()
+  | closed_exp ctx (A.Wait(x,Q)) ext = closed_exp ctx Q ext
                                       
-  | closed_exp ctx (A.AssertR(phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.AssumeL(phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.AssumeR(phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.AssertL(phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
+  | closed_exp ctx (A.Assert(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
+  | closed_exp ctx (A.Assume(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
   | closed_exp ctx (A.Imposs) ext = ()
 
   | closed_exp ctx (A.Work(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.PayR(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.GetL(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.GetR(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.PayL(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
+  | closed_exp ctx (A.Pay(x,p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
+  | closed_exp ctx (A.Get(x,p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
 
   | closed_exp ctx (A.Delay(t,P)) ext = (closed ctx t ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.WhenR(P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.NowL(P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.WhenL(P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.NowR(P)) ext = closed_exp ctx P ext
+  | closed_exp ctx (A.When(x,P)) ext = closed_exp ctx P ext
+  | closed_exp ctx (A.Now(x,P)) ext = closed_exp ctx P ext
 
   | closed_exp ctx (A.Marked(marked_P)) ext = closed_exp ctx (Mark.data marked_P) (Mark.ext marked_P)
+
 and closed_branches ctx nil ext = ()
   | closed_branches ctx ((l,ext',P)::branches) ext =
     ( closed_exp ctx P ext'
@@ -471,7 +458,7 @@ fun expd_expdec_check env (f,es) ext =
  * if vs ; con ; A |{p}- f : B
  * raises ErrorMsg.Error if P || Q where P is not a process name,
  * f is undeclared, or |es| <> |vs|
- *)
+
 fun syn_cut env (P as A.ExpName(f,es), Q) ext =
     (case A.lookup_expdec env f
       of SOME(vs,con,(D,pot,yB)) =>
@@ -481,12 +468,14 @@ fun syn_cut env (P as A.ExpName(f,es), Q) ext =
   | syn_cut env (A.Marked(marked_P), Q) ext = (* Q: preserve mark? *)
     syn_cut env (Mark.data marked_P, Q) (Mark.ext marked_P)
   | syn_cut env P ext = ERROR ext ("left-hand side of spawn '||' must be a process name")
+*)
+
 
 (* syn_call env f{es} ext = [vs/es](con, (A, p, C))
  * if vs ; con ; A |{p}- f : C
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
-fun syn_call env (P as A.ExpName(f,es)) ext =
+fun syn_call env (P as A.ExpName(x,f,es,xs)) ext =
     (case A.lookup_expdec env f
       of SOME(vs,con,(D,pot,yB)) =>
          let val sg = zip_check f vs es ext
@@ -523,7 +512,8 @@ fun syn_alt env choices k = Option.valOf (A.lookup_choice choices k)
 (*************************************)
 (* Type checking process expressions *)
 (*************************************)
-                            
+
+(*
 fun interactsL P = case P of
     A.CaseL _ => true | A.LabL _ => true | A.WaitL _ => true
   | A.WhenL _ => true | A.NowL _ => true
@@ -542,6 +532,8 @@ fun interactsR P = case P of
 
 fun is_tpname (A.TpName(a,l)) = true
   | is_tpname _ = false
+*)
+
 
 (* check_explist_pos ctx con es ext = ()
  * if ctx ; con |= e >= 0 for all e in es
@@ -558,11 +550,16 @@ fun eq_context env ctx con nil nil = true
   | eq_context env ctx con _ _ = false
 
 fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
-  | lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context x D' ext
+  | lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context env x D' ext
 
 fun update_tp (x,A) ((y,B)::D') = if x = y then (x,A)::D' else (y,B)::(update_tp (x,A) D')
 
 fun remove_chan x ((y,B)::D') = if x = y then D' else (y,B)::(remove_chan x D')
+
+fun remove_chans [] D = D
+  | remove_chans (x::xs) D = remove_chans xs (remove_chan x D)
+
+fun gen_context env xs D ext = List.map (fn x => (x,lookup_context env x D ext)) xs
 
 (* check_exp trace env ctx con A pot P C = () if A |{pot}- P : C
  * raises ErrorMsg.Error otherwise
@@ -598,19 +595,34 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
                  else ()
     in () end
 
-and cut trace env ctx con D pot (A.Cut(P,lpot,B,Q)) zC ext =
-    ( valid env ctx con Zero B ext (* interface type B must be valid *)
-    ; if not (C.entails ctx con (R.Ge(lpot,R.Int(0)))) (* and potential >= 0 *)
-      then ERROR ext ("potential not positive: " ^ C.pp_jfail con (R.Ge(lpot, R.Int(0))))
-      else if not (C.entails ctx con (R.Ge(pot, lpot)))
-      then ERROR ext ("insufficient potential: " ^ C.pp_jfail con (R.Ge(pot, lpot)))
-      else ( check_exp' trace env ctx con D lpot P ("R",B) ext
-           ; check_exp' trace env ctx con [("L",B)] (R.minus(pot,lpot)) Q zC ext )
+and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
+    (case (expd_expdec_check env (f,es) ext, A.lookup_expdef env f)
+      of ((con',(D',pot',(z',C'))), SOME _) =>
+         let val cutD = gen_context env xs D ext
+             val () = if eq_context env ctx con cutD D' then ()
+                      else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
+             val () = if not (C.entails ctx con (R.Ge(pot, pot')))
+                      then ERROR ext ("insufficient potential to spawn: " ^ C.pp_jfail con (R.Ge(pot, pot')))
+                      else ()
+             val () = if not (C.entails ctx con (R.Ge(pot',R.Int(0)))) (* and potential >= 0 *)
+                      then ERROR ext ("potential not positive: " ^ C.pp_jfail con (R.Ge(pot', R.Int(0))))
+                      else ()
+             val () = check_explist_pos ctx con es ext
+             val () = if not (C.entails ctx con con')
+                      then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
+                      else ()
+         in
+         check_exp' trace env ctx con ((x,C')::(remove_chans xs D)) (R.minus(pot,pot')) Q zC ext
+         end
+       | (_, NONE) => E.error_undeclared (f, ext)
     )
 
-and expname trace env ctx con D pot (A.ExpName(f,es)) (z,C) ext =
+and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
     (* verify the type, but also make sure f is defined somewhere *)
     (* eq_context expects lists in the same order, no reordering *)
+    if x <> z
+    then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z)
+    else
     (case (expd_expdec_check env (f,es) ext, A.lookup_expdef env f)
       of ((con',(D',pot',(z',C'))), SOME _) =>
          let val () = if eq_context env ctx con D D' then ()
@@ -628,16 +640,16 @@ and expname trace env ctx con D pot (A.ExpName(f,es)) (z,C) ext =
        | (_, NONE) => E.error_undeclared (f, ext)
     )
 
-and plusR trace env ctx con D pot (A.Lab(x,k,P)) (z,A.Plus(choices)) ext (* z = x *) =
+and plusR trace env ctx con D pot (A.Lab(x,k,P)) (z,C as A.Plus(choices)) ext (* z = x *) =
     (case A.lookup_choice choices k
       of SOME(Ck) => check_exp' trace env ctx con D pot P (z,Ck) ext
       | NONE => E.error_label_invalid env (k, C, ext))
   | plusR trace env ctx con D pot (A.Lab(x,k,P)) (z,C) ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected internal choice, found: " ^ PP.pp_tp_compact env C)
 
-and withL trace env ctx con D (A.With(choices)) pot (A.Lab(x,k,P)) zC ext (* z != x *) =
+and withL trace env ctx con D (A as A.With(choices)) pot (A.Lab(x,k,P)) zC ext (* z != x *) =
     (case A.lookup_choice choices k
-      of SOME(Ak) => check_exp' trace env ctx con (update_tp (x,Ak) D) pot Q zC ext
+      of SOME(Ak) => check_exp' trace env ctx con (update_tp (x,Ak) D) pot P zC ext
       | NONE => E.error_label_invalid env (k, A, ext))
   | withL trace env ctx cond D A pot (A.Lab(x,k,P)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected external choice, found: " ^ PP.pp_tp_compact env A)
@@ -645,14 +657,14 @@ and withL trace env ctx con D (A.With(choices)) pot (A.Lab(x,k,P)) zC ext (* z !
 (* check_branchesR trace env ctx con A branches choices = ()
  * for provider of external choice &{...}
  *)
-and check_branchesR trace env ctx con D pot nil nil ext = ()
+and check_branchesR trace env ctx con D pot nil (z,nil) ext = ()
   | check_branchesR trace env ctx con D pot ((l,ext',P)::branches) (z,(l',C)::choices) ext =
     (* require exact order *)
     ( if trace then TextIO.print ("| " ^ l ^ " => \n") else ()
     ; if l = l' then () else E.error_label_mismatch (l, l', ext')
     ; check_exp' trace env ctx con D pot P (z,C) ext
     ; check_branchesR trace env ctx con D pot branches (z,choices) ext )
-  | check_branchesR trace env ctx con D pot (z,(l,ext',P)::_) nil ext = E.error_label_missing_alt (l, ext')
+  | check_branchesR trace env ctx con D pot ((l,ext',P)::_) (z,nil) ext = E.error_label_missing_alt (l, ext')
   | check_branchesR trace env ctx con D pot nil (z,(l',C)::_) ext = E.error_label_missing_branch (l', ext)
 
 and withR trace env ctx con D pot (A.Case(x,branches)) (z,A.With(choices)) ext (* z = x *) =
@@ -663,15 +675,15 @@ and withR trace env ctx con D pot (A.Case(x,branches)) (z,A.With(choices)) ext (
 (* check_branchesL env ctx con choices branches C ext = ()
  * for client of internal choice +{...}
  *)
-and check_branchesL trace env ctx con D nil pot nil zC ext = ()
+and check_branchesL trace env ctx con D (x,nil) pot nil zC ext = ()
   | check_branchesL trace env ctx con D (x,(l,A)::choices) pot ((l',ext',P)::branches) zC ext =
     (* require exact order *)
     ( if trace then TextIO.print ("| " ^ l' ^ " => \n") else ()
     ; if l = l' then () else E.error_label_mismatch (l, l', ext')
     ; check_exp' trace env ctx con (update_tp (x,A) D) pot P zC ext
-    ; check_branchesL trace env ctx con (x,choices) pot branches zC ext )
+    ; check_branchesL trace env ctx con D (x,choices) pot branches zC ext )
   | check_branchesL trace env ctx con D (x,(l,A)::_) pot nil zC ext = E.error_label_missing_branch (l, ext)
-  | check_branchesL trace env ctx con D nil pot ((l',ext',P)::_) zC ext = E.error_label_missing_alt (l', ext')
+  | check_branchesL trace env ctx con D (x,nil) pot ((l',ext',P)::_) zC ext = E.error_label_missing_alt (l', ext')
 
 and plusL trace env ctx con D (A.Plus(choices)) pot (A.Case(x,branches)) zC ext (* z != x *) =
     check_branchesL trace env ctx con D (x,choices) pot branches zC ext
@@ -706,22 +718,22 @@ and forallL trace env ctx con D (A.Forall(phi',A)) pot (A.Assert(x,phi,P)) zC ex
     then ERROR ext ("assertion not entailed: " ^ C.pp_jfail con phi)
     else if not (C.entails ctx con phi') (* equivalent would be con, phi |= phi' *)
     then ERROR ext ("type constraint not entailed: " ^ C.pp_jfail con phi')
-    else check_exp' trace env ctx con (update_tp (x,A) D) pot Q zC ext
+    else check_exp' trace env ctx con (update_tp (x,A) D) pot P zC ext
   | forallL trace env ctx con D A pot (A.Assert(x,phi,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected forall, found: " ^ PP.pp_tp_compact env A)
 
-and forallR trace env ctx con D pot (A.Assume(x,phi,Q)) (z,A.Forall(phi',C)) ext (* z = x *) =
+and forallR trace env ctx con D pot (A.Assume(x,phi,P)) (z,A.Forall(phi',C)) ext (* z = x *) =
     if not (C.entails ctx (R.And(con,phi')) phi)
     then ERROR ext ("assumption not entailed: " ^ C.pp_jfail (R.And(con,phi')) phi)
     else check_exp' trace env ctx (R.And(con,phi)) D pot P (z,C) ext (* assume only the possibly weaker phi *)
- | forallR trace env ctx con D pot (A.Assume(x,phi,Q)) (z,C) ext =
+ | forallR trace env ctx con D pot (A.Assume(x,phi,P)) (z,C) ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected forall, found: " ^ PP.pp_tp_compact env C)
   
-and existsL trace env ctx con D (A.Exists(phi',A)) pot (A.Assume(x,phi,Q)) zC ext (* z != x *) =
+and existsL trace env ctx con D (A.Exists(phi',A)) pot (A.Assume(x,phi,P)) zC ext (* z != x *) =
     if not (C.entails ctx (R.And(con,phi')) phi) (* con, phi' |= phi *)
     then ERROR ext ("assumption not entailed: " ^ C.pp_jfail (R.And(con,phi')) phi)
-    else check_exp' trace env ctx (R.And(con,phi)) (update_tp (x,A) D) pot Q zC ext (* assume the possibly weaker phi *)
-  | existsL trace env ctx con D A pot (A.Assume(x,phi,Q)) zC ext =
+    else check_exp' trace env ctx (R.And(con,phi)) (update_tp (x,A) D) pot P zC ext (* assume the possibly weaker phi *)
+  | existsL trace env ctx con D A pot (A.Assume(x,phi,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected exists, found: " ^ PP.pp_tp_compact env A)
 
 and work trace env ctx con D pot (A.Work(p,P)) zC ext =
@@ -764,7 +776,7 @@ and paypotL trace env ctx con D (A.PayPot(p,A)) pot (A.Get(x,p',P)) zC ext =
     if not (C.entails ctx con (R.Eq(p,p')))
     then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(p,p')))
     else check_exp' trace env ctx con (update_tp (x,A) D) (R.plus (pot,p)) P zC ext
-  | getpotL trace env ctx con D A pot (A.Get(x,p',P)) zC ext =
+  | paypotL trace env ctx con D A pot (A.Get(x,p',P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected getpot, found: " ^ PP.pp_tp_compact env A)
 
 and delay trace env ctx con D pot (A.Delay(t,P)) (z,C) ext =
@@ -794,7 +806,7 @@ and diaL trace env ctx con D (A.Dia(A)) pot (A.When(x,P)) (z,C) ext (* z != x *)
     let val () = if eventually_dia env C then ()
                  else ERROR ext ("type " ^ PP.pp_tp_compact env C ^ " is not patient (ie, not (n)<>A")
     in
-        check_exp' trace env ctx con (update_tp (x,A) D) pot Q (z,C) ext
+        check_exp' trace env ctx con (update_tp (x,A) D) pot P (z,C) ext
     end
   | diaL trace env ctx con D A pot (A.When(x,P)) (z,C) ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected diamond, found: " ^ PP.pp_tp_compact env A)
@@ -802,12 +814,10 @@ and diaL trace env ctx con D (A.Dia(A)) pot (A.When(x,P)) (z,C) ext (* z != x *)
   (* judgmental constructs: id, cut, spawn, call *)
 and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     fwd trace env ctx con D pot (A.Id(x,y)) zC ext
-  | check_exp trace env ctx con D pot (A.Cut(P,lpot,B,Q)) zC ext =
-    cut trace env ctx con D pot (A.Cut(P,lpot,B,Q)) zC ext
   | check_exp trace env ctx con D pot (A.Spawn(P,Q)) zC ext =
-    check_exp trace env ctx con D pot (syn_cut env (P,Q) ext) zC ext
-  | check_exp trace env ctx con D pot (A.ExpName(f,es)) (z,C) ext =
-    expname trace env ctx con D pot (A.ExpName(f,es)) (z,C) ext
+    spawn trace env ctx con D pot (A.Spawn(P,Q)) zC ext
+  | check_exp trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
+    expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext
     
   (* structural types +{...}, &{...}, 1 *)
   | check_exp trace env ctx con D pot (A.Lab(x,k,P)) (z,C) ext =
@@ -832,11 +842,11 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
   | check_exp trace env ctx con D pot (A.Assert(x,phi,P)) (z,C) ext =
     if x = z
     then existsR trace env ctx con D pot (A.Assert(x,phi,P)) (z,expand env C) ext
-    else forallL trace env ctx con D (lookup_context env x D ext) (A.Assert(x,phi,P)) (z,C) ext
-  | check_exp trace env ctx con [(x,A.Exists(phi',A))] pot (A.Assume(x,phi,Q)) (z,C) ext =
+    else forallL trace env ctx con D (lookup_context env x D ext) pot (A.Assert(x,phi,P)) (z,C) ext
+  | check_exp trace env ctx con D pot (A.Assume(x,phi,Q)) (z,C) ext =
     if x = z
     then forallR trace env ctx con D pot (A.Assume(x,phi,Q)) (z,expand env C) ext
-    else existsL trace env ctx con D (lookup_context env x D ext) (A.Assume(x,phi,Q)) (z,C) ext    
+    else existsL trace env ctx con D (lookup_context env x D ext) pot (A.Assume(x,phi,Q)) (z,C) ext    
 
   (* impossibility *)
   | check_exp trace env ctx con D pot (A.Imposs) zC ext =
@@ -855,8 +865,6 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     if x = z
     then getpotR trace env ctx con D pot (A.Get(x,p',P)) (z,expand env C) ext
     else paypotL trace env ctx con D (lookup_context env x D ext) pot (A.Get(x,p',P)) (z,C) ext
-  | check_exp trace env ctx con D pot (A.GetR(p',P)) (z,A.GetPot(p,C)) ext =
-  | check_exp trace env ctx con [(x,A.GetPot(p,A))] pot (A.PayL(p',P)) zC ext =
 
   (* temporal types (), [], <> *)
   | check_exp trace env ctx con D pot (A.Delay(t,P)) (z,C) ext =
@@ -873,9 +881,10 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
 
 
   (* marked expressions *)
-  | check_exp trace env ctx con A pot (A.Marked(marked_P)) C ext =
-    check_exp trace env ctx con A pot (Mark.data marked_P) C (Mark.ext marked_P)
+  | check_exp trace env ctx con D pot (A.Marked(marked_P)) zC ext =
+    check_exp trace env ctx con D pot (Mark.data marked_P) zC (Mark.ext marked_P)
 
+(*
   (* type definitions or error messages *)
   | check_exp trace env ctx con nil pot P (z,C) ext =
     if interactsL P
@@ -900,6 +909,8 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
                          ^ PP.pp_tpj env [(x,A)] pot (z,C))
     else (* not sure if this is possible *)
         ERROR ext ("process does not match types" ^ PP.pp_tpj env [(x,A)] pot (z,C))
+*)
+
 
 (* external interface *)
 val check_exp = check_exp'      (* entry point for tracing *)

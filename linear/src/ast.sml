@@ -433,7 +433,7 @@ fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
   | pp_exp (Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
   | pp_exp (Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
   | pp_exp (Imposs) = "impossible"
-  | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ pp_chanlist xs
+  | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
   | pp_exp (Marked(marked_exp)) = pp_exp (Mark.data marked_exp)
 and pp_branches (nil) = ""
   | pp_branches ((l,_,P)::nil) = l ^ " => " ^ pp_exp P
@@ -443,12 +443,17 @@ and pp_branches (nil) = ""
 fun pp_con (R.True) = ""
   | pp_con con = "{_|" ^ RP.pp_prop con ^ "}"
 
+fun pp_chan_tp (x,A) = "(" ^ x ^ " : " ^ pp_tp A ^ ")"
+fun pp_context nil = "."
+  | pp_context [xA] = pp_chan_tp xA
+  | pp_context (xA::D) = pp_chan_tp xA ^ " " ^ pp_context D
+
+
 fun pp_decl (TpDef(a,vs,R.True,A,_)) = "type " ^ a ^ pp_vars vs ^ " = " ^ pp_tp A
   | pp_decl (TpDef(a,vs,con,A,_)) = "type " ^ a ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
   | pp_decl (TpEq(ctx,con,TpName(a,l),TpName(a',l'),_)) = "eqtype " ^ a ^ pp_idx l ^ " = " ^ a' ^ pp_idx l'
-  | pp_decl (ExpDec(f,vs,con,([(x,A)],pot,(z,C)),_)) = "proc " ^ f ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_tp A ^ " |" ^ pp_pot pot ^ "- " ^ pp_tp C
-  | pp_decl (ExpDec(f,vs,con,(nil,pot,(z,C)),_)) = "proc " ^ f ^ pp_vars vs ^ pp_con con ^ " : " ^ ". |" ^ pp_pot pot ^ "- " ^ pp_tp C
-  | pp_decl (ExpDef(f,vs,(_,P,_),_)) = "proc " ^ f ^ pp_vars vs ^ " = " ^ pp_exp P
+  | pp_decl (ExpDec(f,vs,con,(D,pot,zC),_)) = "proc " ^ f ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
+  | pp_decl (ExpDef(f,vs,(xs,P,x),_)) = "proc " ^ f ^ pp_vars vs ^ " : " ^ x ^ " <- " ^ pp_chanlist xs ^ " = " ^ pp_exp P
   | pp_decl (Exec(f,_)) = "exec " ^ f
   | pp_decl (Pragma(p,line,_)) = p ^ line
 
