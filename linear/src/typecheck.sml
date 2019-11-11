@@ -555,10 +555,11 @@ fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
 
 fun update_tp (x,A) ((y,B)::D') = if x = y then (x,A)::D' else (y,B)::(update_tp (x,A) D')
 
-fun remove_chan x ((y,B)::D') = if x = y then D' else (y,B)::(remove_chan x D')
+fun remove_chan env x ((y,B)::D') ext = if x = y then D' else (y,B)::(remove_chan env x D' ext)
+  | remove_chan env x [] ext = ERROR ext ("cannot remove " ^ x ^ " from context")
 
-fun remove_chans [] D = D
-  | remove_chans (x::xs) D = remove_chans xs (remove_chan x D)
+fun remove_chans env [] D ext = D
+  | remove_chans env (x::xs) D ext = remove_chans env xs (remove_chan env x D ext) ext
 
 fun gen_context env xs D ext = List.map (fn x => (x,lookup_context env x D ext)) xs
 
@@ -612,8 +613,9 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
              val () = if not (C.entails ctx con con')
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
+             val contD = if List.length D' = 0 then D else remove_chans env xs D ext
          in
-         check_exp' trace env ctx con (("L",B)::(remove_chans xs D)) (R.minus(pot,pot')) Q zC ext
+         check_exp' trace env ctx con (("L",B)::contD) (R.minus(pot,pot')) Q zC ext
          end
        | (_, NONE) => E.error_undeclared (f, ext)
     )
@@ -704,7 +706,7 @@ and oneR trace env ctx con D pot (A.Close(x)) (z,A.One) ext (* z = x *) =
     ERROR ext ("type mismatch of " ^ x ^ ": expected one, found: " ^ PP.pp_tp_compact env C)
 
 and oneL trace env ctx con D (A.One) pot (A.Wait(x,Q)) zC ext (* z != x *) =
-    check_exp' trace env ctx con (remove_chan x D) pot Q zC ext
+    check_exp' trace env ctx con (remove_chan env x D ext) pot Q zC ext
   | oneL trace env ctx con D A pot (A.Wait(x,Q)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected one, found: " ^ PP.pp_tp_compact env A)
 
