@@ -483,7 +483,7 @@ and p_fwd_or_spawn_or_label_send_or_chan_recv_or_shared ST = case first ST of
 and p_fwd_or_spawn_or_recv_or_shared ST = ST |> p_id >> p_fwd_or_spawn
 
 and p_fwd_or_spawn ST = case first ST of
-    T.LARROW => ST |> shift >> push (Indices(nil, here ST)) >> push (Args ([], here ST)) >> p_id_list_opt_exp
+    T.LARROW => ST |> push (Indices(nil, here ST)) >> shift >> push (Args ([], here ST)) >> p_id_list_opt_exp
   | T.LBRACE => ST |> push (Indices(nil, here ST)) >> p_idx_seq
   | _ => ST |> reduce r_exp_atomic >> p_exp
 
@@ -515,7 +515,7 @@ and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.C
     S $ Exp(m_exp(A.Case(id,branches),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IMPOSSIBLE,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2)) =
     S $ Exp(m_exp(A.Assume(id,phi,A.Imposs),join r1 r2),join r1 r2)
-  | r_exp_atomic (S $ Tok(T.IDENT(id1),r1) $ Tok(T.LRARROW,r) $ Tok(T.IDENT(id2),r2) ) = S $ Exp(m_exp(A.Id(id1,id2),join r1 r2), join r1 r2)
+  | r_exp_atomic (S $ Tok(T.IDENT(id1),r1) $ Tok(T.LARROW,r) $ Tok(T.IDENT(id2),r2) ) = S $ Exp(m_exp(A.Id(id1,id2),join r1 r2), join r1 r2)
   (* should be the only atomic expressions *)
 
 (* reduce <exp>, possibly multiple actions, cuts, or expressions *)

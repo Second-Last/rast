@@ -3,7 +3,7 @@
 
 type list = +{cons : list, nil : 1}
 
-decl append : (l1 : list), (l2 : list) |- (l : list)
+decl append : (l1 : list) (l2 : list) |- (l : list)
 
 proc l <- append <- l1 l2 =
   case l1 (
