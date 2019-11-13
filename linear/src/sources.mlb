@@ -21,9 +21,9 @@ local
 
     stream.sml
     parsestate.sml
-    terminal.sml
-    lex.sml
-    parse.sml
+    terminal-linear.sml
+    lex-linear.sml
+    parse-linear.sml
     cost.sml
     normalize.sml
     constraints.sml

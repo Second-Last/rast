@@ -1,5 +1,5 @@
 RM	= rm
-MLTON = mlton -default-ann "redundantMatch error" -verbose 0
+MLTON = mlton -default-ann "redundantMatch error" -verbose 2
 
 ss: *.mlb *.sml
 	$(MLTON) -output ss sources-go.mlb
