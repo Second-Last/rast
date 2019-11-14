@@ -598,8 +598,8 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
     in () end
 
 and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
-    (case (expd_expdec_check env (f,es) ext, A.lookup_expdef env f)
-      of ((con',(D',pot',(z',B))), SOME _) =>
+    (case expd_expdec_check env (f,es) ext
+      of (con',(D',pot',(z',B))) =>
          let val cutD = if List.length D' = 0 then [] else gen_context env xs D ext
              val () = if eq_context env ctx con cutD D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
@@ -617,7 +617,6 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
          in
          check_exp' trace env ctx con (("L",B)::contD) (R.minus(pot,pot')) Q zC ext
          end
-       | (_, NONE) => E.error_undeclared (f, ext)
     )
   | spawn trace env ctx con D pot (A.Spawn(A.Marked(marked_P),Q)) zC ext =
     spawn trace env ctx con D pot (A.Spawn(Mark.data marked_P,Q)) zC (Mark.ext marked_P)
@@ -629,8 +628,8 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
     if x <> z
     then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z)
     else
-    (case (expd_expdec_check env (f,es) ext, A.lookup_expdef env f)
-      of ((con',(D',pot',(z',C'))), SOME _) =>
+    (case expd_expdec_check env (f,es) ext
+      of (con',(D',pot',(z',C'))) =>
          let val () = if eq_context env ctx con D D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env D ^ " not equal " ^ PP.pp_context_compact env D')
              val () = if eq_tp' env ctx con nil C' C then ()
@@ -643,7 +642,6 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
          in () end
-       | (_, NONE) => E.error_undeclared (f, ext)
     )
 
 and plusR trace env ctx con D pot (A.Lab(x,k,P)) (z,C as A.Plus(choices)) ext (* z = x *) =

@@ -484,7 +484,7 @@ and p_fwd_or_spawn_or_recv_or_shared ST = ST |> p_id >> p_fwd_or_spawn
 
 and p_fwd_or_spawn ST = case first ST of
     T.LARROW => ST |> push (Indices(nil, here ST)) >> shift >> push (Args ([], here ST)) >> p_id_list_opt_exp
-  | T.LBRACE => ST |> push (Indices(nil, here ST)) >> p_idx_seq
+  | T.LBRACE => ST |> push (Indices(nil, here ST)) >> p_idx_seq >> shift >> push (Args ([], here ST)) >> p_id_list_opt_exp
   | _ => ST |> reduce r_exp_atomic >> p_exp
 
 and p_id_list_opt_exp ST = case first ST of
