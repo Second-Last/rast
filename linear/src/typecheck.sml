@@ -600,7 +600,7 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
 and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
     (case expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',B))) =>
-         let val cutD = if List.length D' = 0 then [] else gen_context env xs D ext
+         let val cutD = gen_context env xs D ext
              val () = if eq_context env ctx con cutD D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
              val () = if not (C.entails ctx con (R.Ge(pot, pot')))
@@ -613,9 +613,9 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
              val () = if not (C.entails ctx con con')
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
-             val contD = if List.length D' = 0 then D else remove_chans env xs D ext
+             val contD = remove_chans env xs D ext
          in
-         check_exp' trace env ctx con (("L",B)::contD) (R.minus(pot,pot')) Q zC ext
+         check_exp' trace env ctx con ((x,B)::contD) (R.minus(pot,pot')) Q zC ext
          end
     )
   | spawn trace env ctx con D pot (A.Spawn(A.Marked(marked_P),Q)) zC ext =
@@ -630,8 +630,9 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
     else
     (case expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',C'))) =>
-         let val () = if eq_context env ctx con D D' then ()
-                      else ERROR ext ("context " ^ PP.pp_context_compact env D ^ " not equal " ^ PP.pp_context_compact env D')
+         let val cutD = gen_context env xs D ext
+             val () = if eq_context env ctx con cutD D' then ()
+                      else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
              val () = if eq_tp' env ctx con nil C' C then ()
                       else ERROR ext ("type " ^ PP.pp_tp_compact env C' ^ " not equal " ^ PP.pp_tp_compact env C)
              val () = if not (C.entails ctx con (R.Eq(pot, pot')))
@@ -641,6 +642,8 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
              val () = if not (C.entails ctx con con')
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
+             val contD = remove_chans env xs D ext
+             val () = if List.length contD > 0 then ERROR ext ("unconsumed channels: " ^ PP.pp_context_compact env contD) else ()
          in () end
     )
 
