@@ -84,10 +84,6 @@ fun mark_exp (exp, (left, right)) = A.Marked (Mark.mark' (exp, PS.ext (left, rig
 
 type region = int * int
 
-datatype infix_item =
-   Cut of A.pot * A.tp
- | Spawn
-
 (* operator precedence, for arithmetic *)
 type prec = int
 
@@ -102,7 +98,6 @@ datatype stack_item =
  | Tp of A.tp * region                                          (* types *)
  | Alts of A.choices                                            (* list of alternatives in types *)
  | Action of (A.exp -> A.exp) * region                          (* prefix process action *)
- | Infix of infix_item * region                                 (* infix process expression *)
  | Args of (A.chan list) * region                               (* arguments for spawn *)
  | Exp of A.exp * region                                        (* process expression *)
  | Branches of A.branches                                       (* list of branches *)
@@ -454,7 +449,7 @@ and m_exp (exp, r) = mark_exp (exp, r)
 
 (* <exp> *)
 and p_exp ST = case first ST of
-    T.IDENT(id) => ST |> shift >> p_fwd_or_spawn_or_label_send_or_chan_recv_or_shared
+    T.IDENT(id) => ST |> shift >> p_id_exps
   | T.CASE => ST |> shift >> p_id >> p_terminal T.LPAREN >> push (Branches []) >> p_branches >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp
   | T.CLOSE => ST |> shift >> p_id >> reduce r_exp_atomic >> p_exp
   | T.WAIT => ST |> shift >>p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
@@ -475,12 +470,12 @@ and p_exp ST = case first ST of
   (* end of expression; do not consume token *)
   | t => ST |> reduce r_exp
 
-and p_fwd_or_spawn_or_label_send_or_chan_recv_or_shared ST = case first ST of
+and p_id_exps ST = case first ST of
     T.PERIOD => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.LARROW => ST |> shift >> p_fwd_or_spawn_or_recv_or_shared
+  | T.LARROW => ST |> shift >> p_fwd_or_spawn_id
   | t => error_expected_list (here ST, [T.PERIOD, T.LARROW], t)
 
-and p_fwd_or_spawn_or_recv_or_shared ST = ST |> p_id >> p_fwd_or_spawn
+and p_fwd_or_spawn_id ST = ST |> p_id >> p_fwd_or_spawn
 
 and p_fwd_or_spawn ST = case first ST of
     T.LARROW => ST |> push (Indices(nil, here ST)) >> shift >> push (Args ([], here ST)) >> p_id_list_opt_exp
