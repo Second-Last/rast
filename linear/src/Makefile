@@ -1,11 +1,17 @@
 RM	= rm
-MLTON = mlton -default-ann "redundantMatch error" -verbose 1
+MLTON = mlton -default-ann "redundantMatch error" -verbose 0
 
 ss: *.mlb *.sml
 	$(MLTON) -output ss sources-go.mlb
 
 ss-test: *.mlb *.sml
 	$(MLTON) -output ss-test sources-test.mlb
+
+lin: *.mlb *.sml
+	$(MLTON) -output lin sources-go-linear.mlb
+
+lin-test: *.mlb *.sml
+	$(MLTON) -output lin-test sources-test-linear.mlb
 
 all: ss ss-test
 
@@ -14,3 +20,5 @@ clean:
 	$(RM) -rf .cm/
 	$(RM) -f ss
 	$(RM) -f ss-test
+	$(RM) -f lin
+	$(RM) -f lin-test
