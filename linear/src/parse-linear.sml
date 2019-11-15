@@ -278,18 +278,20 @@ and r_decl (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ 
   | r_decl (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.TURNSTILE,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <context> |- <id> : <type> *)
     S $ Decl(A.ExpDec(id,vars l,phis l,(context,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
-  | r_decl (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.BAR,_) $ Arith(pot,_) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
+  | r_decl S = r_decl_2 S
+
+and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.BAR,_) $ Arith(pot,_) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <context> '|{' <arith> '}-' <id> : <type> *)
     S $ Decl(A.ExpDec(id,vars l,phis l,(context,pot,(c,tp)), PS.ext(join r1 r2)))
-  | r_decl (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r) $ Tok(T.LARROW,_) $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
+  | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r) $ Tok(T.LARROW,_) $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
     (* 'proc' <id> '<-' <id> <var_seq> '<-' <id_list> = <exp> *)
     (case (phis l)
      of R.True => S $ Decl(A.ExpDef(id,vars l,(xs, exp, x),PS.ext(join r1 r2)))
       | _ => parse_error (r, "constraint found in process definition"))
-  | r_decl (S $ Tok(T.EXEC,r1) $ Tok(T.IDENT(id),r2)) =
+  | r_decl_2 (S $ Tok(T.EXEC,r1) $ Tok(T.IDENT(id),r2)) =
     (* 'exec' <id> *)
     S $ Decl(A.Exec(id, PS.ext(join r1 r2)))
-  | r_decl (S $ Tok(T.PRAGMA(p,line),r)) =
+  | r_decl_2 (S $ Tok(T.PRAGMA(p,line),r)) =
     (* '#' <line> '\n' *)
     S $ Decl(A.Pragma(p,line,PS.ext(r)))
   (* should be the only possibilities *)
@@ -508,9 +510,11 @@ and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.C
   | r_exp_atomic (S $ Tok(T.LPAREN,r1) $ Exp(exp,r) $ Tok(T.RPAREN,r2)) = S $ Exp(exp,join r1 r2)
   | r_exp_atomic (S $ Tok(T.CASE,r1) $ Tok(T.IDENT(id),_) $ Tok(T.LPAREN,_) $ Branches(branches) $ Tok(T.RPAREN,r2)) =
     S $ Exp(m_exp(A.Case(id,branches),join r1 r2),join r1 r2)
-  | r_exp_atomic (S $ Tok(T.IMPOSSIBLE,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2)) =
+  | r_exp_atomic S = r_exp_atomic_2 S
+
+and r_exp_atomic_2 (S $ Tok(T.IMPOSSIBLE,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2)) =
     S $ Exp(m_exp(A.Assume(id,phi,A.Imposs),join r1 r2),join r1 r2)
-  | r_exp_atomic (S $ Tok(T.IDENT(id1),r1) $ Tok(T.LARROW,r) $ Tok(T.IDENT(id2),r2) ) = S $ Exp(m_exp(A.Id(id1,id2),join r1 r2), join r1 r2)
+  | r_exp_atomic_2 (S $ Tok(T.IDENT(id1),r1) $ Tok(T.LARROW,r) $ Tok(T.IDENT(id2),r2) ) = S $ Exp(m_exp(A.Id(id1,id2),join r1 r2), join r1 r2)
   (* should be the only atomic expressions *)
 
 (* reduce <exp>, possibly multiple actions, cuts, or expressions *)
@@ -534,17 +538,19 @@ and r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ T
     S $ Action((fn K => m_exp(A.When(id,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.NOW,r1) $ Tok(T.IDENT(id),_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Now(id,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.WORK,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
+  | r_action S = r_action_2 S
+
+and r_action_2 (S $ Tok(T.WORK,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Work(pot,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_2 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Pay(id,pot,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_2 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Get(id,pot,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_2 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Assert(id,phi,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Assume(id,phi,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Tok(T.LARROW,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_2 (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Tok(T.LARROW,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
 
 (* <branches> *)
