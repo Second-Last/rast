@@ -8,10 +8,10 @@ datatype terminal =
          LBRACE | RBRACE | LPAREN | RPAREN
        | LBRACKET | RBRACKET | LANGLE | RANGLE
        | COLON | COMMA | SEMICOLON | PERIOD
-       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION
+       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION | LOLLI
        | BAR | DOUBLEBAR | EQ | RARROW | LRARROW | LARROW
        | LEQ | GEQ
-       | CASE | CLOSE | WAIT
+       | CASE | CLOSE | WAIT | SEND | RECV
        | TICK | DELAY | WHEN | NOW
        | WORK | PAY | GET
        | ASSERT | ASSUME | IMPOSSIBLE
@@ -32,10 +32,10 @@ datatype terminal =
          LBRACE | RBRACE | LPAREN | RPAREN
        | LBRACKET | RBRACKET | LANGLE | RANGLE
        | COLON | COMMA | SEMICOLON | PERIOD
-       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION
+       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION | LOLLI
        | BAR | DOUBLEBAR | EQ | RARROW | LRARROW | LARROW
        | LEQ | GEQ
-       | CASE | CLOSE | WAIT
+       | CASE | CLOSE | WAIT | SEND | RECV
        | TICK | DELAY | WHEN | NOW
        | WORK | PAY | GET
        | ASSERT | ASSUME | IMPOSSIBLE
@@ -50,7 +50,8 @@ fun toString t =
      of LBRACE => "{" | RBRACE => "}" | LPAREN => "(" | RPAREN => ")"
       | LBRACKET => "[" | RBRACKET => "]" | LANGLE => "<" | RANGLE => ">"
       | COLON => ":" | COMMA => "," | SEMICOLON => ";" | PERIOD => "."
-      | BACKQUOTE => "`" | PLUS => "+" | MINUS => "-" | STAR => "*" | AMPERSAND => "&" | QUESTION => "?" | EXCLAMATION => "!"
+      | BACKQUOTE => "`" | PLUS => "+" | MINUS => "-" | STAR => "*"
+      | AMPERSAND => "&" | QUESTION => "?" | EXCLAMATION => "!" | LOLLI => "-o"
       | BAR => "|" | DOUBLEBAR => "||" | EQ => "=" | RARROW => "=>" | LRARROW => "<->" | LARROW => "<-"
       | LEQ => "<=" | GEQ => ">="
       | CASE => "case"

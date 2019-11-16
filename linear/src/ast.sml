@@ -15,6 +15,8 @@ type time = Arith.arith         (* s,t, for time *)
 datatype tp =
          Plus of (label * tp) list (* +{...} *)
        | With of (label * tp) list (* &{...} *)
+       | Tensor of tp * tp         (* A * B *)
+       | Lolli of tp * tp          (* A -o B *)
        | One                       (* 1 *)
        | Exists of Arith.prop * tp (* ?{phi}. A *)
        | Forall of Arith.prop * tp (* !{phi}. A *)
@@ -41,6 +43,10 @@ datatype exp =
        (* internal/external choice +{...} *)
        | Lab of chan * label * exp                   (* x.k ; P *)
        | Case of chan * (label * ext * exp) list     (* case x (...) *)
+
+       (* tensor and lolli *)
+       | Send of chan * chan * exp                   (* send x w ; P *)
+       | Recv of chan * chan * exp                   (* y <- recv x ; P *)
 
        (* termination 1 *)
        | Close of chan                               (* closeR *)
@@ -166,6 +172,8 @@ type time = R.arith
 datatype tp =
          Plus of (label * tp) list (* +{...} *)
        | With of (label * tp) list (* &{...} *)
+       | Tensor of tp * tp         (* A * B *)
+       | Lolli of tp * tp          (* A -o B *)
        | One                       (* 1 *)
        | Exists of R.prop * tp     (* ?{phi}. A *)
        | Forall of R.prop * tp     (* !{phi}. A *)
@@ -195,6 +203,10 @@ datatype exp =
        (* termination 1 *)
        | Close of chan                               (* closeR *)
        | Wait of chan * exp                          (* waitL ; P *)
+
+       (* tensor and lolli *)
+       | Send of chan * chan * exp                   (* send x w ; P *)
+       | Recv of chan * chan * exp                   (* y <- recv x ; P *)
 
        (* existential quantifier ?{phi}. A *)
        | Assert of chan * Arith.prop * exp           (* assertR{phi} ; P *)
@@ -239,6 +251,8 @@ type env = decl list
 fun apply_tp sg (One) = One
   | apply_tp sg (Plus(choices)) = Plus(apply_choices sg choices)
   | apply_tp sg (With(choices)) = With(apply_choices sg choices)
+  | apply_tp sg (Tensor(A,B)) = Tensor(apply sg A, apply sg B)
+  | apply_tp sg (Lolli(A,B)) = Lolli(apply sg A, apply sg B)
   | apply_tp sg (Next(t,A)) = Next(R.apply sg t, apply_tp sg A)
   | apply_tp sg (Box(A)) = Box(apply_tp sg A)
   | apply_tp sg (Dia(A)) = Dia(apply_tp sg A)
@@ -258,6 +272,8 @@ fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (Id(x,y)) = Id(x,y)
   | apply_exp sg (Lab(x,k,P)) = Lab(x,k, apply_exp sg P)
   | apply_exp sg (Case(x,branches)) = Case(x,apply_branches sg branches)
+  | apply_exp sg (Send(x,w,P)) = Send(x,w, apply_exp sg P)
+  | apply_exp sg (Recv(x,y,Q)) = Recv(x,y, apply_exp sg Q)
   | apply_exp sg (Close(x)) = Close(x)
   | apply_exp sg (Wait(x,Q)) = Wait(x,apply_exp sg Q)
   | apply_exp sg (Delay(t,Q)) = Delay(R.apply sg t, apply_exp sg Q)
@@ -339,6 +355,8 @@ fun strip_exts (Id(x,y)) = Id(x,y)
   | strip_exts (ExpName(x,f,es,xs)) = ExpName(x,f,es,xs)
   | strip_exts (Lab(x,k,P)) = Lab(x,k, strip_exts P)
   | strip_exts (Case(x,branches)) = Case(x,strip_exts_branches branches)
+  | strip_exts (Send(x,w,P)) = Send(x,w, strip_exts P)
+  | strip_exts (Recv(x,y,Q)) = Recv(x,y, strip_exts Q)
   | strip_exts (Close(x)) = Close(x)
   | strip_exts (Wait(x,Q)) = Wait(x,strip_exts Q)
   | strip_exts (Assert(x,phi,P)) = Assert(x,phi, strip_exts P)
@@ -400,6 +418,8 @@ fun pp_prop phi = "{" ^ RP.pp_prop phi ^ "}"
 fun pp_tp (One) = "1"
   | pp_tp (Plus(choice)) = "+{" ^ pp_choice choice ^ "}"
   | pp_tp (With(choice)) = "&{" ^ pp_choice choice ^ "}"
+  | pp_tp (Tensor(A,B)) = pp_tp A ^ " * " ^ pp_tp B
+  | pp_tp (Lolli(A,B)) = pp_tp A " -o " ^ pp_tp B
   | pp_tp (Next(t,A)) = "(" ^ pp_time t ^ ")" ^ pp_tp A
   | pp_tp (Box(A)) = "[]" ^ pp_tp A
   | pp_tp (Dia(A)) = "<>" ^ pp_tp A
@@ -422,6 +442,8 @@ fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
   | pp_exp (Id(x,y)) = x ^ " <- " ^ y
   | pp_exp (Lab(x,k,P)) = x ^ "." ^ k ^ " ; " ^ pp_exp P
   | pp_exp (Case(x,branches)) = "case " ^ x ^ " (" ^ pp_branches branches ^ ")"
+  | pp_exp (Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ; " ^ pp_exp P
+  | pp_exp (Recv(x,y,Q)) = y ^ " <- recv " ^ x ^ " ; " ^ pp_exp Q
   | pp_exp (Close(x)) = "close " ^ x
   | pp_exp (Wait(x,Q)) = "wait " ^ x ^ " ; " ^ pp_exp Q
   | pp_exp (Delay(t,P)) = "delay " ^ pp_time t ^ " ; " ^ pp_exp P
