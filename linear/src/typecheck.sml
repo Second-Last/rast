@@ -625,7 +625,10 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
 and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
     (case expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',B))) =>
-         let val cutD = gen_context env xs D ext
+         let val () = if List.length D' = List.length xs then ()
+                      else ERROR ext ("process defined with " ^ Int.toString (List.length D') ^
+                                      " arguments but called with " ^ Int.toString (List.length xs))
+             val cutD = gen_context env xs D ext
              val () = if eq_context env ctx con cutD D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
              val () = if not (C.entails ctx con (R.Ge(pot, pot')))
@@ -655,7 +658,10 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
     else
     (case expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',C'))) =>
-         let val cutD = gen_context env xs D ext
+         let val () = if List.length D' = List.length xs then ()
+                      else ERROR ext ("process defined with " ^ Int.toString (List.length D') ^
+                                      " arguments but called with " ^ Int.toString (List.length xs))
+             val cutD = gen_context env xs D ext
              val () = if eq_context env ctx con cutD D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
              val () = if eq_tp' env ctx con nil C' C then ()
@@ -741,7 +747,7 @@ and lolliL trace env ctx con D (A.Lolli(A,B)) pot (A.Send(x,w,Q)) zC ext (* z !=
     in
     check_exp' trace env ctx con (update_tp (x,B) (remove_chan env w D ext)) pot Q zC ext
     end
-  | lolliL trace env ctx con D A pot (A.Recv(x,y,Q)) zC ext =
+  | lolliL trace env ctx con D A pot (A.Send(x,w,Q)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
 
 and lolliR trace env ctx con D pot (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext (* z = x *) =
