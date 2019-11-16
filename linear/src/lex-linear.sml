@@ -69,7 +69,7 @@ fun lex_code (pos, charstream) =
       | M.Cons (#"-", cs) =>
         (case M.force cs
           of M.Cons(#"o", cs) => (T.LOLLI, pos, pos+2, cs)
-          | _ => (T.MINUS, pos, pos+1, cs)
+          | _ => (T.MINUS, pos, pos+1, cs))
       | M.Cons (#"*", cs) => (T.STAR, pos, pos+1, cs)
       | M.Cons (#"&", cs) => (T.AMPERSAND, pos, pos+1, cs)
       | M.Cons (#"?", cs) => (T.QUESTION, pos, pos+1, cs)
