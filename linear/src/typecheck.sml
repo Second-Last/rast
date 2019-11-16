@@ -736,7 +736,7 @@ and lolliL trace env ctx con D (A.Lolli(A,B)) pot (A.Send(x,w,Q)) zC ext (* z !=
     in
     check_exp' trace env ctx con (update_tp (x,B) (remove_chan env w D ext)) pot Q zC ext
     end
-  | lolliL trace env ctx con D A pot (A.Recv(x,y,Q)) zC ext =
+  | lolliL trace env ctx con D A pot (A.Send(x,w,Q)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
 
 and lolliR trace env ctx con D pot (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext (* z = x *) =
