@@ -74,6 +74,8 @@ fun closed_prop ctx phi ext =
 
 fun closed_tp ctx (A.Plus(choice)) ext = closed_choice ctx choice ext
   | closed_tp ctx (A.With(choice)) ext = closed_choice ctx choice ext
+  | closed_tp ctx (A.Tensor(A,B)) ext = ( closed_tp ctx A ext ; closed_tp ctx B ext )
+  | closed_tp ctx (A.Lolli(A,B)) ext = ( closed_tp ctx A ext ; closed_tp ctx B ext )
   | closed_tp ctx (A.One) ext = ()
   | closed_tp ctx (A.Exists(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp ctx A ext )
   | closed_tp ctx (A.Forall(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp ctx A ext )
@@ -96,6 +98,9 @@ fun closed_exp ctx (A.Id _) ext = ()
 
   | closed_exp ctx (A.Lab(x,k,P)) ext = closed_exp ctx P ext
   | closed_exp ctx (A.Case(x,branches)) ext = closed_branches ctx branches ext
+
+  | closed_exp ctx (A.Send(x,w,P)) ext = closed_exp ctx P ext
+  | closed_exp ctx (A.Recv(x,y,Q)) ext = closed_exp ctx Q ext
 
   | closed_exp ctx (A.Close _) ext = ()
   | closed_exp ctx (A.Wait(x,Q)) ext = closed_exp ctx Q ext
@@ -132,6 +137,18 @@ datatype polarity = Pos | Neg | Zero
  *)
 fun valid env ctx con _ (A.Plus(choice)) ext = valid_choice env ctx con Pos choice ext
   | valid env ctx con _ (A.With(choice)) ext = valid_choice env ctx con Neg choice ext
+  | valid env ctx con _ (A.Tensor(A,B)) ext =
+    let val () = valid env ctx con Zero A ext
+        val () = valid env ctx con Pos B ext
+    in
+    ()
+    end
+  | valid env ctx con _ (A.Lolli(A,B)) ext =
+    let val () = valid env ctx con Zero A ext
+        val () = valid env ctx con Neg B ext
+    in
+    ()
+    end
   | valid env ctx con _ A.One ext = ()
 
   | valid env ctx con Pos (A.Exists(phi, A)) ext = valid env ctx (R.And(con,phi)) Pos A ext
@@ -563,6 +580,9 @@ fun remove_chans env [] D ext = D
 
 fun gen_context env xs D ext = List.map (fn x => (x,lookup_context env x D ext)) xs
 
+fun exists x [] = false
+  | exists x ((y,A)::D) = if x = y then true else exists x D
+
 (* check_exp trace env ctx con A pot P C = () if A |{pot}- P : C
  * raises ErrorMsg.Error otherwise
  * assumes ctx ; con |= A valid
@@ -697,6 +717,42 @@ and plusL trace env ctx con D (A.Plus(choices)) pot (A.Case(x,branches)) zC ext 
   | plusL trace env ctx con D A pot (A.Case(x,branches)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected internal choice, found: " ^ PP.pp_tp_compact env A)
 
+and tensorR trace env ctx con D pot (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext (* z = x *) =
+    let val A' = lookup_context env w D ext
+        val () = if eq_tp' env ctx con nil A A' then ()
+                 else ERROR ext ("type of " ^ w ^ ": " ^ PP.pp_tp_compact env A ^
+                                 " not equal " ^ PP.pp_tp_compact env A')
+    in
+    check_exp' trace env ctx con (remove_chan env w D ext) pot P (z,B) ext
+    end
+  | tensorR trace env ctx con D pot (A.Send(x,w,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
+
+and lolliL trace env ctx con D (A.Lolli(A,B)) pot (A.Send(x,w,Q)) zC ext (* z != x *) =
+    let val A' = lookup_context env w D ext
+        val () = if eq_tp' env ctx con nil A A' then ()
+                 else ERROR ext ("type of " ^ w ^ ": " ^ PP.pp_tp_compact env A ^
+                                 " not equal " ^ PP.pp_tp_compact env A')
+    in
+    check_exp' trace env ctx con (update_tp (x,B) (remove_chan env w D ext)) pot Q zC ext
+    end
+  | lolliL trace env ctx con D A pot (A.Recv(x,y,Q)) zC ext =
+    ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
+
+and lolliR trace env ctx con D pot (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext (* z = x *) =
+    if exists y ((z,A.Lolli(A,B))::D)
+    then ERROR ext ("variable " ^ y ^ " not fresh")
+    else check_exp' trace env ctx con ((y,A)::D) pot P (z,B) ext
+  | lolliR trace env ctx con D pot (A.Recv(x,y,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env C)
+
+and tensorL trace env ctx con D (A.Tensor(A,B)) pot (A.Recv(x,y,Q)) zC ext (* z != x *) =
+    if exists y (zC::D)
+    then ERROR ext ("variable " ^ y ^ " not fresh")
+    else check_exp' trace env ctx con ((y,A)::(update_tp (x,B) D)) pot Q zC ext
+  | tensorL trace env ctx con D A pot (A.Recv(x,y,Q)) zC ext =
+    ERROR ext ("type mismatch for " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env A)
+
 and oneR trace env ctx con D pot (A.Close(x)) (z,A.One) ext (* z = x *) =
     if List.length D > 0
     then ERROR ext ("context not empty while closing")
@@ -770,7 +826,7 @@ and getpotL trace env ctx con D (A.GetPot(p,A)) pot (A.Pay(x,p',P)) zC ext (* z 
   | getpotL trace env ctx con D A pot (A.Pay(x,p',P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected getpot, found: " ^ PP.pp_tp_compact env A)
 
-and getpotR trace env ctx con D pot (A.Get(x,p',P)) (z,A.GetPot(p,C)) ext =
+and getpotR trace env ctx con D pot (A.Get(x,p',P)) (z,A.GetPot(p,C)) ext (* z = x *) =
     (* con |= p >= 0 since type is valid *)
     if not (C.entails ctx con (R.Eq(p',p)))
     then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(p',p)))
@@ -778,7 +834,7 @@ and getpotR trace env ctx con D pot (A.Get(x,p',P)) (z,A.GetPot(p,C)) ext =
   | getpotR trace env ctx con D pot (A.Get(x,p',P)) (z,C) ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected paypot, found: " ^ PP.pp_tp_compact env C)
 
-and paypotL trace env ctx con D (A.PayPot(p,A)) pot (A.Get(x,p',P)) zC ext =
+and paypotL trace env ctx con D (A.PayPot(p,A)) pot (A.Get(x,p',P)) zC ext (* z != x *) =
     (* con |= p >= 0 since type is valid *)
     if not (C.entails ctx con (R.Eq(p,p')))
     then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(p,p')))
@@ -791,12 +847,12 @@ and delay trace env ctx con D pot (A.Delay(t,P)) (z,C) ext =
     then ERROR ext ("delay cannot be shown to be positive : " ^ C.pp_jfail con (R.Ge(t,R.Int(0))))
     else check_exp' trace env ctx con (decrement env ctx con D t ext) pot P (z,decrementR env ctx con C t ext) ext
 
-and diaR trace env ctx con D pot (A.Now(x,P)) (z,A.Dia(C)) ext =
+and diaR trace env ctx con D pot (A.Now(x,P)) (z,A.Dia(C)) ext (* z = x *) =
     check_exp' trace env ctx con D pot P (z,C) ext
   | diaR trace env ctx con D pot (A.Now(x,P)) (z,C) ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected diamond, found: " ^ PP.pp_tp_compact env C)
 
-and boxL trace env ctx con D (A.Box(A)) pot (A.Now(x,P)) zC ext =
+and boxL trace env ctx con D (A.Box(A)) pot (A.Now(x,P)) zC ext (* z != x *) =
     check_exp' trace env ctx con (update_tp (x,A) D) pot P zC ext
   | boxL trace env ctx con D A pot (A.Now(x,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected box, found: " ^ PP.pp_tp_compact env A)
@@ -835,6 +891,15 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     if x = z
     then withR trace env ctx con D pot (A.Case(x,branches)) (z,expand env C) ext
     else plusL trace env ctx con D (lookup_context env x D ext) pot (A.Case(x,branches)) (z,C) ext
+
+  | check_exp trace env ctx con D pot (A.Send(x,w,P)) (z,C) ext =
+    if x = z
+    then tensorR trace env ctx con D pot (A.Send(x,w,P)) (z,expand env C) ext
+    else lolliL trace env ctx con D (lookup_context env x D ext) pot (A.Send(x,w,P)) (z,C) ext
+  | check_exp trace env ctx con D pot (A.Recv(x,y,Q)) (z,C) ext =
+    if x = z
+    then lolliR trace env ctx con D pot (A.Recv(x,y,Q)) (z,expand env C) ext
+    else tensorL trace env ctx con D (lookup_context env x D ext) pot (A.Recv(x,y,Q)) (z,C) ext
 
   | check_exp trace env ctx con D pot (A.Close(x)) (z,C) ext =
     if x = z

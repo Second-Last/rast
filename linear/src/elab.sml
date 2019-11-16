@@ -165,6 +165,8 @@ fun tp_naming (A.TpDef(a,vs,con,A,ext)) =
  *)
 and tp_name_subtp ctx con (A.Plus(choices)) env = apply_fst A.Plus (tp_name_subchoices ctx con choices env)
   | tp_name_subtp ctx con (A.With(choices)) env = apply_fst A.With (tp_name_subchoices ctx con choices env)
+  | tp_name_subtp ctx con (A.Tensor(A',B')) env = apply_fst (fn B => A.Tensor(A',B)) (tp_name_subtp' ctx con B' env)
+  | tp_name_subtp ctx con (A.Lolli(A',B')) env = apply_fst (fn B => A.Lolli(A',B)) (tp_name_subtp' ctx con B' env)
   | tp_name_subtp ctx con (A.One) env = (A.One, env)
   | tp_name_subtp ctx con (A.Exists(phi,A')) env =
     apply_fst (fn A => (A.Exists(phi,A))) (tp_name_subtp' ctx (R.And(con,phi)) A' env)

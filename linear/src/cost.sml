@@ -20,6 +20,9 @@ fun cost_recv f (A.Id(x,y)) = A.Id(x,y)
   | cost_recv f (A.Lab(x,k,P)) = A.Lab(x,k, cost_recv f P)
   | cost_recv f (A.Case(x,branches)) = A.Case(x,cost_recv_branches f branches)
 
+  | cost_recv f (A.Send(x,w,P)) = A.Send(x,w, cost_recv f P)
+  | cost_recv f (A.Recv(x,y,Q)) = A.Recv(x,y, f (cost_recv f Q))
+
   | cost_recv f (A.Close(x)) = A.Close(x)
   | cost_recv f (A.Wait(x,P)) = A.Wait(x,f(cost_recv f P))
 
@@ -51,6 +54,10 @@ fun cost_send sf (A.Id(x,y)) = A.Id(x,y)
   | cost_send (After,f) (A.Lab(x,k,P)) = A.Lab(x,k, f(cost_send (After,f) P))
   | cost_send (Before,f) (A.Lab(x,k,P)) = f(A.Lab(x,k, cost_send (Before,f) P))
   | cost_send sf (A.Case(x,branches)) = A.Case(x,cost_send_branches sf branches)
+
+  | cost_send (After,f) (A.Send(x,w,P)) = A.Send(x,w, f (cost_send (After,f) P))
+  | cost_send (Before,f) (A.Send(x,w,P)) = f (A.Send(x,w, cost_send (Before,f) P))
+  | cost_send sf (A.Recv(x,y,Q)) = A.Recv(x,y, cost_send sf Q)
 
   | cost_send (After,f) (A.Close(x)) = A.Close(x) (* no continuation here to delay *)
   | cost_send (Before,f) (A.Close(x)) = f(A.Close(x))
