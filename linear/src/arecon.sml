@@ -123,7 +123,7 @@ and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
  *)
 (* judgmental constructs: id, cut, spawn *)
 and recon' env D (P as A.Id(x,y)) (z,C) ext =
-    if x = z andalso (TC.lookup_context env y D ext ; true)
+    if x = z andalso (ignore (TC.lookup_context env y D ext) ; true)
     then P
     else ERROR ext ("incorrect channels in forward")
   | recon' env D (A.Spawn(P,Q)) zC ext =
