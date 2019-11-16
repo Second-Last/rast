@@ -31,13 +31,14 @@ sig
 
     (* operations on approximately typed expressions (see arecon.sml) *)
     (* val syn_cut : Ast.env -> Ast.exp * Ast.exp ->  Ast.ext -> Ast.exp *)
-    val syn_call : Ast.env -> Ast.exp -> Ast.ext -> Ast.context * Ast.pot * Ast.exp * Ast.chan_tp
+    val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context
+                                                                   
     val synR : Ast.env -> Ast.expname * Arith.arith list -> Ast.chan_tp
     val synL : Ast.env -> Ast.expname * Arith.arith list -> Ast.context
     val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
     val syn_alt : Ast.env -> Ast.choices -> Ast.label -> Ast.tp
-    val remove_chans : Ast.env -> Ast.chan list -> Ast.context -> Ast.ext -> Ast.context
-    val remove_chan : Ast.env -> Ast.chan -> Ast.context -> Ast.ext -> Ast.context
+    val remove_chans : Ast.chan list -> Ast.context -> Ast.ext -> Ast.context
+    val remove_chan : Ast.chan -> Ast.context -> Ast.ext -> Ast.context
     val expand : Ast.env -> Ast.tp -> Ast.tp
     val update_tp : Ast.chan_tp -> Ast.context -> Ast.context
     val lookup_context : Ast.env -> Ast.chan -> Ast.context -> Ast.ext -> Ast.tp
@@ -463,6 +464,28 @@ fun expd env (A.TpName(a,es)) = A.expd_tp env (a,es)
 fun expand env (A.TpName(a,es)) = expand env (A.expd_tp env (a,es))
   | expand env A = A
 
+fun eq_context env ctx con nil nil = true
+  | eq_context env ctx con ((x,A)::D) ((x',A')::D') =
+      eq_tp' env ctx con nil A A' andalso eq_context env ctx con D D'
+  | eq_context env ctx con _ _ = false
+
+fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
+  | lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context env x D' ext
+
+fun update_tp (x,A) ((y,B)::D') = if x = y then (x,A)::D' else (y,B)::(update_tp (x,A) D')
+
+fun remove_chan x ((y,B)::D') ext = if x = y then D' else (y,B)::(remove_chan x D' ext)
+  | remove_chan x [] ext = ERROR ext ("cannot remove " ^ x ^ " from context")
+
+fun remove_chans [] D ext = D
+  | remove_chans (x::xs) D ext = remove_chans xs (remove_chan x D ext) ext
+
+fun gen_context env xs D ext = List.map (fn x => (x,lookup_context env x D ext)) xs
+
+fun exists x [] = false
+  | exists x ((y,A)::D) = if x = y then true else exists x D
+
+
 (* zip_check f vs es ext = [es/vs]
  * raises ErrorMsg.Error if |es| <> |vs|
  *)
@@ -505,15 +528,16 @@ fun syn_cut env (P as A.ExpName(f,es), Q) ext =
  * if vs ; con ; A |{p}- f : C
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
-fun syn_call env (P as A.ExpName(x,f,es,xs)) ext =
+fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
     (case A.lookup_expdec env f
-      of SOME(vs,con,(D,pot,yB)) =>
+      of SOME(vs,con',(D',pot',(y,B'))) =>
          let val sg = zip_check f vs es ext
-         in (A.apply_context sg D, R.apply sg pot, P, A.apply_chan_tp sg yB) end
+             val B = A.apply_tp sg B'
+         in (x,B)::remove_chans xs D ext end
        | NONE => ERROR ext ("process " ^ f ^ " undeclared"))
-  | syn_call env (A.Marked(marked_P)) ext = (* Q: preserve mark? *)
-    syn_call env (Mark.data marked_P) (Mark.ext marked_P)
-  | syn_call env P ext = ERROR ext ("call must be a process name")
+  | syn_call env D (A.Marked(marked_P)) ext = (* Q: preserve mark? *)
+    syn_call env D (Mark.data marked_P) (Mark.ext marked_P)
+  | syn_call env D P ext = ERROR ext ("call must be a process name")
 
 (* synL env (f,es) = A where A |- f : _, approximately *)
 fun synL env (f, es) =
@@ -575,27 +599,6 @@ fun check_explist_pos ctx con (nil) ext = ()
     then ERROR ext ("index cannot be shown to be positive: " ^ C.pp_jfail con (R.Ge(e, R.Int(0))))
     else check_explist_pos ctx con es ext
 
-fun eq_context env ctx con nil nil = true
-  | eq_context env ctx con ((x,A)::D) ((x',A')::D') =
-      eq_tp' env ctx con nil A A' andalso eq_context env ctx con D D'
-  | eq_context env ctx con _ _ = false
-
-fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
-  | lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context env x D' ext
-
-fun update_tp (x,A) ((y,B)::D') = if x = y then (x,A)::D' else (y,B)::(update_tp (x,A) D')
-
-fun remove_chan env x ((y,B)::D') ext = if x = y then D' else (y,B)::(remove_chan env x D' ext)
-  | remove_chan env x [] ext = ERROR ext ("cannot remove " ^ x ^ " from context")
-
-fun remove_chans env [] D ext = D
-  | remove_chans env (x::xs) D ext = remove_chans env xs (remove_chan env x D ext) ext
-
-fun gen_context env xs D ext = List.map (fn x => (x,lookup_context env x D ext)) xs
-
-fun exists x [] = false
-  | exists x ((y,A)::D) = if x = y then true else exists x D
-
 (* check_exp trace env ctx con A pot P C = () if A |{pot}- P : C
  * raises ErrorMsg.Error otherwise
  * assumes ctx ; con |= A valid
@@ -649,7 +652,8 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
              val () = if not (C.entails ctx con con')
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
-             val contD = remove_chans env xs D ext
+             val contD = remove_chans xs D ext
+             val () = if exists x (zC::D) then ERROR ext ("variable " ^ x ^ " not fresh") else ()
          in
          check_exp' trace env ctx con ((x,B)::contD) (R.minus(pot,pot')) Q zC ext
          end
@@ -681,7 +685,7 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
              val () = if not (C.entails ctx con con')
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
-             val contD = remove_chans env xs D ext
+             val contD = remove_chans xs D ext
              val () = if List.length contD > 0 then ERROR ext ("unconsumed channels: " ^ PP.pp_context_compact env contD) else ()
          in () end
     )
@@ -742,7 +746,7 @@ and tensorR trace env ctx con D pot (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext (* z =
                  else ERROR ext ("type of " ^ w ^ ": " ^ PP.pp_tp_compact env A ^
                                  " not equal " ^ PP.pp_tp_compact env A')
     in
-    check_exp' trace env ctx con (remove_chan env w D ext) pot P (z,B) ext
+    check_exp' trace env ctx con (remove_chan w D ext) pot P (z,B) ext
     end
   | tensorR trace env ctx con D pot (A.Send(x,w,P)) (z,C) ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
@@ -753,7 +757,7 @@ and lolliL trace env ctx con D (A.Lolli(A,B)) pot (A.Send(x,w,Q)) zC ext (* z !=
                  else ERROR ext ("type of " ^ w ^ ": " ^ PP.pp_tp_compact env A ^
                                  " not equal " ^ PP.pp_tp_compact env A')
     in
-    check_exp' trace env ctx con (update_tp (x,B) (remove_chan env w D ext)) pot Q zC ext
+    check_exp' trace env ctx con (update_tp (x,B) (remove_chan w D ext)) pot Q zC ext
     end
   | lolliL trace env ctx con D A pot (A.Send(x,w,Q)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
@@ -782,7 +786,7 @@ and oneR trace env ctx con D pot (A.Close(x)) (z,A.One) ext (* z = x *) =
     ERROR ext ("type mismatch of " ^ x ^ ": expected one, found: " ^ PP.pp_tp_compact env C)
 
 and oneL trace env ctx con D (A.One) pot (A.Wait(x,Q)) zC ext (* z != x *) =
-    check_exp' trace env ctx con (remove_chan env x D ext) pot Q zC ext
+    check_exp' trace env ctx con (remove_chan x D ext) pot Q zC ext
   | oneL trace env ctx con D A pot (A.Wait(x,Q)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected one, found: " ^ PP.pp_tp_compact env A)
 

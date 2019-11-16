@@ -108,12 +108,12 @@ and recon_branchesL env D (x,nil) nil zC ext = nil
 
 and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
     (* do not check type equality here, just remove w *)
-    A.Send(x,w,recon env (TC.remove_chan env w D ext) P (z,B) ext)
+    A.Send(x,w,recon env (TC.remove_chan w D ext) P (z,B) ext)
   | tensorR env D (A.Send(x,w,P)) (z,C) ext =
     ERROR ext ("type mismacth of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
 
 and lolliL env D (A.Lolli(A,B)) (A.Send(x,w,P)) zC ext = (* x <> z *)
-    A.Send(x,w,recon env (TC.update_tp (x,B) (TC.remove_chan env w D ext)) P zC ext)
+    A.Send(x,w,recon env (TC.update_tp (x,B) (TC.remove_chan w D ext)) P zC ext)
   | lolliL env D A (A.Send(x,w,P)) zC ext =
     ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
 
@@ -134,7 +134,7 @@ and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
     ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env C)
 
 and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
-    A.Wait(x,recon env (TC.remove_chan env x D ext) P zC ext)
+    A.Wait(x,recon env (TC.remove_chan x D ext) P zC ext)
   | oneL env D A (A.Wait(x,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env A)
 
@@ -147,10 +147,9 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
     if x = z andalso (ignore (TC.lookup_context env y D ext) ; true)
     then P
     else ERROR ext ("incorrect channels in forward")
-  | recon' env D (A.Spawn(P,Q)) zC ext =
-    let val (D', pot', P', yB) = TC.syn_call env P ext
-        val contD = yB::TC.remove_chans env (List.map (fn (x,_) => x) D') D ext
-    in A.Spawn(P', recon env contD Q zC ext) end
+  | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) zC ext =
+    let val D' = TC.syn_call env D P ext
+    in A.Spawn(P, recon env D' Q zC ext) end
   | recon' env A (P as A.ExpName(x,f,es,xs)) (z,C) ext =
     ( if x <> z then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z) else ()
       (* also check context? *)
