@@ -33,8 +33,8 @@ local
 
     recon-sig.sml
 
-    (*
     arecon.sml
+    (*
     brecon.sml
     qrecon.sml
     wrecon.sml

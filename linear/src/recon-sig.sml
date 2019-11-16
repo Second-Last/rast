@@ -7,7 +7,7 @@ signature RECON =
 sig
 
     val recon : Ast.env -> Arith.ctx -> Arith.prop
-                -> Ast.tp -> Ast.pot -> Ast.exp -> Ast.tp -> Ast.ext
+                -> Ast.context -> Ast.pot -> Ast.exp -> Ast.chan_tp -> Ast.ext
                 -> Ast.exp
 
 end  (* signature RECON *)
