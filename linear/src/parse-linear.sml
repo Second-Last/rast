@@ -96,6 +96,7 @@ datatype stack_item =
  | Vars of (R.varname * R.prop) list * region                   (* list of variables with constraints *)
  | Indices of R.arith list * region                             (* list of index expressions *)
  | Tp of A.tp * region                                          (* types *)
+ | TpInfix of prec * (A.tp * A.tp -> A.tp) * region             (* infix tensor and lolli type operators *)
  | Alts of A.choices                                            (* list of alternatives in types *)
  | Action of (A.exp -> A.exp) * region                          (* prefix process action *)
  | Args of (A.chan list) * region                               (* arguments for spawn *)
@@ -166,6 +167,9 @@ infix 1 |>
 fun join (left1, right1) (left2, right2) = (left1, right2)
 fun here (S, M.Cons((t, r), ts')) = r
 val nowhere = (0,0)
+
+fun ptensor (A,B) = A.Tensor(A,B)
+fun plolli (A,B) = A.Lolli(A,B)
 
 (***********)
 (* Parsing *)
@@ -337,20 +341,31 @@ and r_idx (S $ Tok(T.LBRACE,r1) $ Arith(e, _) $ Tok(T.RBRACE,r2)) = S $ Arith (e
 
 (* <tp> *)
 and p_type ST = case first ST of
-    T.NAT(1) => ST |> shift >> reduce r_type
-  | T.PLUS => ST |> shift >> p_choices >> reduce r_type
-  | T.AMPERSAND => ST |> shift >> p_choices >> reduce r_type
-  | T.BACKQUOTE => ST |> shift >> p_type >> reduce r_type
-  | T.LPAREN => ST |> shift >> p_tpopr_next >> p_type >> reduce r_type
-  | T.LBRACKET => ST |> shift >> p_terminal T.RBRACKET >> p_type >> reduce r_type
-  | T.LANGLE => ST |> shift >> p_tpopr_dia_ltri >> p_type >> reduce r_type (* maybe not shift *)
-  | T.BAR => ST |> shift >> p_tpopr_rtri >> p_type >> reduce r_type    (* maybe not shift *)
-  | T.QUESTION => ST |> shift >> p_con_dot >> p_type >> reduce r_type
-  | T.EXCLAMATION => ST |> shift >> p_con_dot >> p_type >> reduce r_type
-  | T.IDENT(id) => ST |> p_id_idx_seq >> reduce r_type
-  | t => error_expected_list (here ST, [T.NAT(1), T.PLUS, T.AMPERSAND, T.BACKQUOTE,
-                                        T.LPAREN, T.LBRACKET, T.LANGLE, T.BAR,
-                                        T.QUESTION, T.EXCLAMATION, T.IDENT("<id>")], t)
+    T.NAT(1) => ST |> shift >> reduce r_type >> p_type
+  | T.NAT(n) => parse_error (here ST, "expected type, found " ^ Int.toString n)
+  | T.PLUS => ST |> shift >> p_choices >> reduce r_type >> p_type
+  | T.AMPERSAND => ST |> shift >> p_choices >> reduce r_type >> p_type
+  | T.BACKQUOTE => ST |> shift >> p_type >> reduce r_type >> p_type
+  | T.LPAREN => ST |> shift >> p_tpopr_next >> p_type >> reduce r_type >> p_type
+  | T.LBRACKET => ST |> shift >> p_terminal T.RBRACKET >> p_type >> reduce r_type >> p_type
+  | T.LANGLE => ST |> shift >> p_tpopr_dia_ltri >> p_type >> reduce r_type >> p_type (* maybe not shift *)
+  | T.BAR => ST |> shift >> p_tpopr_rtri >> p_type >> reduce r_type >> p_type        (* maybe not shift *)
+  | T.STAR => ST |> drop >> push (TpInfix(1, ptensor, here ST)) >> p_type_prec
+  | T.LOLLI => ST |> drop >> push (TpInfix(1, plolli, here ST)) >> p_type_prec
+  | T.QUESTION => ST |> shift >> p_con_dot >> p_type >> reduce r_type >> p_type
+  | T.EXCLAMATION => ST |> shift >> p_con_dot >> p_type >> reduce r_type >> p_type
+  | T.IDENT(id) => ST |> p_id_idx_seq >> reduce r_type >> p_type
+  | t => ST |> reduce r_type
+
+(* shift/reduce decision based on operator precedence *)
+and p_type_prec ST = case ST of
+    (S $ Tp(tp1,r1) $ TpInfix(prec1, con1, _) $ Tp(tp2, r2) $ TpInfix(prec, con, r), ft) =>
+      if prec1 > prec         (* all type operators are right associative *)
+      then p_type_prec (S $ Tp(con1(tp1,tp2), join r1 r2) $ TpInfix(prec, con, r), ft) (* reduce *)
+      else p_type ST          (* shift *)
+  | (S $ Tp(_,_) $ TpInfix(_,_,_), _) => p_type ST (* shift *)
+  | (S $ TpInfix(_,_,r1) $ TpInfix(_,_,r2), _) => parse_error (join r1 r2, "consecutive infix type operators")
+  | (S $ TpInfix(_,_,r), _) => parse_error (r, "leading infix type operator")
 
 (* ')' | <idx> ')' *)
 (* follows '(' to parse circle *)
@@ -431,6 +446,12 @@ and r_type (S $ Tok(T.NAT(1),r)) = S $ Tp(A.One, r)
   | r_type (S $ Tok(T.EXCLAMATION,r1) $ Prop(phi,_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(phi,tp), join r1 r2)
   | r_type (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
   | r_type (S $ Tok(T.PERIOD,r)) = S $ Tp(A.Dot,r) (* only for lhs of turnstile *)
+  | r_type (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
+  | r_type (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
+  | r_type (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
+  | r_type (S $ TpInfix(_,_,r)) = parse_error (r, "trailing infix type operator")
+  | r_type (S $ Tp(tp,r)) = S $ Tp(tp,r)
+  | r_type (S $ Tok(_,r)) = parse_error (r, "unknown or empty type expression")
   (* should be the only possibilities *)
 
 (* <choices> *)
@@ -453,6 +474,7 @@ and m_exp (exp, r) = mark_exp (exp, r)
 and p_exp ST = case first ST of
     T.IDENT(id) => ST |> shift >> p_id_exps
   | T.CASE => ST |> shift >> p_id >> p_terminal T.LPAREN >> push (Branches []) >> p_branches >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp
+  | T.SEND => ST |> shift >> p_id >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
   | T.CLOSE => ST |> shift >> p_id >> reduce r_exp_atomic >> p_exp
   | T.WAIT => ST |> shift >>p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
   | T.LPAREN => ST |> shift >> p_exp >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp
@@ -474,10 +496,13 @@ and p_exp ST = case first ST of
 
 and p_id_exps ST = case first ST of
     T.PERIOD => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.LARROW => ST |> shift >> p_fwd_or_spawn_id
+  | T.LARROW => ST |> shift >> p_fwd_or_spawn_id_or_recv
   | t => error_expected_list (here ST, [T.PERIOD, T.LARROW], t)
 
-and p_fwd_or_spawn_id ST = ST |> p_id >> p_fwd_or_spawn
+and p_fwd_or_spawn_id_or_recv ST = case first ST of
+    T.RECV => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
+  | T.IDENT(id) => ST |> p_id >> p_fwd_or_spawn
+  | t => parse_error (here ST, "expected 'recv', or identifier, found " ^ pp_tok t)
 
 and p_fwd_or_spawn ST = case first ST of
     T.LARROW => ST |> push (Indices(nil, here ST)) >> shift >> push (Args ([], here ST)) >> p_id_list_opt_exp
@@ -528,28 +553,32 @@ and r_exp (S $ Action(act,r1) $ Exp(exp,r2)) = r_exp (S $ Exp(act(exp), join r1 
 (* reduce action prefix of <exp> *)
 and r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Lab(x,id,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.WAIT,r1) $ Tok(T.IDENT(id),_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Wait(id,K),r1)), join r1 r2)
+  | r_action (S $ Tok(T.IDENT(y),r1) $ Tok(T.LARROW,_) $ Tok(T.RECV,_) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Recv(x,y,K),join r1 r2)), join r1 r3)
+  | r_action (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Tok(T.IDENT(w),r2) $ Tok(T.SEMICOLON, r3)) =
+    S $ Action((fn K => m_exp(A.Send(x,w,K), join r1 r2)), join r1 r3)
+  | r_action (S $ Tok(T.WAIT,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Wait(id,K),join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.DELAY,r1) $ Arith(t,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(t,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.TICK,r1) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(R.Int(1),K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.WHEN,r1) $ Tok(T.IDENT(id),_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.When(id,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.NOW,r1) $ Tok(T.IDENT(id),_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Now(id,K),r1)), join r1 r2)
+  | r_action (S $ Tok(T.WHEN,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.When(id,K),join r1 r2)), join r1 r3)
+  | r_action (S $ Tok(T.NOW,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Now(id,K),join r1 r2)), join r1 r3)
   | r_action S = r_action_2 S
 
 and r_action_2 (S $ Tok(T.WORK,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Work(pot,K),r1)), join r1 r2)
-  | r_action_2 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Pay(id,pot,K),r1)), join r1 r2)
-  | r_action_2 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Get(id,pot,K),r1)), join r1 r2)
-  | r_action_2 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Assert(id,phi,K),r1)), join r1 r2)
-  | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Assume(id,phi,K),r1)), join r1 r2)
+  | r_action_2 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Pay(id,pot,K),join r1 r2)), join r1 r3)
+  | r_action_2 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Get(id,pot,K), join r1 r2)), join r1 r3)
+  | r_action_2 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Assert(id,phi,K), join r1 r2)), join r1 r2)
+  | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Assume(id,phi,K),join r1 r2)), join r1 r2)
   | r_action_2 (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Tok(T.LARROW,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
 

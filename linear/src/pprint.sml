@@ -148,6 +148,8 @@ fun is_internal a = String.sub (a,0) = #"%"
 fun ext_tp env (A.One) = A.One
   | ext_tp env (A.Plus(choices)) = A.Plus(ext_choices env choices)
   | ext_tp env (A.With(choices)) = A.With(ext_choices env choices)
+  | ext_tp env (A.Tensor(A,B)) = A.Tensor(ext_tp env A, ext_tp env B)
+  | ext_tp env (A.Lolli(A,B)) = A.Lolli(ext_tp env A, ext_tp env B)
   | ext_tp env (A.Next(t,A)) = A.Next(t,ext_tp env A)
   | ext_tp env (A.Box(A)) = A.Box(ext_tp env A)
   | ext_tp env (A.Dia(A)) = A.Dia(ext_tp env A)
@@ -181,6 +183,18 @@ fun len s = String.size s
 fun pp_tp i (A.One) = "1"
   | pp_tp i (A.Plus(choice)) = "+{ " ^ pp_choice (i+3) choice ^ " }"
   | pp_tp i (A.With(choice)) = "&{ " ^ pp_choice (i+3) choice ^ " }"
+  | pp_tp i (A.Tensor(A,B)) =
+      let val astr = pp_tp i A ^ " * "
+          val l = len (astr)
+      in
+      astr ^ pp_tp (i+l) B
+      end
+  | pp_tp i (A.Lolli(A,B)) =
+      let val astr = pp_tp i A ^ " -o "
+          val l = len (astr)
+      in
+      astr ^ pp_tp (i+l) B
+      end
   | pp_tp i (A.Next(t,A)) = "(" ^ pp_time t ^ ") " ^ pp_tp (i+len(pp_time t)+3) A
   | pp_tp i (A.Box(A)) = "[]" ^ pp_tp (i+2) A
   | pp_tp i (A.Dia(A)) = "<>" ^ pp_tp (i+2) A
@@ -251,6 +265,8 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
   | pp_exp env i (A.Id(x,y)) = x ^ " <- " ^ y
   | pp_exp env i (A.Lab(x,k,P)) = x ^ "." ^ k ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Case(x,branches)) = "case " ^ x ^ " (" ^ pp_branches env (i+7+len(x)) branches ^ " )"
+  | pp_exp env i (A.Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.Recv(x,y,Q)) = y ^ " <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i Q
   | pp_exp env i (A.Close(x)) = "close " ^ x
   | pp_exp env i (A.Wait(x,Q)) = "wait " ^ x ^ " ;\n" ^ pp_exp_indent env i Q
   | pp_exp env i (A.Delay(t,P)) = "delay " ^ pp_time t ^ " ;\n" ^ pp_exp_indent env i P
@@ -285,6 +301,8 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
   | pp_exp_prefix env (A.Id(x,y)) = x ^ " <- " ^ y
   | pp_exp_prefix env (A.Lab(x,k,P)) = x ^ "." ^ k ^ " ; ..."
   | pp_exp_prefix env (A.Case(x,branches)) = "case " ^ x ^ "(...)"
+  | pp_exp_prefix env (A.Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ; ..."
+  | pp_exp_prefix env (A.Recv(x,y,Q)) = y ^ " <- recv " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Close(x)) = "close " ^ x
   | pp_exp_prefix env (A.Wait(x,Q)) = "wait " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Delay(t,P)) = "delay " ^ pp_time t ^ " ; ..."

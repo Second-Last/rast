@@ -55,6 +55,7 @@ fun toString t =
       | BAR => "|" | DOUBLEBAR => "||" | EQ => "=" | RARROW => "=>" | LRARROW => "<->" | LARROW => "<-"
       | LEQ => "<=" | GEQ => ">="
       | CASE => "case"
+      | SEND => "send" | RECV => "recv"
       | CLOSE => "close" | WAIT => "wait"
       | TICK => "tick" | DELAY => "delay"
       | WHEN => "when?" | NOW => "now!"
