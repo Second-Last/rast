@@ -57,3 +57,18 @@ proc thm7{n}{k}{nk} =
         | mults => thm7{n-1}{k}{nk-k} ||
                    R.mults ;
                    <-> )
+
+type conat = &{next: pseudonat}
+type pseudonat = +{z : 1, s : conat}
+
+proc plus1 : conat |- conat
+proc plus1 = caseR ( next => % conat |- +{...}
+                     L.next ;
+                     caseL ( z => R.s ; caseR ( next => R.z ; <-> )
+                           | s => R.s ; caseR ( next => R.s ; <-> ) ) )
+
+proc dbl : conat |- conat
+proc dbl = caseR ( next => % conat |- +{...}
+                   L.next ;
+                   caseL ( z => R.z ; <->
+                         | s => R.s ; caseR ( next => R.s ; dbl ) ) )

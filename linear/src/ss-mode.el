@@ -34,7 +34,7 @@
 (defvar font-lock-decl-face 'font-lock-decl-face)
 
 (defvar ss-font-lock-keywords
-  '(("type\\|eqtype\\|proc\\|exec" . font-lock-decl-face)
+  '(("type\\|eqtype\\|decl\\|proc\\|exec" . font-lock-decl-face)
     ("<->\\|L\\.\\|R\\.\\|caseL\\|caseR\\|waitL\\|closeR" . font-lock-keyword-face)
     ("tick\\|work" . font-lock-cost-face)
     ("payR\\|payL\\|getR\\|getL" . font-lock-work-face)

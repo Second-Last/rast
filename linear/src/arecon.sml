@@ -19,18 +19,6 @@ structure E = TpError
 structure TC = TypeCheck
 val ERROR = ErrorMsg.ERROR
 
-(* direction of interaction for structural types
- * for the purpose of error messages
- *)
-datatype dir = Left | Right
-fun interacts P = case P of
-    A.LabR _ => Right | A.CaseR _ => Right | A.CloseR => Right
-    (* WhenR, NowR, PayR, GetR, assumeR, assertR, imposs not allowed *)
-  | A.LabL _ => Left | A.CaseL _ => Left | A.WaitL _ => Left
-    (* WhenL, NowL, PayL, GetL, assumeL, assertL, imposs not allowed *)
-  | A.Marked(marked_exp) => interacts (Mark.data marked_exp)
-    (* Cut, Id, ExpName not allowed *)
-
 (* skipping over non-structural types, stopping at structural types *)
 fun skip env (A.TpName(a,es)) = skip env (A.expd_tp env (a,es))
   | skip env (A.Exists(_,A')) = skip env A'
@@ -42,6 +30,8 @@ fun skip env (A.TpName(a,es)) = skip env (A.expd_tp env (a,es))
   | skip env (A.Box(A')) = skip env A'
   | skip env A = A
 
+fun lookup_skip env x D ext = skip env (TC.lookup_context env x D ext)
+
 fun check_declared env (f,es) ext =
     (case A.lookup_expdec env f
       of SOME(vs,con,(A,pot,C)) =>
@@ -52,7 +42,7 @@ fun check_declared env (f,es) ext =
                          ^ "but defined with " ^ Int.toString (List.length vs))
        | NONE => E.error_undeclared (f, ext))
 
-(* recon env ctx con A P C ext = P' where P' == P
+(* recon env A P C ext = P' where P' == P
  * may raise ErrorMsg.error
  *
  * P' will be approximately well-typed which means all the structural
@@ -62,121 +52,139 @@ fun check_declared env (f,es) ext =
  * and structural interactions are permitted.  Furthermore, process
  * variables must be declared.
  *)
-fun recon env ctx con A P C ext =
-    let 
-        val A' = skip env A (* skip non-structural constructors *)
-        val C' = skip env C (* skip non-structural constructors *)
-    in
-        recon' env ctx con A' P C' ext
-    end
+fun recon env D P zC ext =
+    (* opportunity for tracing here *)
+    recon' env D P zC ext
 
-(* recon' env ctx con A P C ext
+and plusR env D (A.Lab(x,k,P)) (z,C as A.Plus(choices)) ext = (* x = z *)
+    (case A.lookup_choice choices k
+      of SOME(Ck) => A.Lab(x,k,recon env D P (z,Ck) ext)
+       | NONE => E.error_label_invalid env (k, C, ext))
+  | plusR env D (A.Lab(x,k,P)) (z,C) ext = (* x = z *)
+    ERROR ext ("type mismatch for " ^ x ^ ": expected internal choice, found: " ^ PP.pp_tp_compact env C)
+
+and withL env D (A as A.With(choices)) (A.Lab(x,k,P)) zC ext =
+    (case A.lookup_choice choices k
+      of SOME(Ak) => A.Lab(x,k,recon env (TC.update_tp (x,Ak) D) P zC ext)
+       | NONE => E.error_label_invalid env (k, A, ext))
+  | withL env D A (A.Lab(x,k,P)) zC ext =
+    ERROR ext ("type mismatch for " ^ x ^ ": expected external choice, found: " ^ PP.pp_tp_compact env A)
+
+and withR env D (A.Case(x,branches)) (z,A.With(choices)) ext = (* x = z *)
+    A.Case(x,recon_branchesR env D branches (z,choices) ext)
+  | withR env D (A.Case(x,branches)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected external choice, found: " ^ PP.pp_tp_compact env C)
+
+(* branchesR for case handling external choice *)
+(* tolerate missing branches *)
+and recon_branchesR env D nil (z,nil) ext = nil
+  | recon_branchesR env D ((l,ext',P)::branches) (z,(l',C)::choices) ext =
+    if l = l'
+    then (l',ext',recon env D P (z,C) ext)::(recon_branchesR env D branches (z,choices) ext)
+    else recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext (* alternative l' missing; ignore *)
+  | recon_branchesR env D ((l,ext',P)::_) (z,nil) ext =
+    (* l not part of the type *)
+    E.error_label_missing_alt (l, ext')
+  | recon_branchesR env D nil (z, (l',C)::choices) ext = (* alternative l' missing; ignore *)
+    recon_branchesR env D nil (z, choices) ext
+
+and plusL env D (A.Plus(choices)) (A.Case(x,branches)) zC ext = (* z <> x *)
+    A.Case(x,recon_branchesL env D (x,choices) branches zC ext)
+  | plusL env D A (A.Case(x,branches)) zC ext =
+    ERROR ext ("type miscmatch of " ^ x ^ ": expected internal choice, found: " ^ PP.pp_tp_compact env A)
+
+(* branchesL for case handling internal choice *)
+(* tolerate missing branches *)
+and recon_branchesL env D (x,nil) nil zC ext = nil
+  | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) zC ext =
+    if l = l'
+    then (l',ext',recon env (TC.update_tp (x,A) D) P zC ext)::(recon_branchesL env D (x,choices) branches zC ext)
+    else recon_branchesL env D (x,choices) ((l',ext',P)::branches) zC ext (* alternative l missing; ignore *)
+  | recon_branchesL env D (x,(l,A)::choices) nil zC ext = (* alternative l missing; ignore *)
+    recon_branchesL env D (x,choices) nil zC ext
+  | recon_branchesL env D (x,nil) ((l', ext', P)::_) (z,C) ext =
+    (* l' not part of the type *)
+    E.error_label_missing_alt (l',ext')
+
+and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
+    (* tolerate non-empty context *)
+    A.Close(x)
+  | oneR env D (A.Close(x)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env C)
+
+and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
+    A.Wait(x,recon env (TC.remove_chan env x D ext) P zC ext)
+  | oneL env D A (A.Wait(x,P)) zC ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env A)
+
+(* recon' env A P C ext
  * assumes A, C are structural
  * otherwise see recon
  *)
 (* judgmental constructs: id, cut, spawn *)
-and recon' env ctx con A (A.Id) C ext = A.Id
-  | recon' env ctx con A (A.Cut(P,pot,B,Q)) C ext =
-    let val P' = recon env ctx con A P B ext
-        val Q' = recon env ctx con B Q C ext
-    in A.Cut(P',pot,B,Q') end
-  | recon' env ctx con A (A.Spawn(P,Q)) C ext =
-    let val (A', pot', P', B) = TC.syn_call env P ext
-    in A.Spawn(P', recon env ctx con B Q C ext) end
-  | recon' env ctx con A (P as A.ExpName(f,es)) C ext =
-    ( check_declared env (f,es) ext
+and recon' env D (P as A.Id(x,y)) (z,C) ext =
+    if x = z andalso (TC.lookup_context env y D ext ; true)
+    then P
+    else ERROR ext ("incorrect channels in forward")
+  | recon' env D (A.Spawn(P,Q)) zC ext =
+    let val (D', pot', P', yB) = TC.syn_call env P ext
+        val contD = yB::TC.remove_chans env (List.map (fn (x,_) => x) D') D ext
+    in A.Spawn(P', recon env contD Q zC ext) end
+  | recon' env A (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+    ( if x <> z then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z) else ()
+      (* also check context? *)
+    ; check_declared env (f,es) ext
     ; P )
 
   (* begin cases for each action matching their type *)
-  | recon' env ctx con A (A.LabR(k,P)) (C as A.Plus(choices)) ext =
-    (case A.lookup_choice choices k
-      of SOME(Ck) => A.LabR(k, recon env ctx con A P Ck ext)
-       | NONE => E.error_label_invalid env (k, C, ext))
-  | recon' env ctx con A (A.CaseR(branches)) (A.With(choices)) ext =
-    let val branches' = recon_branchesR env ctx con A branches choices ext
-    in A.CaseR(branches') end
+  | recon' env D (P as A.Lab(x,k,P')) (z,C) ext =
+    if x = z
+    then plusR env D P (z,skip env C) ext
+    else withL env D (lookup_skip env x D ext) P (z,C) ext
 
-  | recon' env ctx con (A as A.With(choices)) (A.LabL(k,Q)) C ext =
-    (case A.lookup_choice choices k
-      of SOME(Ak) => A.LabL(k, recon env ctx con Ak Q C ext)
-       | NONE => E.error_label_invalid env (k, A, ext))
-  | recon' env ctx con (A.Plus(choices)) (A.CaseL(branches)) C ext =
-    let val branches' = recon_branchesL env ctx con choices branches C ext
-    in A.CaseL(branches') end
-  
-  | recon' env ctx con (A.Dot) (A.CloseR) (A.One) ext = A.CloseR
-  | recon' env ctx con (A.One) (A.WaitL(Q)) C ext =
-    let val Q' = recon env ctx con A.Dot Q C ext
-    in A.WaitL(Q') end
+  | recon' env D (P as A.Case(x,branches)) (z,C) ext =
+    if x = z
+    then withR env D P (z,skip env C) ext
+    else plusL env D (lookup_skip env x D ext) P (z,C) ext
+         
+  | recon' env D (P as A.Close(x)) (z,C) ext =
+    if x = z
+    then oneR env D P (z,skip env C) ext
+    else ERROR ext ("name mismatch on right: " ^ x ^ " <> " ^ z)
+
+  | recon' env D (P as A.Wait(x,P')) (z,C) ext =
+    if x = z
+    then ERROR ext ("name mismatch on left: " ^ x ^ " <> " ^ z) (* strange error message *)
+    else oneL env D (lookup_skip env x D ext) P (z,C) ext
 
   (* work, which is allowed before reconstruction *)
-  | recon' env ctx con A (A.Work(p,P')) C ext =
-    A.Work(p, recon env ctx con A P' C ext)
+  | recon' env D (A.Work(p,P')) zC ext =
+    A.Work(p, recon env D P' zC ext)
 
   (* delay, which is allowed before reconstruction *)
-  | recon' env ctx con A (A.Delay(t,P')) C ext =
-    A.Delay(t, recon env ctx con A P' C ext)
+  | recon' env D (A.Delay(t,P')) zC ext =
+    A.Delay(t, recon env D P' zC ext)
 
   (* should not be allowed before reconstruction *)
   (* this would be with disjunctive patterns or a separate function *)
-  | recon' env ctx con A (P as A.AssertR _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.AssumeL _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.AssumeR _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.AssertL _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.Imposs)    C ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.Assert _) zC ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.Assume _) zC ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.Imposs)   zC ext = E.error_implicit (P,ext)
 
-  | recon' env ctx con A (P as A.PayR _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.GetL _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.GetR _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.PayL _) C ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.Pay _) zC ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.Get _) zC ext = E.error_implicit (P,ext)
 
-  | recon' env ctx con A (P as A.NowR _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.WhenL _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.WhenR _) C ext = E.error_implicit (P,ext)
-  | recon' env ctx con A (P as A.NowL _) C ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.Now _) zC ext = E.error_implicit (P,ext)
+  | recon' env D (P as A.When _) zC ext = E.error_implicit (P,ext)
 
   (* traverse, but preserve, marks for downstream error messages *)
-  | recon' env A ctx con (A.Marked(marked_P)) C ext =
+  | recon' env D (A.Marked(marked_P)) zC ext =
     (* preserve marks for later error messages *)
-    A.Marked(Mark.mark'(recon env A ctx con (Mark.data marked_P) C (Mark.ext marked_P),
+    A.Marked(Mark.mark'(recon env D (Mark.data marked_P) zC (Mark.ext marked_P),
                         Mark.ext marked_P))
 
-  (* remaining cases, where process attempts to interact *)
-  | recon' env ctx con A P C ext =
-    (case (A, interacts P, C)
-      of (* interacting right *)
-         (A, Right, C) => ERROR ext ("does not match right type " ^ PP.pp_tp_compact env C)
-         (* interacting left *)
-       | (A, Left, C) => ERROR ext ("does not match left type " ^ PP.pp_tp_compact env A))
-
-(* branchesL for case handling internal choice *)
-(* tolerate missing branches *)
-and recon_branchesL env ctx con nil nil C ext = nil
-  | recon_branchesL env ctx con ((l,A)::choices) ((l',ext',P)::branches) C ext =
-    if l = l'
-    then (l',ext',recon env ctx con A P C ext)::(recon_branchesL env ctx con choices branches C ext)
-    else recon_branchesL env ctx con choices ((l',ext',P)::branches) C ext (* alternative l missing; ignore *)
-  | recon_branchesL env ctx con ((l,A)::choices) nil C ext = (* alternative l missing; ignore *)
-    recon_branchesL env ctx con choices nil C ext
-  | recon_branchesL env ctx con nil ((l', ext', P)::_) C ext =
-    (* l' not part of the type *)
-    E.error_label_missing_alt (l',ext')
-
-(* branchesR for case handling external choice *)
-(* tolerate missing branches *)
-and recon_branchesR env ctx con A nil nil ext = nil
-  | recon_branchesR env ctx con A ((l,ext',P)::branches) ((l',C)::choices) ext =
-    if l = l'
-    then (l',ext',recon env ctx con A P C ext)::(recon_branchesR env ctx con A branches choices ext)
-    else recon_branchesR env ctx con A ((l,ext',P)::branches) choices ext (* alternative l' missing; ignore *)
-  | recon_branchesR env ctx con A ((l,ext',P)::_) nil ext =
-    (* l not part of the type *)
-    E.error_label_missing_alt (l, ext')
-  | recon_branchesR env ctx con A nil ((l',C)::choices) ext = (* alternative l' missing; ignore *)
-    recon_branchesR env ctx con A nil choices ext
-
 (* external interface: ignore potential *)
-val recon = fn env => fn ctx => fn con => fn A => fn pot => fn P => fn C => fn ext =>
-            recon env ctx con A P C ext
+val recon = fn env => fn ctx => fn con => fn D => fn pot => fn P => fn C => fn ext =>
+            recon env D P C ext
 
 end (* structure ARecon *)

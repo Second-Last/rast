@@ -36,6 +36,11 @@ sig
     val synL : Ast.env -> Ast.expname * Arith.arith list -> Ast.context
     val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
     val syn_alt : Ast.env -> Ast.choices -> Ast.label -> Ast.tp
+    val remove_chans : Ast.env -> Ast.chan list -> Ast.context -> Ast.ext -> Ast.context
+    val remove_chan : Ast.env -> Ast.chan -> Ast.context -> Ast.ext -> Ast.context
+    val expand : Ast.env -> Ast.tp -> Ast.tp
+    val update_tp : Ast.chan_tp -> Ast.context -> Ast.context
+    val lookup_context : Ast.env -> Ast.chan -> Ast.context -> Ast.ext -> Ast.tp
 
     (* check_exp trace env ctx con A pot P C ext = ()
      * checks that A |- P : C with potential pot
