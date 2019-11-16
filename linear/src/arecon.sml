@@ -106,6 +106,27 @@ and recon_branchesL env D (x,nil) nil zC ext = nil
     (* l' not part of the type *)
     E.error_label_missing_alt (l',ext')
 
+and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
+    (* do not check type equality here, just remove w *)
+    A.Send(x,w,recon env (TC.remove_chan env w D ext) P (z,B) ext)
+  | tensorR env D (A.Send(x,w,P)) (z,C) ext =
+    ERROR ext ("type mismacth of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
+
+and lolliL env D (A.Lolli(A,B)) (A.Send(x,w,P)) zC ext = (* x <> z *)
+    A.Send(x,w,recon env (TC.update_tp (x,B) (TC.remove_chan env w D ext)) P zC ext)
+  | lolliL env D A (A.Send(x,w,P)) zC ext =
+    ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
+
+and lolliR env D (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext = (* x = z *)
+    A.Recv(x,y,recon env ((y,A)::D) P (z,B) ext)        (* check if y is fresh here? *)
+  | lolliR env D (A.Recv(x,y,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env C)
+
+and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
+    A.Recv(x,y,recon env ((y,A)::TC.update_tp (x,B) D) P zC ext) (* check if y is fresh here? *)
+  | tensorL env D A (A.Recv(x,y,P)) zC ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
+
 and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
     (* tolerate non-empty context *)
     A.Close(x)
@@ -146,6 +167,16 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
     if x = z
     then withR env D P (z,skip env C) ext
     else plusL env D (lookup_skip env x D ext) P (z,C) ext
+
+  | recon' env D (P as A.Send(x,w,P')) (z,C) ext =
+    if x = z
+    then tensorR env D P (z,skip env C) ext
+    else lolliL env D (lookup_skip env x D ext) P (z,C) ext
+
+  | recon' env D (P as A.Recv(x,y,P')) (z,C) ext =
+    if x = z
+    then lolliR env D P (z,skip env C) ext
+    else tensorL env D (lookup_skip env x D ext) P (z,C) ext
          
   | recon' env D (P as A.Close(x)) (z,C) ext =
     if x = z
