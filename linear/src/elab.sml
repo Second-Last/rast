@@ -310,6 +310,9 @@ and elab_exps env nil = nil
              val () = if List.length vs = List.length vs' then ()
                       else ERROR ext ("process defined with " ^ Int.toString (List.length vs) ^ " indices and "
                                       ^ "declared with " ^ Int.toString (List.length vs'))
+             val () = if List.length xs = List.length D' then ()
+                      else ERROR ext ("process defined with " ^ Int.toString (List.length xs) ^ " arguments and "
+                                      ^ "declared with " ^ Int.toString (List.length D'))
              val (con, (D,pot,C)) = subst (R.create_idx vs) (vs',con',(D',pot',C'))
              val () = TC.closed_exp vs P ext
              (* val P' = Cost.apply_cost_model P *) (* cost model now applied during reconstruction *)
