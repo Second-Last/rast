@@ -148,6 +148,16 @@ end
 
 fun apply_fst f (A,env) = (f A, env)
 
+fun exists (A.TpDef(a,vs,con,A,ext)) nil = false
+  | exists (A.TpDef(a,vs,con,A,ext)) (A.TpDef(a',vs',con',A',ext')::env) =
+    a = a' orelse exists (A.TpDef(a,vs,con,A,ext)) env
+
+fun combine nil env = env
+  | combine (decl::env1) env2 =
+    if exists decl env2
+    then combine env1 env2
+    else combine env1 (decl::env2)
+
 (* tp_naming ("type a = A") = env where env contains
  * a new definition "type a = A'" with A' == A and
  * also definitions for all internal names in A'
@@ -165,8 +175,18 @@ fun tp_naming (A.TpDef(a,vs,con,A,ext)) =
  *)
 and tp_name_subtp ctx con (A.Plus(choices)) env = apply_fst A.Plus (tp_name_subchoices ctx con choices env)
   | tp_name_subtp ctx con (A.With(choices)) env = apply_fst A.With (tp_name_subchoices ctx con choices env)
-  | tp_name_subtp ctx con (A.Tensor(A',B')) env = apply_fst (fn B => A.Tensor(A',B)) (tp_name_subtp' ctx con B' env)
-  | tp_name_subtp ctx con (A.Lolli(A',B')) env = apply_fst (fn B => A.Lolli(A',B)) (tp_name_subtp' ctx con B' env)
+  | tp_name_subtp ctx con (A.Tensor(A',B')) env =
+      let val (nameB, envB) = tp_name_subtp' ctx con B' env
+          val (nameA, envA) = tp_name_subtp' ctx con A' env
+      in
+      (A.Tensor(nameA, nameB), (combine envA envB))
+      end
+  | tp_name_subtp ctx con (A.Lolli(A',B')) env =
+      let val (nameB, envB) = tp_name_subtp' ctx con B' env
+          val (nameA, envA) = tp_name_subtp' ctx con A' env
+      in
+      (A.Lolli(nameA, nameB), (combine envA envB))
+      end
   | tp_name_subtp ctx con (A.One) env = (A.One, env)
   | tp_name_subtp ctx con (A.Exists(phi,A')) env =
     apply_fst (fn A => (A.Exists(phi,A))) (tp_name_subtp' ctx (R.And(con,phi)) A' env)

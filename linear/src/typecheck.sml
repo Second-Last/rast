@@ -385,6 +385,14 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     eq_choice env ctx con seen choice choice'
   | eq_tp env ctx con seen (A.With(choice)) (A.With(choice')) =
     eq_choice env ctx con seen choice choice'
+  
+  | eq_tp env ctx con seen (A.Tensor(A,B)) (A.Tensor(A',B')) =
+    eq_tp' env ctx con seen A A'
+    andalso eq_tp' env ctx con seen B B'
+  | eq_tp env ctx con seen (A.Lolli(A,B)) (A.Lolli(A',B')) =
+    eq_tp' env ctx con seen A A'
+    andalso eq_tp' env ctx con seen B B'
+
   | eq_tp env ctx con seen (A.One) (A.One) = true
 
   | eq_tp env ctx con seen (A.Exists(phi,A)) (A.Exists(phi',A')) =
