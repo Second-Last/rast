@@ -38,7 +38,9 @@ structure TC = TypeCheck
 structure AR = ARecon
 (*
 structure BR = BRecon
+*)
 structure QR = QRecon
+(*
 structure WR = WRecon
 structure TR = TRecon
 structure TRBT = TReconBT
@@ -79,12 +81,14 @@ fun arecon env ctx con A pot P C ext =
     let val P' = AR.recon env ctx con A pot P C ext (* P' = P *)
     in P' end
 
-(*
 (* quantifier reconstruction: first do approximate type checking *)
 fun qrecon env ctx con A pot P C ext =
     let val P' = AR.recon env ctx con A pot P C ext (* P' = P *)
+        (* add brecon here to simplify qrecon? *)
         val P'' = QR.recon env ctx con A pot P' C ext
     in P'' end
+
+(*
 
 (* work reconstruction: first do quantifier reconstruction *)
 fun wrecon env ctx con A pot P C ext =
@@ -126,10 +130,9 @@ fun twrecon env ctx con A pot P C ext =
  * We assume the cost model has already been applied
  *)
 fun reconstruct Flags.Explicit _          _          env ctx con A pot P C ext = Cost.apply_cost_model P
-  | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = arecon env ctx con A pot P C ext
+  | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = qrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = ERROR ext ("only explicit syntax allowed")
 (*
-  | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = qrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit Flags.None _          env ctx con A pot P C ext = tqrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          Flags.None env ctx con A pot P C ext = wrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = twrecon env ctx con A pot P C ext

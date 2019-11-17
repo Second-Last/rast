@@ -32,11 +32,25 @@ sig
     (* operations on approximately typed expressions (see arecon.sml) *)
     (* val syn_cut : Ast.env -> Ast.exp * Ast.exp ->  Ast.ext -> Ast.exp *)
     val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context
-                                                                   
-    val synR : Ast.env -> Ast.expname * Arith.arith list -> Ast.chan_tp
-    val synL : Ast.env -> Ast.expname * Arith.arith list -> Ast.context
+    val synL : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.context
+    val synR : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.chan_tp
+
+    val syn_altR : Ast.env -> Ast.chan_tp -> Ast.label -> Ast.chan_tp
+    val syn_altL : Ast.env -> Ast.context -> Ast.chan -> Ast.label -> Ast.context
+    val syn_sendR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
+    val syn_sendL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
+    val syn_recvR1 : Ast.env -> Ast.context -> Ast.chan_tp -> Ast.chan -> Ast.context
+    val syn_recvR2 : Ast.env -> Ast.chan_tp -> Ast.chan_tp
+    val syn_recvL : Ast.env -> Ast.context -> Ast.chan -> Ast.chan -> Ast.context
+    val syn_waitL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
+
+    val syn_branchesR : Ast.env -> Ast.chan_tp -> Ast.chan * Ast.choices
+    val syn_branchesL : Ast.env -> Ast.context -> Ast.chan -> Ast.chan * Ast.choices
+
+    (*
     val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
-    val syn_alt : Ast.env -> Ast.choices -> Ast.label -> Ast.tp
+    *)
+
     val remove_chans : Ast.chan list -> Ast.context -> Ast.ext -> Ast.context
     val remove_chan : Ast.chan -> Ast.context -> Ast.ext -> Ast.context
     val expand : Ast.env -> Ast.tp -> Ast.tp
@@ -540,16 +554,16 @@ fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
   | syn_call env D P ext = ERROR ext ("call must be a process name")
 
 (* synL env (f,es) = A where A |- f : _, approximately *)
-fun synL env (f, es) =
+fun synL env (y, f, es, xs) =
     (case A.expd_expdec env (f, es)
-      of SOME(con, (D, pot, zC)) => D
+      of SOME(con, (D, pot, zC)) => ListPair.mapEq (fn (x,(x',A')) => (x,A')) (xs,D)
          (* NONE impossible, since f{es} approximately typed *)
     )
 
 (* synR env (f,es) = C where _ |- f : C, approximately *)
-fun synR env (f, es) =
+fun synR env (y, f, es, xs) =
     (case A.expd_expdec env (f,es)
-      of SOME(con, (D, pot, zC)) => zC
+      of SOME(con, (D, pot, (z,C))) => (y,C)
          (* NONE impossible, since f{es} approximately typed *)
     )
 
@@ -560,8 +574,50 @@ fun synLR env (f, es) =
          (* NONE impossible, since f{es} approximately typed *)
     )
 
-(* syn_alt env (l => Al)_(l in L) k = Ak, assumes k in L *)
-fun syn_alt env choices k = Option.valOf (A.lookup_choice choices k)
+(* syn_altR env (l => Al)_(l in L) k = Ak, assumes k in L *)
+fun syn_altR' env z (A.Plus(choices)) k = (z, Option.valOf (A.lookup_choice choices k))
+fun syn_altR env (z,C) k = syn_altR' env z (expand env C) k
+
+fun syn_altL' env x (A.With(choices)) k D = (x, Option.valOf (A.lookup_choice choices k))::D
+fun syn_altL env ((x',A)::D') x k =
+    if x' = x
+    then syn_altL' env x' (expand env A) k D'
+    else (x',A)::syn_altL env D' x k
+    (* nil impossile by approx typing *)
+
+fun syn_sendR' env z (A.Tensor(A,B)) = (z,B)
+fun syn_sendR env (z,C) = syn_sendR' env z (expand env C)
+
+fun syn_sendL' env x (A.Lolli(A,B)) D = (x,B)::D
+fun syn_sendL env ((x',A)::D') x  =
+    if x' = x then syn_sendL' env x' (expand env A) D'
+    else (x',A)::syn_sendL env D' x
+    (* nil impossible by approx typing *)
+
+fun syn_recvR1' env y (A.Lolli(A,B)) D = (y,A)::D
+fun syn_recvR1 env D (z,C) y = syn_recvR1' env y (expand env C) D
+
+fun syn_recvR2' env z (A.Lolli(A,B)) = (z,B)
+fun syn_recvR2 env (z,C) = syn_recvR2' env z (expand env C)
+
+fun syn_recvL' env (y,x) (A.Tensor(A,B)) D = (y,A)::(x,B)::D
+  | syn_recvL' env (y,x) A D = ( TextIO.print (x ^ ":" ^ PP.pp_tp_compact env A ^ "\n") ; raise Match )
+fun syn_recvL env ((x',A)::D') x y =
+    if x' = x then syn_recvL' env (y,x) (expand env A) D'
+    else (x',A)::syn_recvL env D' x y
+
+fun syn_waitL' env () (A.One) D = D
+fun syn_waitL env ((x',A)::D') x =
+    if x = x' then syn_waitL' env () (expand env A) D'
+    else (x',A)::syn_waitL env D' x
+
+fun syn_branchesR' env z (A.With(choices)) = (z,choices)
+fun syn_branchesR env (z,C) = syn_branchesR' env z (expand env C)
+
+fun syn_branchesL' env x (A.Plus(choices)) = (x,choices)
+fun syn_branchesL env ((x',A)::D') x =
+    if x = x' then syn_branchesL' env x (expand env A)
+    else syn_branchesL env D' x
 
 (*************************************)
 (* Type checking process expressions *)

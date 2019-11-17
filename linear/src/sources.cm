@@ -27,9 +27,9 @@ Group is
       recon-sig.sml
 
       arecon.sml
+      qrecon.sml
       (*
       brecon.sml
-      qrecon.sml
       wrecon.sml
       trecon-util.sml
       trecon.sml
