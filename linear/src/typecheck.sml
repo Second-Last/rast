@@ -601,7 +601,6 @@ fun syn_recvR2' env z (A.Lolli(A,B)) = (z,B)
 fun syn_recvR2 env (z,C) = syn_recvR2' env z (expand env C)
 
 fun syn_recvL' env (y,x) (A.Tensor(A,B)) D = (y,A)::(x,B)::D
-  | syn_recvL' env (y,x) A D = ( TextIO.print (x ^ ":" ^ PP.pp_tp_compact env A ^ "\n") ; raise Match )
 fun syn_recvL env ((x',A)::D') x y =
     if x' = x then syn_recvL' env (y,x) (expand env A) D'
     else (x',A)::syn_recvL env D' x y
