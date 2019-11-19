@@ -29,6 +29,11 @@ fun skip env (A.PayPot(_,A')) = skip env A'
   | skip env (A.TpName(a,es)) = skip env (A.expd_tp env (a,es))
   | skip env A = A
 
+fun skipQ env A = case skip env A
+                   of A.Exists(phi,A') => skipQ env A'
+                    | A.Forall(phi,A') => skipQ env A'
+                    | A => A
+
 (* impossL_branch env (l,A) l_opt = ImpossL(phi)
  * if A = Exists(phi,A'), raises an exception otherwise
  * l_opt is label of the next branch if one (for error messages)
@@ -220,27 +225,75 @@ and recon' env ((x, A as A.Exists(phi,A'))::D) D' P (z,C) ext =
   | recon' env nil D' P (z,C) ext =
     recon'' env (List.rev D') P (z,C) ext (* reverse, to keep original order *)
 
+fun addR_assert env P (z,A.Exists(phi,C)) = A.Assert(z,phi,addR_assert env P (z,skip env C))
+  | addR_assert env P (z,C) = P
+
+fun addL_assert env (y,A.Forall(phi,A)) P = A.Assert(y,phi,addL_assert env (y,skip env A) P)
+  | addL_assert env (y,A) P = P
+
+fun addR_assume env P (z,A.Forall(phi,C)) = A.Assume (z,phi,addR_assume env P (z,skip env C))
+  | addR_assume env P (z,C) = P
+
+fun addL_assume env (y,A.Exists(phi,A)) P = A.Assume(y,phi,addL_assume env (y,skip env A) P)
+  | addL_assume env (y,A) P = P
+
+fun addLs_assert env D nil P = P
+  | addLs_assert env D (x::xs) P =
+    addLs_assert env D xs (addL_assert env (x, TC.lookup_context env x D NONE) P)
+
+fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
+    addLs_assert env D xs PQ
+  | add_call env D (A.Spawn(A.Marked(marked_P),Q)) =
+    add_call env D (A.Spawn(Mark.data marked_P,Q))
+
 (* recon'' env A P C ext
  * assumes A, C are structural
  *)
 (* judgmental constructs: id, cut, spawn *)
-and recon'' env D (P as A.Id(z',y)) (z,C) ext = P
+fun recon_assumeR env D P (z,C) ext =
+    let val P' = recon env D P (z,C) ext
+    in addR_assume env P' (z,skip env C) end
+
+and recon_assumeL env D (x,A) P (z,C) ext =
+    let val P' = recon env D P (z,C) ext
+    in addL_assume env (x,skip env A) P end
+
+and recon'' env D (P as A.Id(z',y)) (z,C) ext =
+    let val P'  = addR_assert env P (z,skip env C)
+        val P'' = addL_assert env (y, skip env (TC.lookup_context env y D ext)) P'
+    in P'' end
   | recon'' env D (A.Spawn(P,Q)) (z,C) ext =
     (* obtain intermediate type B, to reconstruct both P and Q *)
     let val D' = TC.syn_call env D P ext
-    in A.Spawn(P, recon env D' Q (z,C) ext) end
-  | recon'' env A (P as A.ExpName(x,f,es,xs)) (z,C) ext = P
+        val Q' = recon env D' Q (z,C) ext
+        val PQ' = add_call env D (A.Spawn(P,Q'))
+    in PQ' end
+
+  | recon'' env A (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+    addLs env D xs P
 
   (* begin cases for each action matching their type *)
   | recon'' env D (A.Lab(x,k,P)) (z,C) ext =
     if x = z
-    then A.Lab(x, k, recon env D P (TC.syn_altR env (z,C) k) ext)
-    else A.Lab(x, k, recon env (TC.syn_altL env D x k) P (z,C) ext)
+    then let val P' = recon_assumeR env D P (TC.syn_altR env (z,skipQ env C) k) ext
+             val P'' = addR_assert env (A.Lab(x, k, P')) (z,skip env C)
+         in P'' end
+    else let val A = TC.lookup_context env x D ext
+             val D' = TC.syn_altL env (TC.update_tp (x,skipQ env A) D) x k
+             val P' = recon_assumeL env D' (x,TC.lookup_context env x D') P (z,C) ext
+             val P'' = addL_assert env (x,skip env A) P'
+         in P'' end
 
   | recon'' env D (A.Case(x,branches)) (z,C) ext =
     if x = z
-    then A.Case(x, recon_branchesR env D branches (TC.syn_branchesR env (z,C)) ext)
-    else A.Case(x, recon_branchesL env D (TC.syn_branchesL env D x) branches (z,C) ext)
+    then let val branches' = recon_branchesR env D branches (TC.syn_branchesR env (z,skipQ env C)) ext
+             val P'' = addR_assert env (A.Case(x, branches')) (z, skip env C)
+         in P'' end
+    else let val A = TC.lookup_context env x D ext
+             val D' = TC.syn_branchesL env (TC.update_tp (x,skipQ env A) D) x
+             val branches' = recon_branchesL env D' (x,TC.lookup_context env x D') branches (z,C) ext
+             val P'' = addL_assert env (x,skip env A) (A.Case(x,branches'))
+         in P'' end
 
   | recon'' env D (A.Send(x,y,P)) (z,C) ext =
     if x = z
