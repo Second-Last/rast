@@ -63,14 +63,14 @@ fun impossR_branch env (z,(l,A.Forall(phi,C'))) l' ext' =
   | impossR_branch env (z,(l,C)) NONE ext' = E.error_label_missing_branch (l,ext')
   | impossR_branch env (z,(l,C)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
 
+
+(*
 (* matching_qprefix env A B, where A = !{phi}. A' or A = ?{phi}. A' initially *)
 fun matching_qprefix env A B = matching_qprefix' env (skip env A) (skip env B)
 and matching_qprefix' env (A.Exists(phi,A')) (A.Exists(psi,B')) = true
   | matching_qprefix' env (A.Forall(phi,A')) (A.Forall(psi,B')) = true
   | matching_qprefix' env A B = false
 
-
-(*
 (* we insert assumeL if must_postpone is false *)
 fun must_postpone env (w,A) D (A.Id(z,y)) (z',C) = (* z' = z *)
     if w = y then matching_qprefix env A C

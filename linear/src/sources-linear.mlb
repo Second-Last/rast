@@ -35,9 +35,9 @@ local
 
     arecon.sml
     qrecon.sml
+    wrecon.sml
     (*
     brecon.sml
-    wrecon.sml
     trecon-util.sml
     trecon.sml
     trecon-bt.sml

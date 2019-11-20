@@ -32,6 +32,7 @@ sig
     (* operations on approximately typed expressions (see arecon.sml) *)
     (* val syn_cut : Ast.env -> Ast.exp * Ast.exp ->  Ast.ext -> Ast.exp *)
     val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context
+    val syn_pot : Ast.env -> Ast.exp -> Ast.ext -> Ast.pot
     val synL : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.context
     val synR : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.chan_tp
 
@@ -46,6 +47,11 @@ sig
 
     val syn_branchesR : Ast.env -> Ast.chan_tp -> Ast.chan * Ast.choices
     val syn_branchesL : Ast.env -> Ast.context -> Ast.chan -> Ast.chan * Ast.choices
+
+    val syn_assertR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
+    val syn_assertL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
+    val syn_assumeR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
+    val syn_assumeL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
 
     (*
     val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
@@ -553,6 +559,17 @@ fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
     syn_call env D (Mark.data marked_P) (Mark.ext marked_P)
   | syn_call env D P ext = ERROR ext ("call must be a process name")
 
+fun syn_pot env (P as A.ExpName(x,f,es,xs)) ext =
+    (case A.lookup_expdec env f
+      of SOME(vs,con',(D',pot',(y,B'))) =>
+         let val sg = zip_check f vs es ext
+             val pot = R.apply sg pot'
+         in pot end
+       | NONE => ERROR ext ("process " ^ f ^ " undeclared"))
+  | syn_pot env (A.Marked(marked_P)) ext = (* Q: preserve mark? *)
+    syn_pot env (Mark.data marked_P) (Mark.ext marked_P)
+  | syn_pot env P ext = ERROR ext ("call must be a process name")
+
 (* synL env (f,es) = A where A |- f : _, approximately *)
 fun synL env (y, f, es, xs) =
     (case A.expd_expdec env (f, es)
@@ -617,6 +634,22 @@ fun syn_branchesL' env x (A.Plus(choices)) = (x,choices)
 fun syn_branchesL env ((x',A)::D') x =
     if x = x' then syn_branchesL' env x (expand env A)
     else syn_branchesL env D' x
+
+fun syn_assertR' env z (A.Exists(phi,C)) = (z,C)
+fun syn_assertR env (z,C) = syn_assertR' env z (expand env C)
+
+fun syn_assertL' env x (A.Forall(phi,A)) D = (x,A)::D
+fun syn_assertL env ((x',A)::D') x =
+    if x = x' then syn_assertL' env x (expand env A) D'
+    else (x',A)::syn_assertL env D' x
+
+fun syn_assumeR' env z (A.Forall(phi,C)) = (z,C)
+fun syn_assumeR env (z,C) = syn_assumeR' env z (expand env C)
+
+fun syn_assumeL' env x (A.Exists(phi,A)) D' = (x,A)::D'
+fun syn_assumeL env ((x',A)::D') x =
+    if x = x' then syn_assumeL' env x (expand env A) D'
+    else (x',A)::syn_assumeL env D' x
 
 (*************************************)
 (* Type checking process expressions *)
