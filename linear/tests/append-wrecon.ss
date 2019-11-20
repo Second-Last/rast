@@ -20,6 +20,14 @@ proc l <- append{n}{k}{p} <- l1 l2 =
                     l <- append{n-1}{k}{p} <- l1 l2
           | nil => wait l1 ; l <- l2 )
 
+decl rev{n}{k}{p} : (l : list{n}{p+2}) (a : list{k}{p}) |- (r : list{n+k}{p})
+
+proc r <- rev{n}{k}{p} <- l a =
+  case l ( cons => x <- recv l ;
+                   a' <- cons{k}{p} <- x a ;
+                   r <- rev{n-1}{k+1}{p} <- l a'
+         | nil => wait l ; r <- a )
+
 type stack{n} = &{ push : <{4}| nat -o stack{n+1},
                    pop : +{ none : ?{n = 0}. 1,
                             some : ?{n > 0}. nat * stack{n-1} } }
