@@ -69,6 +69,8 @@ and matching_qprefix' env (A.Exists(phi,A')) (A.Exists(psi,B')) = true
   | matching_qprefix' env (A.Forall(phi,A')) (A.Forall(psi,B')) = true
   | matching_qprefix' env A B = false
 
+
+(*
 (* we insert assumeL if must_postpone is false *)
 fun must_postpone env (w,A) D (A.Id(z,y)) (z',C) = (* z' = z *)
     if w = y then matching_qprefix env A C
@@ -181,7 +183,33 @@ fun may_postpone env (w,A) D (A.Id(z',y)) (z,C) = false (* cannot postpone past 
   | may_postpone env (w,A) D (A.Marked(marked_P)) (z,C) = may_postpone env (w,A) D (Mark.data marked_P) (z,C)
   (* illegal, catch later *)
   | may_postpone env (w,A) D P (z,C) = true
-                                     
+
+*)
+
+
+fun addR_assert env P (z,A.Exists(phi,C)) = A.Assert(z,phi,addR_assert env P (z,skip env C))
+  | addR_assert env P (z,C) = P
+
+fun addL_assert env (y,A.Forall(phi,A)) P = A.Assert(y,phi,addL_assert env (y,skip env A) P)
+  | addL_assert env (y,A) P = P
+
+fun addR_assume env P (z,A.Forall(phi,C)) = A.Assume (z,phi,addR_assume env P (z,skip env C))
+  | addR_assume env P (z,C) = P
+
+fun addL_assume env (y,A.Exists(phi,A)) P = A.Assume(y,phi,addL_assume env (y,skip env A) P)
+  | addL_assume env (y,A) P = P
+
+fun addLs_assert env D nil P = P
+  | addLs_assert env D (x::xs) P =
+    addLs_assert env D xs (addL_assert env (x, TC.lookup_context env x D NONE) P)
+
+fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
+    addLs_assert env D xs PQ
+  | add_call env D (A.Spawn(A.Marked(marked_P),Q)) =
+    add_call env D (A.Spawn(Mark.data marked_P,Q))
+
+
+
 (* recon env A P C ext = P'
  * where P' contains assume, assert, imposs to match all quantified
  * type constructors in A and C
@@ -193,13 +221,19 @@ fun may_postpone env (w,A) D (A.Id(z',y)) (z,C) = false (* cannot postpone past 
  * use them at present.  Checking them is postponed to type checking
  *)
 fun recon env D P (z,C) ext =
-    let 
-        val D' = List.map (fn (x,A) => (x, skip env A)) D (* skip non-structural constructors *)
-        val C' = skip env C (* skip non-structural constructors *)
-    in
-        recon' env D' nil P (z,C') ext
-    end
+  (*
+  let 
+      val D' = List.map (fn (x,A) => (x, skip env A)) D (* skip non-structural constructors *)
+      val C' = skip env C (* skip non-structural constructors *)
+  in
+      recon'' env D' P (z,C') ext
+  end
+  *)
+  (if false then TextIO.print (PP.pp_exp_prefix env P ^ " : "
+                               ^ PP.pp_tpj_compact env D (R.Int(0)) (z,C) ^ "\n") else ()
+  ; recon'' env D P (z,C) ext)
 
+(*
 (* recon' env A P C ext = P'
  * assumes A and C are structural or quantifiers
  * (see recon' for other info)
@@ -224,39 +258,18 @@ and recon' env ((x, A as A.Exists(phi,A'))::D) D' P (z,C) ext =
     recon' env D ((x,A)::D') P (z,C) ext
   | recon' env nil D' P (z,C) ext =
     recon'' env (List.rev D') P (z,C) ext (* reverse, to keep original order *)
-
-fun addR_assert env P (z,A.Exists(phi,C)) = A.Assert(z,phi,addR_assert env P (z,skip env C))
-  | addR_assert env P (z,C) = P
-
-fun addL_assert env (y,A.Forall(phi,A)) P = A.Assert(y,phi,addL_assert env (y,skip env A) P)
-  | addL_assert env (y,A) P = P
-
-fun addR_assume env P (z,A.Forall(phi,C)) = A.Assume (z,phi,addR_assume env P (z,skip env C))
-  | addR_assume env P (z,C) = P
-
-fun addL_assume env (y,A.Exists(phi,A)) P = A.Assume(y,phi,addL_assume env (y,skip env A) P)
-  | addL_assume env (y,A) P = P
-
-fun addLs_assert env D nil P = P
-  | addLs_assert env D (x::xs) P =
-    addLs_assert env D xs (addL_assert env (x, TC.lookup_context env x D NONE) P)
-
-fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
-    addLs_assert env D xs PQ
-  | add_call env D (A.Spawn(A.Marked(marked_P),Q)) =
-    add_call env D (A.Spawn(Mark.data marked_P,Q))
-
+*)
 (* recon'' env A P C ext
  * assumes A, C are structural
  *)
 (* judgmental constructs: id, cut, spawn *)
-fun recon_assumeR env D P (z,C) ext =
+and recon_assumeR env D P (z,C) ext =
     let val P' = recon env D P (z,C) ext
     in addR_assume env P' (z,skip env C) end
 
 and recon_assumeL env D (x,A) P (z,C) ext =
     let val P' = recon env D P (z,C) ext
-    in addL_assume env (x,skip env A) P end
+    in addL_assume env (x,skip env A) P' end
 
 and recon'' env D (P as A.Id(z',y)) (z,C) ext =
     let val P'  = addR_assert env P (z,skip env C)
@@ -269,8 +282,8 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
         val PQ' = add_call env D (A.Spawn(P,Q'))
     in PQ' end
 
-  | recon'' env A (P as A.ExpName(x,f,es,xs)) (z,C) ext =
-    addLs env D xs P
+  | recon'' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+    addLs_assert env D xs P
 
   (* begin cases for each action matching their type *)
   | recon'' env D (A.Lab(x,k,P)) (z,C) ext =
@@ -280,7 +293,7 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
          in P'' end
     else let val A = TC.lookup_context env x D ext
              val D' = TC.syn_altL env (TC.update_tp (x,skipQ env A) D) x k
-             val P' = recon_assumeL env D' (x,TC.lookup_context env x D') P (z,C) ext
+             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_assert env (x,skip env A) P'
          in P'' end
 
@@ -290,36 +303,60 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addR_assert env (A.Case(x, branches')) (z, skip env C)
          in P'' end
     else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_branchesL env (TC.update_tp (x,skipQ env A) D) x
-             val branches' = recon_branchesL env D' (x,TC.lookup_context env x D') branches (z,C) ext
+             val choices' = TC.syn_branchesL env (TC.update_tp (x,skipQ env A) D) x
+             val branches' = recon_branchesL env D choices' branches (z,C) ext
              val P'' = addL_assert env (x,skip env A) (A.Case(x,branches'))
          in P'' end
 
   | recon'' env D (A.Send(x,y,P)) (z,C) ext =
     if x = z
-    then A.Send(x, y, recon env (TC.remove_chan y D NONE) P (TC.syn_sendR env (z,C)) ext)
-    else A.Send(x, y, recon env (TC.syn_sendL env (TC.remove_chan y D NONE) x) P (z,C) ext)
+    then let val B = TC.lookup_context env y D ext
+             val P' = recon_assumeR env (TC.remove_chan y D ext) P (TC.syn_sendR env (z,skipQ env C)) ext
+             val P'' = addR_assert env (A.Send(x,y,P')) (z,skip env C)
+             val P''' = addL_assert env (y,skip env B) P''
+         in P''' end
+    else let val A = TC.lookup_context env x D ext
+             val B = TC.lookup_context env y D ext
+             val D' = TC.remove_chan y (TC.syn_sendL env (TC.update_tp (x,skipQ env A) D) x) ext
+             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_assert env (x,skip env A) (A.Send(x,y,P'))
+             val P''' = addL_assert env (y,skip env B) P''
+         in P''' end
 
   | recon'' env D (A.Recv(x,y,P)) (z,C) ext =
     if x = z
-    then A.Recv(x, y, recon env (TC.syn_recvR1 env D (z,C) y) P (TC.syn_recvR2 env (z,C)) ext)
-    else A.Recv(x, y, recon env (TC.syn_recvL env D x y) P (z,C) ext)
+    then let val D' = TC.syn_recvR1 env D (z,skipQ env C) y
+             val P' = recon_assumeR env D' P (TC.syn_recvR2 env (z,skipQ env C)) ext
+             val P'' = P' (* recon_assumeL env D' (y,TC.lookup_context env y D' ext) P' (z,C) ext *)
+             val P''' = addR_assert env (A.Recv(x,y,P'')) (z,skip env C)
+         in P''' end
+    else let val A = TC.lookup_context env x D ext
+             val D' = TC.syn_recvL env (TC.update_tp (x,skipQ env A) D) x y
+             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+             val P'' = P' (* recon_assumeL env D' (y,TC.lookup_context env y D' ext) P' (z,C) ext *)
+             val P''' = addL_assert env (x,skip env A) (A.Recv(x,y,P''))
+         in P''' end
 
-  | recon'' env D (P as A.Close(x)) (z,C) ext = P  (* x = z *)
+  | recon'' env D (P as A.Close(x)) (z,C) ext = (* x = z *)
+    addR_assert env P (z,skip env C)
   | recon'' env D (A.Wait(x,P)) (z,C) ext = (* x <> z *)
-    A.Wait(x, recon env (TC.syn_waitL env D x) P (z,C) ext)
+    let val A = TC.lookup_context env x D ext
+        val D' = TC.syn_waitL env (TC.update_tp (x,skipQ env A) D) x
+        val P' = recon env D' P (z,C) ext
+        val P'' = addL_assert env (x,skip env A) (A.Wait(x,P'))
+    in P'' end
                                                          
   (* work, which is allowed before reconstruction *)
-  | recon'' env D (A.Work(p,P')) C ext =
-    A.Work(p, recon env D P' C ext)
+  | recon'' env D (A.Work(p,P')) zC ext =
+    A.Work(p, recon env D P' zC ext)
 
   (* delay, which is allowed before reconstruction *)
-  | recon'' env D (A.Delay(t,P')) C ext =
-    A.Delay(t, recon env D P' C ext)
+  | recon'' env D (A.Delay(t,P')) zC ext =
+    A.Delay(t, recon env D P' zC ext)
     
-  | recon'' env D (A.Marked(marked_P)) C ext =
+  | recon'' env D (A.Marked(marked_P)) zC ext =
     (* preserve marks for later error messages *)
-    A.Marked(Mark.mark'(recon'' env D (Mark.data marked_P) C (Mark.ext marked_P),
+    A.Marked(Mark.mark'(recon'' env D (Mark.data marked_P) zC (Mark.ext marked_P),
                         Mark.ext marked_P))
 
 (* all other cases are impossible, by approximate reconstruction *)
@@ -327,7 +364,7 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
 and recon_branchesL env D (x,nil) nil (z,C) ext = nil
   | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) (z,C) ext =
     if l = l'
-    then (l',ext',recon env (TC.update_tp (x,A) D) P (z,C) ext)
+    then (l',ext',recon_assumeL env (TC.update_tp (x,A) D) (x,A) P (z,C) ext)
          ::(recon_branchesL env D (x,choices) branches (z,C) ext)
     else (impossL_branch env (x,(l,A)) (SOME(l')) ext')
          ::(recon_branchesL env D (x,choices) ((l',ext',P)::branches) (z,C) ext)
@@ -338,7 +375,7 @@ and recon_branchesL env D (x,nil) nil (z,C) ext = nil
 and recon_branchesR env D nil (z,nil) ext = nil
   | recon_branchesR env D ((l,ext',P)::branches) (z,(l',C)::choices) ext =
     if l = l'
-    then (l',ext',recon env D P (z,C) ext)
+    then (l',ext',recon_assumeR env D P (z,C) ext)
          ::(recon_branchesR env D branches (z,choices) ext)
     else (impossR_branch env (z,(l',C)) (SOME(l)) ext')
          ::(recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext)
@@ -347,6 +384,6 @@ and recon_branchesR env D nil (z,nil) ext = nil
     ::(recon_branchesR env D nil (z,choices) ext)
 
 (* external interface: ignore potential *)
-val recon = fn env => fn ctx => fn con => fn A => fn pot => fn P => fn C => fn ext => recon env A P C ext
+val recon = fn env => fn ctx => fn con => fn A => fn pot => fn P => fn C => fn ext => recon'' env A P C ext
 
 end (* structure QRecon *)
