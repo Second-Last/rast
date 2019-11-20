@@ -281,7 +281,7 @@ and recon''' env ctx con D pot (P as A.Id(z',y)) (z,C) ext =
     let val D' = TC.syn_call env D P ext
         val potP = TC.syn_pot env P ext
         val potQ = R.minus(pot,potP)
-        val Q' = recon env ctx con D' potQ (z,C) ext
+        val Q' = recon env ctx con D' potQ Q (z,C) ext
         val PQ' = add_call env D (A.Spawn(P,Q'))
     in PQ' end
   | recon'''  env ctx con D pot (P as A.ExpName(x,f,es,xs)) (z,C) ext =
@@ -295,7 +295,7 @@ and recon''' env ctx con D pot (P as A.Id(z',y)) (z,C) ext =
          in P'' end
     else let val A = TC.lookup_context env x D ext
              val D' = TC.syn_altL env (TC.update_tp (x,skipW env A) D) x k
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) pot P (z,C) ext
+             val P' = recon_getL env ctx con D' (x,TC.lookup_context env x D' ext) pot P (z,C) ext
              val P'' = addL_pay env (x,skip env A) P'
          in P'' end
 
@@ -320,7 +320,7 @@ and recon''' env ctx con D pot (P as A.Id(z',y)) (z,C) ext =
     else let val A = TC.lookup_context env x D ext
              val B = TC.lookup_context env y D ext
              val D' = TC.remove_chan y (TC.syn_sendL env (TC.update_tp (x,skipW env A) D) x) ext
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+             val P' = recon_getL env ctx con D' (x,TC.lookup_context env x D' ext) pot P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Send(x,y,P'))
              val P''' = addL_pay env (y,skip env B) P''
          in P''' end
@@ -355,17 +355,20 @@ and recon''' env ctx con D pot (P as A.Id(z',y)) (z,C) ext =
              val P'' = addR_pay env (A.Assert(x, phi, P')) (z,skip env C)
          in P'' end
     else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_assertL env (TC.update_tp (x,skipW env A) D) x k
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) pot P (z,C) ext
-             val P'' = addL_pay env (x,skip env A) P'
+             val D' = TC.syn_assertL env (TC.update_tp (x,skipW env A) D) x
+             val P' = recon_getL env ctx con D' (x,TC.lookup_context env x D' ext) pot P (z,C) ext
+             val P'' = addL_pay env (x,skip env A) (A.Assert(x,phi,P'))
          in P'' end
-  | recon''' env ctx con (A.Exists(phi',A')) pot (A.AssumeL(phi, P)) C ext =
-    A.AssumeL(phi,recon env ctx con A' pot P C ext)
-
-  | recon''' env ctx con A pot (A.AssumeR(phi,P)) (A.Forall(phi',C')) ext =
-    A.AssumeR(phi, recon env ctx con A pot P C' ext)
-  | recon''' env ctx con (A.Forall(phi',A')) pot (A.AssertL(phi,P)) C ext =
-    A.AssertL(phi, recon env ctx con A' pot P C ext)
+  | recon''' env ctx con D pot (A.Assume(x,phi, P)) (z,C) ext =
+    if x = z
+    then let val P' = recon_getR env ctx con D pot P (TC.syn_assumeR env (z,skipW env C)) ext
+             val P'' = addR_pay env (A.Assume(x,phi,P')) (z,skip env C)
+         in P'' end
+    else let val A = TC.lookup_context env x D ext
+             val D' = TC.syn_assumeL env (TC.update_tp (x,skipW env A) D) x
+             val P' = recon_getL env ctx con D' (x,TC.lookup_context env x D' ext) pot P (z,C) ext
+             val P'' = addL_pay env (x,skip env A) (A.Assume(x,phi,P'))
+         in P'' end
   (* end structural cases *)
 
   (* impossibility *)
@@ -386,15 +389,17 @@ and recon''' env ctx con D pot (P as A.Id(z',y)) (z,C) ext =
 
   (* all other cases are impossible, since we assume approximate typing *)
 
-and recon_branchesL env ctx con nil pot nil C ext = nil
-  | recon_branchesL env ctx con ((l,A)::choices) pot ((l',ext',P)::branches) C ext =
+and recon_branchesL env ctx con D (x,nil) pot nil (z,C) ext = nil
+  | recon_branchesL env ctx con D (x,(l,A)::choices) pot ((l',ext',P)::branches) (z,C) ext =
     (* after quantifer reconstruction, branches must match choices exactly *)
-    (l',ext',recon env ctx con A pot P C ext)::(recon_branchesL env ctx con choices pot branches C ext)
+    (l',ext',recon_getL env ctx con (TC.update_tp (x,A) D) (x,A) pot P (z,C) ext)
+    ::(recon_branchesL env ctx con D (x,choices) pot branches (z,C) ext)
 
-and recon_branchesR env ctx con A pot nil nil ext = nil
-  | recon_branchesR env ctx con A pot ((l,ext',P)::branches) ((l',C)::choices) ext =
+and recon_branchesR env ctx con D pot nil (z,nil) ext = nil
+  | recon_branchesR env ctx con D pot ((l,ext',P)::branches) (z,(l',C)::choices) ext =
     (* after quantifer reconstruction, branches must match choices exactly *)
-    (l,ext',recon env ctx con A pot P C ext)::(recon_branchesR env ctx con A pot branches choices ext)
+    (l',ext',recon_getR env ctx con D pot P (z,C) ext)
+    ::(recon_branchesR env ctx con D pot branches (z,choices) ext)
 
 (* external interface *)
 (* at present, we do not pass through constraints *)

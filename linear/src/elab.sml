@@ -131,6 +131,7 @@ fun twrecon env ctx con A pot P C ext =
  *)
 fun reconstruct Flags.Explicit _          _          env ctx con A pot P C ext = Cost.apply_cost_model P
   | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = qrecon env ctx con A pot P C ext
+  (*| reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = *)
   | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = ERROR ext ("only explicit syntax allowed")
 (*
   | reconstruct Flags.Implicit Flags.None _          env ctx con A pot P C ext = tqrecon env ctx con A pot P C ext
