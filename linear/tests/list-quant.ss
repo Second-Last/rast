@@ -128,4 +128,47 @@ proc k <- revhelper{m}{n} <- l r =
             k <- r
   )
 
-type listlist{m}{n}
+type listlist{m}{n} = +{cons : ?{n > 0}. list{m} * listlist{m}{n-1}, nil : ?{n = 0}. 1}
+
+decl flatten{m}{n} : (l : listlist{m}{n}) |- (k : list{m*n})
+
+proc k <- flatten{m}{n} <- l =
+  case l (
+    cons => x <- recv l ;
+            kt <- flatten{m}{n-1} <- l ;
+            k <- append{m*(n-1)}{m} <- kt x
+   | nil => wait l ;
+            k <- nil <- 
+  )
+
+decl split{n} : (l : list{2*n}) |- (k : list{n} * list{n})
+decl splithelper{m}{n}{p} : (l : list{2*m}) (l1 : list{n}) (l2 : list{p}) |- (k : list{m+n} * list{m+p})
+
+proc k <- splithelper{m}{n}{p} <- l l1 l2 =
+  case l (
+    cons => x <- recv l ;
+            case l (
+              cons => y <- recv l ;
+                      l1n <- cons{n} <- x l1 ;
+                      l2n <- cons{p} <- y l2 ;
+                      k <- splithelper{m-1}{n+1}{p+1} <- l l1n l2n
+            )
+   | nil => wait l ;
+            send k l1 ;
+            k <- l2
+  )
+
+proc k <- split{n} <- l =
+  l1 <- nil <- ;
+  l2 <- nil <- ;
+  k <- splithelper{n}{0}{0} <- l l1 l2
+
+decl head{n} : (l : list{n+1}) |- (k : A * list{n})
+
+proc k <- head{n} <- l =
+  case l (
+    cons => x <- recv l ;
+            send k x ;
+            k <- l
+  )
+
