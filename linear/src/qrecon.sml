@@ -294,7 +294,7 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
     else let val A = TC.lookup_context env x D ext
              val D' = TC.syn_altL env (TC.update_tp (x,skipQ env A) D) x k
              val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
-             val P'' = addL_assert env (x,skip env A) P'
+             val P'' = addL_assert env (x,skip env A) (A.Lab(x,k,P'))
          in P'' end
 
   | recon'' env D (A.Case(x,branches)) (z,C) ext =
