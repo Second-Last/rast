@@ -172,3 +172,227 @@ proc k <- head{n} <- l =
             k <- l
   )
 
+type checker = &{next : A -o +{true : A * checker,
+                               false : A * checker},
+                 done : 1}
+
+decl insert{n} : (x : A) (l : list{n}) (ch : checker) |- (k : list{n+1})
+
+proc k <- insert{n} <- x l ch =
+  case l (
+    cons => y <- recv l ;
+            ch.next ;
+            send ch y ;
+            case ch (
+              true => y <- recv ch ;
+                      ch.done ;
+                      wait ch ;
+                      l1 <- cons{n-1} <- y l ;
+                      k <- cons{n} <- x l1
+            | false => y <- recv ch ;
+                       l1 <- insert{n-1} <- x l ch ;
+                       k <- cons{n} <- y l1
+            )
+  | nil => wait l ;
+           e <- nil <- ;
+           ch.done ;
+           wait ch ;
+           k <- cons{0} <- x e
+  )
+
+type partitioner{a}{b} = & {next : A -o +{true : ?{a > 0}. A * partitioner{a-1}{b},
+                                          false : ?{b > 0}. A * partitioner{a}{b-1}},
+                            done : 1}
+
+decl partition{m}{n} : (l : list{m+n}) (ch : partitioner{m}{n}) |- (k : list{m} * list{n})
+decl partitionhelper{a}{b}{n}{p} : (l : list{a+b}) (l1 : list{n}) (l2 : list{p}) (ch : partitioner{a}{b}) |- (k : list{a+n} * list{b+p})
+
+proc k <- partitionhelper{a}{b}{n}{p} <- l l1 l2 ch =
+  case l (
+    cons => x <- recv l ;
+            ch.next ;
+            send ch x ;
+            case ch (
+              true => x <- recv ch ;
+                      l1n <- cons{n} <- x l1 ;
+                      k <- partitionhelper{a-1}{b}{n+1}{p} <- l l1n l2 ch
+            | false => x <- recv ch ;
+                       l2n <- cons{p} <- x l2 ;
+                       k <- partitionhelper{a}{b-1}{n}{p+1} <- l l1 l2n ch
+            )
+  | nil => wait l ;
+           ch.done ;
+           wait ch ;
+           send k l1 ;
+           k <- l2
+  )
+
+proc k <- partition{m}{n} <- l ch =
+  l1 <- nil <- ;
+  l2 <- nil <- ;
+  k <- partitionhelper{m}{n}{0}{0} <- l l1 l2 ch
+
+type bool = +{true : 1, false : 1}
+
+type satisfier = &{next : A -o bool * satisfier,
+                   done : 1}
+
+decl forall{n} : (l : list{n}) (s : satisfier) |- (b : bool)
+decl exists{n} : (l : list{n}) (s : satisfier) |- (b : bool)
+decl tt : . |- (b : bool)
+decl ff : . |- (b : bool)
+decl and : (a : bool) (b : bool) |- (c : bool)
+decl or : (a : bool) (b : bool) |- (c : bool)
+
+proc b <- forall{n} <- l s =
+  case l (
+    cons => x <- recv l ;
+            s.next ;
+            send s x ;
+            bx <- recv s ;
+            bt <- forall{n-1} <- l s ;
+            b <- and <- bt bx
+  | nil => wait l ;
+           s.done ;
+           wait s ;
+           b <- tt <- 
+  )
+
+proc b <- exists{n} <- l s =
+  case l (
+    cons => x <- recv l ;
+            s.next ;
+            send s x ;
+            bx <- recv s ;
+            bt <- exists{n-1} <- l s ;
+            b <- or <- bt bx
+  | nil => wait l ;
+           s.done ;
+           wait s ;
+           b <- tt <- 
+  )
+
+proc b <- tt <- =
+  b.true ;
+  close b
+
+proc b <- ff <- =
+  b.false ;
+  close b
+
+proc c <- and <- a b =
+  case a (
+    true => case b (
+              true => c.true ;
+                      wait a ;
+                      wait b ;
+                      close c
+            | false => c.false ;
+                       wait a ;
+                       wait b ;
+                       close c
+    )
+  | false => case b (
+              true => c.false ;
+                      wait a ;
+                      wait b ;
+                      close c
+            | false => c.false ;
+                       wait a ;
+                       wait b ;
+                       close c
+    )
+  )
+
+proc c <- or <- a b =
+  case a (
+    true => case b (
+              true => c.true ;
+                      wait a ;
+                      wait b ;
+                      close c
+            | false => c.true ;
+                       wait a ;
+                       wait b ;
+                       close c
+            )
+  | false => case b (
+              true => c.true ;
+                      wait a ;
+                      wait b ;
+                      close c
+            | false => c.false ;
+                       wait a ;
+                       wait b ;
+                       close c
+             )
+  )
+
+type eq = &{next : A -o A -o bool * eq,
+            done : 1}
+
+decl equal{n} : (l1 : list{n}) (l2 : list{n}) (e : eq) |- (b : bool)
+
+proc b <- equal{n} <- l1 l2 e =
+  case l1 (
+    cons => x <- recv l1 ;
+            case l2 (
+              cons => y <- recv l2 ;
+                      e.next ;
+                      send e x ;
+                      send e y ;
+                      bxy <- recv e ;
+                      bt <- equal{n-1} <- l1 l2 e ;
+                      b <- and <- bxy bt
+            )
+  | nil => wait l1 ;
+           case l2 (
+             nil => wait l2 ;
+                    e.done ;
+                    wait e ;
+                    b <- tt <- 
+           )
+  )
+
+type comparer = &{next : A -o A -o A * A * bool * comparer,
+                  done : 1}
+
+decl merge{m}{n} : (l1 : list{m}) (l2 : list{n}) (c : comparer) |- (l : list{m+n})
+
+proc l <- merge{m}{n} <- l1 l2 c =
+  case l1 (
+    cons => x <- recv l1 ;
+            case l2 (
+              cons => y <- recv l2 ;
+                      c.next ;
+                      send c x ;
+                      send c y ;
+                      x <- recv c ;
+                      y <- recv c ;
+                      b <- recv c ;
+                      ln <- merge{m-1}{n-1} <- l1 l2 c ;
+                      case b (
+                        true => ly <- cons{m+n-2} <- y ln ;
+                                wait b ;
+                                l <- cons{m+n-1} <- x ly
+                      | false => lx <- cons{m+n-2} <- x ln ;
+                                 wait b ;
+                                 l <- cons{m+n-1} <- y lx
+                      )
+            | nil => wait l2 ;
+                     c.done ;
+                     wait c ;
+                     l <- cons{m-1} <- x l1
+            )
+  | nil => wait l1 ;
+           c.done ;
+           wait c ;
+           l <- l2
+  )
+
+decl mergesort{n} : (l : list{2*n}) (c : comparer) |- (k : list{2*n})
+
+proc k <- mergesort{n} <- l c =
+  l2 <- split{n} <- l ;
+  l1 <- recv l2 ;
+  k <- merge{n}{n} <- l1 l2 c
