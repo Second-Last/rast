@@ -58,6 +58,11 @@ proc r <- rev{n} <- w =
   s <- empty <- ;
   r <- push{0}{n} <- w s
 
-type editor{n} = +{next : char * editor,
-                   undo : char * editor}
+type char = +{a : 1, s : char}
+
+type editor{n}{C} = +{moveL : +{first : ?{n = 0}. editor{0}{C},
+                                notfirst : ?{n > 0}. editor{n-1}{C}},
+                      moveR : +{last : ?{n = C}. editor{C}{C},
+                                notlast : ?{n < C}. editor{n+1}{C}},
+                      type : char -o editor{n+1}{C+1}}
 
