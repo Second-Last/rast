@@ -1,4 +1,4 @@
-#test success
+#test approx success
 #options --syntax=implicit
 
 type A = 1
