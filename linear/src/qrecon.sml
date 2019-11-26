@@ -44,10 +44,7 @@ fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env
   | impossL_assumes env x A = A.Imposs
 
 fun impossL_branch env (x,(l,A.Exists(phi,A'))) l_opt ext' =
-    let val P = impossL_assumes env x (A.Exists(phi,A'))
-    in
-    (l, NONE, P)
-    end
+    (l, NONE, impossL_assumes env x (A.Exists(phi,A')))
   | impossL_branch env (x,(l,A.TpName(a,es))) l_opt ext' =
     impossL_branch env (x,(l,A.expd_tp env (a,es))) l_opt ext'
   | impossL_branch env (x,(l,A)) NONE ext' = E.error_label_missing_branch (l,ext')
@@ -63,10 +60,7 @@ fun impossR_assumes env x (A.Forall(phi,C)) = A.Assume(x,phi,impossR_assumes env
   | impossR_assumes env x C = A.Imposs
 
 fun impossR_branch env (z,(l,A.Forall(phi,C'))) l' ext' =
-    let val P = impossR_assumes env z (A.Forall(phi,C'))
-    in
-    (l, NONE, P)
-    end
+    (l, NONE, impossR_assumes env z (A.Forall(phi,C')))
     (*
       if not (C.contradictory phi)
       then error_label_sat_con phi (l, ext')
