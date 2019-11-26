@@ -283,7 +283,7 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
     in PQ' end
 
   | recon'' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
-    addLs_assert env D xs P
+    addR_assert env (addLs_assert env D xs P) (z,skip env C)
 
   (* begin cases for each action matching their type *)
   | recon'' env D (A.Lab(x,k,P)) (z,C) ext =

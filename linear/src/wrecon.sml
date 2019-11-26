@@ -254,7 +254,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
         val PQ' = add_call env D (A.Spawn(P,Q'))
     in PQ' end
   | recon'''  env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
-    addLs_pay env D xs P
+    addR_pay env (addLs_pay env D xs P) (z,skip env C)
 
   (* begin cases for each action matching their type *)
   | recon''' env D (A.Lab(x,k,P)) (z,C) ext =
