@@ -125,7 +125,7 @@ and lolliR env D (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext = (* x = z *)
 and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
     A.Recv(x,y,recon env ((y,A)::TC.update_tp (x,B) D) P zC ext) (* check if y is fresh here? *)
   | tensorL env D A (A.Recv(x,y,P)) zC ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env A)
 
 and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
     (* tolerate non-empty context *)
