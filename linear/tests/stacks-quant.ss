@@ -58,11 +58,20 @@ proc r <- rev{n} <- w =
   s <- empty <- ;
   r <- push{0}{n} <- w s
 
-type char = +{a : 1, s : char}
+type char = 1
 
-type editor{n}{C} = +{moveL : +{first : ?{n = 0}. editor{0}{C},
-                                notfirst : ?{n > 0}. editor{n-1}{C}},
-                      moveR : +{last : ?{n = C}. editor{C}{C},
-                                notlast : ?{n < C}. editor{n+1}{C}},
-                      type : char -o editor{n+1}{C+1}}
+type editor{n1}{n2} = +{moveL : +{first : ?{n1 = 0}. editor{0}{n2},
+                                  notfirst : ?{n1 > 0}. editor{n1-1}{n2+1}},
+                        moveR : +{last : ?{n2 = 0}. editor{n1}{0},
+                                  notlast : ?{n2 > 0}. editor{n1+1}{n2-1}},
+                        input : char -o editor{n1+1}{n2},
+                        delete : +{empty : ?{n1 = 0}. editor{0}{n2},
+                                   notempty : ?{n1 > 0}. editor{n1-1}{n2}}}
+
+decl start_editor_proc{n | n > 0} : (s1 : stack{0}) (s2 : stack{n}) |- (e : editor{0}{n})
+decl editor_proc{n1 | n1 > 0}{n2} : (s1 : stack{n1}) (s2 : stack{n2}) |- (e : editor{n1}{n1+n2})
+decl last_editor_proc{n | n > 0} : (s1 : stack{n}) (s2 : stack{0}) |- (e : editor{n}{n})
+decl empty_editor_proc : (s1 : stack{0}) (s2 : stack{0}) |- (e : editor{0}{0})
+decl edit : . |- (e : editor{0}{0})
+
 
