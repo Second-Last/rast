@@ -39,8 +39,15 @@ fun skipQ env A = case skip env A
  * l_opt is label of the next branch if one (for error messages)
  * Checking unsat(phi) is postponed to type checking
  *)
-fun impossL_branch env (x,(l,A.Exists(phi,A'))) _ ext' =
-    (l, NONE, A.Assume(x,phi,A.Imposs))
+fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env x A)
+  | impossL_assumes env x (A.TpName(a,es)) = impossL_assumes env x (A.expd_tp env (a,es))
+  | impossL_assumes env x A = A.Imposs
+
+fun impossL_branch env (x,(l,A.Exists(phi,A'))) l_opt ext' =
+    let val P = impossL_assumes env x (A.Exists(phi,A'))
+    in
+    (l, NONE, P)
+    end
   | impossL_branch env (x,(l,A.TpName(a,es))) l_opt ext' =
     impossL_branch env (x,(l,A.expd_tp env (a,es))) l_opt ext'
   | impossL_branch env (x,(l,A)) NONE ext' = E.error_label_missing_branch (l,ext')
@@ -51,8 +58,15 @@ fun impossL_branch env (x,(l,A.Exists(phi,A'))) _ ext' =
  * l_opt is label of the next branch if one (for error messages)
  * Checking unsat(phi) is postponed to type checking
  *)
+fun impossR_assumes env x (A.Forall(phi,C)) = A.Assume(x,phi,impossR_assumes env x C)
+  | impossR_assumes env x (A.TpName(a,es)) = impossR_assumes env x (A.expd_tp env (a,es))
+  | impossR_assumes env x C = A.Imposs
+
 fun impossR_branch env (z,(l,A.Forall(phi,C'))) l' ext' =
-    (l, NONE, A.Assume(z,phi,A.Imposs))
+    let val P = impossR_assumes env z (A.Forall(phi,C'))
+    in
+    (l, NONE, P)
+    end
     (*
       if not (C.contradictory phi)
       then error_label_sat_con phi (l, ext')
