@@ -117,13 +117,15 @@ proc k <- rev{n} <- l =
   e <- nil <- ;
   k <- revhelper{0}{n} <- l e
 
+eqtype list{n} = list{n}
+
 decl revhelper{m}{n} : (l : list{n}) (r : list{m}) |- (k : list{m+n})
 
-proc k <- revhelper{m}{n} <- l r =
-  case l (
-    cons => x <- recv l ;
-            rr <- cons{m} <- x r ;
-            k <- revhelper{m+1}{n-1} <- l rr
+proc k <- revhelper{m}{n} <- l r =  % l : list{n}, r : list{m} |- k : list{m+n}
+  case l (                          % n > 0 ; (l : A * list{n-1}) (r : ...) |- (k : ...)
+    cons => x <- recv l ;           % n > 0 ; (x:A) (l : list{n-1}) (r : ...) |- (k : ...)
+            rr <- cons{m} <- x r ;  % n > 0 ; (l : list{n-1}) (rr : list{m+1}) |- (k : ...)
+            k <- revhelper{m+1}{n-1} <- l rr  
    | nil => wait l ;
             k <- r
   )

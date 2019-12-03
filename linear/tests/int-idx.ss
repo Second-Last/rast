@@ -35,9 +35,6 @@ type ord{x}{y} = +{ lt : ?{x < y}. 1,
                     eq : ?{x = y}. 1,
                     gt : ?{x > y}. 1 }
 
-% would like to express below, but it doesn't check...
-eqtype ord{x+1}{y+1} = ord{x}{y}
-
 decl compare{x}{y} : (n : nat{x}) (k : nat{y}) |- (o : ord{x}{y})
 proc o <- compare{x}{y} <- n k =
   case n ( succ => case k ( succ => o <- compare{x-1}{y-1} <- n k
@@ -65,15 +62,15 @@ proc a <- izero <- =
 
 decl counter{x}{y} : (p : nat{x}) (n : nat{y}) |- (a : int{x}{y})
 proc a <- counter{x}{y} <- p n =
-  case a ( inc => p' <- succ <- p ;
+  case a ( inc => p' <- succ{x} <- p ;
                   a <- counter{x+1}{y} <- p' n
-         | dec => n' <- succ <- n ;      
+         | dec => n' <- succ{y} <- n ;      
                   a <- counter{x}{y+1} <- p n'
          | sgn => pp <- duplicate{x} <- p ;
                   p1 <- recv pp ; p2 <- recv pp ; wait pp ;
                   nn <- duplicate{y} <- n ;
                   n1 <- recv nn ; n2 <- recv nn ; wait nn ;
                   c <- compare{x}{y} <- p1 n1 ;
-                  case c ( neg => a.neg ; a <- counter{x}{y} <- p2 n2
-                         | zer => a.zer ; a <- counter{x}{y} <- p2 n2
-                         | pos => a.pos ; a <- counter{x}{y} <- p2 n2 ) )
+                  case c ( lt => wait c ; a.neg ; a <- counter{x}{y} <- p2 n2
+                         | eq => wait c ; a.zer ; a <- counter{x}{y} <- p2 n2
+                         | gt => wait c ; a.pos ; a <- counter{x}{y} <- p2 n2 ) )

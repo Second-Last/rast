@@ -360,6 +360,7 @@ fun gen_prop_eq FCTX FCON FES es FES' es' =
     let val eqs = gen_eq FES es
         val eqs' = gen_eq FES' es'
         val and_prop = R.And(FCON, R.And(eqs, eqs'))
+        (* val () = TextIO.print (PP.pp_prop and_prop ^ "\n") *)
         val nnf_prop = R.nnf and_prop
         val exists_prop = R.elim_vars FCTX nnf_prop (* exists_prop is in NNF, but not using it *)
     in
@@ -445,7 +446,7 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     eq_tp' env ctx con seen A A'
 
   | eq_tp env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
-    if a = a' then eq_idx ctx con es es' (* reflexivity *)
+    if a = a' then eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* reflexivity *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
   | eq_tp env ctx con seen (A as A.TpName(a,es)) A' =
     eq_tp' env ctx con seen (A.expd_tp env (a,es)) A'
@@ -471,8 +472,13 @@ and eq_name_name env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es'))
             val FCON = R.apply_prop sigma CON
             val FES = R.apply_list sigma ES
             val FES' = R.apply_list sigma ES'
+            (* val () = TextIO.print (PP.pp_prop con ^ " |- ") *)
+            val phi = gen_prop_eq FCTX FCON FES es FES' es'
+            (* val () = TextIO.print (PP.pp_prop phi ^ "\n") *)
+            val result = C.entails ctx con phi (* could be trusting non-linear *)
+            (* val () = if result then TextIO.print("true\n") else TextIO.print("false\n") *)
         in
-            C.entails ctx con (gen_prop_eq FCTX FCON FES es FES' es') (* could be trusting non-linear *)
+            result
         end
 
 (*****************************)
