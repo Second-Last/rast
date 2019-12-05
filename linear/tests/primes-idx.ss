@@ -44,7 +44,7 @@ proc s <- filter{k}{n1}{n2}{n} <- t c d =
                              s.composite ;
                              z <- zero <- ;
                              s <- filter{k-1}{n2}{0}{n} <- t d z ) % cyclic loop
-         | composite => s.composite ;  % alrady composite
+         | composite => s.composite ;  % already composite
                         case c ( succ => d' <- succ{n2} <- d ;
                                          s <- filter{k-1}{n1-1}{n2+1}{n} <- t c d'
                                | zero => wait c ;

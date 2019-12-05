@@ -31,6 +31,8 @@ proc xx <- duplicate{n} <- x =
                    x2 <- zero <- ; send xx x2 ;
                    close xx )
 
+%--------------------
+
 type ord{x}{y} = +{ lt : ?{x < y}. 1,
                     eq : ?{x = y}. 1,
                     gt : ?{x > y}. 1 }
