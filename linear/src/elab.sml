@@ -239,6 +239,11 @@ fun subst es (vs,con,(D,pot,(z,C))) =
         (R.apply_prop sg con, (A.apply_context sg D, R.apply sg pot, (z,A.apply_tp sg C)))
     end
 
+fun subst_chan (y,t) x = (x,t)
+
+fun subst_chans (yt::D) (x::xs)  = (subst_chan yt x)::(subst_chans D xs)
+  | subst_chans nil nil = nil
+
 (* elab_tps env decls = env'
  * elaborates all type definitions in decls to generate env'
  * This checks them for validity and creates internal names.
@@ -331,7 +336,7 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.ExpDef(f,vs,(xs,P,x),ext))::decls) =
     (case A.lookup_expdec env f
       of NONE => ERROR ext ("process " ^ f ^ " undeclared")
-       | SOME(vs',con',(D',pot',C')) =>
+       | SOME(vs',con',(D',pot',zC')) =>
          let 
              val () = if dups vs then ERROR ext ("duplicate index variable in process definition") else ()
              val () = if List.length vs = List.length vs' then ()
@@ -340,10 +345,11 @@ and elab_exps env nil = nil
              val () = if List.length xs = List.length D' then ()
                       else ERROR ext ("process defined with " ^ Int.toString (List.length xs) ^ " arguments and "
                                       ^ "declared with " ^ Int.toString (List.length D'))
-             val (con, (D,pot,C)) = subst (R.create_idx vs) (vs',con',(D',pot',C'))
+             val (con, (D,pot,zC)) = subst (R.create_idx vs) (vs',con',(D',pot',zC'))
+             val (D,zC) = (subst_chans D xs, subst_chan zC x)
              val () = TC.closed_exp vs P ext
              (* val P' = Cost.apply_cost_model P *) (* cost model now applied during reconstruction *)
-             val P' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con D pot P C ext
+             val P' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con D pot P zC ext
              val () = case !Flags.syntax                     (* print reconstructed term *)
                        of Flags.Implicit =>                  (* if syntax implicit *)
                           if !Flags.verbosity >= 2           (* and verbose *)
@@ -356,12 +362,12 @@ and elab_exps env nil = nil
                                ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,(xs,P',x),ext)) ^ "\n") )
                           else ()
              (* is necessary for implicit syntax, since reconstruction is approximate *)
-             val () = TC.check_exp false env vs con D pot P' C ext (* type check *)
+             val () = TC.check_exp false env vs con D pot P' zC ext (* type check *)
                  handle ErrorMsg.Error =>
                         (* if verbosity >= 2, type-check again, this time with tracing *)
                         if !Flags.verbosity >= 2
                         then ( TextIO.print ("% tracing type checking...\n")
-                             ; TC.check_exp true env vs con D pot P' C ext ) (* will re-raise ErrorMsg.Error *)
+                             ; TC.check_exp true env vs con D pot P' zC ext ) (* will re-raise ErrorMsg.Error *)
                         else raise ErrorMsg.Error (* re-raise if not in verbose mode *)
              val P' = A.strip_exts P' (* always strip extents whether implicit or explicit syntax *)
          in
