@@ -6,8 +6,7 @@
 (*
 eval (lam f) = lam f
 eval (app e1 e2) = 
-  case eval e1 ( lam f => eval (f e2)
-               | app e11 e12 =>  app (app e11 e12) e2 )
+  case eval e1 ( lam f => eval (f e2) ) % no case for app needed
 *)
 
 type exp = +{ lam : exp -o exp,
