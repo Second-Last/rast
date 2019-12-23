@@ -43,7 +43,7 @@ proc s <- append{n}{k} <- x t =
        u <- one{k} <- x ;
        s <- concat{n}{1}{k} <- t u
 
-decl tolist{n} : (s : seg{n}{0}) |{3}- (l : list{n})
+decl tolist{n} : (s : seg{n}{0}) |{5}- (l : list{n})
 proc l <- tolist{n} <- s =
        t <- nil <- ;
        send s t ;
