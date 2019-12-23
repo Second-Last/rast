@@ -14,7 +14,7 @@ proc x <- zero <- =
   assert x {0 = 0} ;
   close x
 
-proc x <- succ <- y =                         % !n ; y : bin{n} |- x : bin{n+1}
+proc x <- succ{n} <- y =                         % !n ; y : bin{n} |- x : bin{n+1}
   case y ( b0 =>                              % !n ; y : ?{k}. ?{n = 2*k}. bin{k} |- x : bin{n+1}
                   {k} <- recv y ;             % !n, !k ; y : ?{n = 2*k}. bin{k}   |- x : bin{n+1}
                   assume {n = 2*k} ;          % !n, !k, !{n = 2*k} ; y : bin{k}   |- x : bin{n+1}
