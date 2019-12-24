@@ -446,7 +446,11 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     eq_tp' env ctx con seen A A'
 
   | eq_tp env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
-    if a = a' then eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* reflexivity *)
+    if a = a'
+    then case !Flags.equality
+          of Flags.SubsumeRefl => eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* both *)
+           | Flags.Subsume => eq_name_name env ctx con seen A A' (* only coinductive equality *)
+           | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
   | eq_tp env ctx con seen (A as A.TpName(a,es)) A' =
     eq_tp' env ctx con seen (A.expd_tp env (a,es)) A'
