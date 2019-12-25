@@ -48,8 +48,8 @@ type bits{w} : +{ b0 : ?{w > 0}. bits{w-1},
 % t.ins(x)       inserts one new copy of x into the trie t
 % t.del(x) = c   deletes all copies of x from the tri t, returning the multiplicity of x
 
-type trie{n} = &{ ins : !{w}. bits{w} -o trie{n+1},
-                  del : !{w}. bits{w} -o ?{m | 0 <= m /\ m <= n}. bin{m} * trie{n-m} }
+type trie{n} = &{ ins : !{w}. <{2*w}| bits{w} -o trie{n+1},
+                  del : !{w}. <{3*w}| bits{w} -o ?{m | 0 <= m /\ m <= n}. bin{m} * trie{n-m} }
 
 
 decl leaf : . |- (t : trie{0})
@@ -108,13 +108,13 @@ proc t <- node{n1}{m}{n2} <- l c r =
           | del => {w} <- recv t ;
                    x <- recv t ;
                    case x ( b0 =>
-                            l.del ;
+                            l.del ; % 1
                             send l {w-1} ;
-                            send l x ;
+                            send l x ; % 2
                             {m1} <- recv l ;
                             a <- recv l ;
-                            send t {m1} ;
-                            send t a ;
+                            send t {m1} ; 
+                            send t a ; % 3
                             t <- node{n1-m1}{m}{n2} <- l c r
                           | b1 =>
                             r.del ;
