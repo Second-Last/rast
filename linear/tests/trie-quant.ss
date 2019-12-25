@@ -11,7 +11,6 @@ decl succ{n} : (y : bin{n}) |- (x : bin{n+1})
 
 proc x <- zero <- =
   x.e ;
-  assert x {0 = 0} ;
   close x
 
 proc x <- succ{n} <- y =
