@@ -28,6 +28,8 @@ fun cost_recv f (A.Id(x,y)) = A.Id(x,y)
 
   | cost_recv f (A.Assert(x,phi,P)) = A.Assert(x,phi,cost_recv f P)
   | cost_recv f (A.Assume(x,phi,P)) = A.Assume(x,phi,cost_recv f P)
+  | cost_recv f (A.SendNat(x,e,P)) = A.SendNat(x,e,cost_recv f P) (* free *)
+  | cost_recv f (A.RecvNat(x,v,P)) = A.RecvNat(x,v,cost_recv f P) (* free *)
 
   | cost_recv f (A.Imposs) = A.Imposs
 
@@ -65,6 +67,8 @@ fun cost_send sf (A.Id(x,y)) = A.Id(x,y)
 
   | cost_send sf (A.Assert(x,phi,P)) = A.Assert(x,phi,cost_send sf P)
   | cost_send sf (A.Assume(x,phi,P)) = A.Assume(x,phi,cost_send sf P)
+  | cost_send sf (A.SendNat(x,e,P)) = A.SendNat(x,e,cost_send sf P) (* free *)
+  | cost_send sf (A.RecvNat(x,v,P)) = A.RecvNat(x,v,cost_send sf P) (* free *)
   | cost_send sf (A.Imposs) = A.Imposs
 
   | cost_send sf (A.Work(p,P)) = A.Work(p,cost_send sf P)   (* allow in source *)
