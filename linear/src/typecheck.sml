@@ -53,10 +53,10 @@ sig
     val syn_assumeR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
     val syn_assumeL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
 
-    val syn_sendNatR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
-    val syn_sendNatL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
-    val syn_recvNatR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
-    val syn_recvNatL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
+    val syn_sendNatR : Ast.env -> Arith.arith -> Ast.chan_tp -> Ast.chan_tp
+    val syn_sendNatL : Ast.env -> Ast.context -> Arith.arith -> Ast.chan -> Ast.context
+    val syn_recvNatR : Ast.env -> Arith.varname -> Ast.chan_tp -> Ast.chan_tp
+    val syn_recvNatL : Ast.env -> Ast.context -> Ast.chan -> Arith.varname -> Ast.context
 
     (*
     val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
@@ -686,21 +686,21 @@ fun syn_assumeL env ((x',A)::D') x =
     if x = x' then syn_assumeL' env x (expand env A) D'
     else (x',A)::syn_assumeL env D' x
 
-fun syn_sendNatR' env z (A.ExistsNat(v,C)) = (z,C)
-fun syn_sendNatR env (z,C) = syn_sendNatR' env z (expand env C)
+fun syn_sendNatR' env z e (A.ExistsNat(v,C)) = (z,A.apply_tp [(v,e)] C)
+fun syn_sendNatR env e (z,C) = syn_sendNatR' env z e (expand env C)
 
-fun syn_sendNatL' env x (A.ForallNat(v,A)) D = (x,A)::D
-fun syn_sendNatL env ((x',A)::D') x =
-    if x = x' then syn_sendNatL' env x (expand env A) D'
-    else (x',A)::syn_sendNatL env D' x
+fun syn_sendNatL' env x e (A.ForallNat(v,A)) D = (x,A.apply_tp [(v,e)] A)::D
+fun syn_sendNatL env ((x',A)::D') e x =
+    if x = x' then syn_sendNatL' env x e (expand env A) D'
+    else (x',A)::syn_sendNatL env D' e x
 
-fun syn_recvNatR' env z (A.ForallNat(v,C)) = (z,C)
-fun syn_recvNatR env (z,C) = syn_recvNatR' env z (expand env C)
+fun syn_recvNatR' env v' z (A.ForallNat(v,C)) = (z,A.apply_tp [(v,R.Var(v'))] C)
+fun syn_recvNatR env v' (z,C) = syn_recvNatR' env v' z (expand env C)
 
-fun syn_recvNatL' env x (A.ExistsNat(v,A)) D' = (x,A)::D'
-fun syn_recvNatL env ((x',A)::D') x =
-    if x = x' then syn_recvNatL' env x (expand env A) D'
-    else (x',A)::syn_recvNatL env D' x
+fun syn_recvNatL' env x v' (A.ExistsNat(v,A)) D' = (x,A.apply_tp [(v,R.Var(v'))] A)::D'
+fun syn_recvNatL env ((x',A)::D') x v' =
+    if x = x' then syn_recvNatL' env x v' (expand env A) D'
+    else (x',A)::syn_recvNatL env D' x v'
 
 (*************************************)
 (* Type checking process expressions *)

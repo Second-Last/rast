@@ -336,9 +336,12 @@ fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
   | pp_decl env (A.TpEq(ctx,con,A.TpName(a,es),A.TpName(a',es'),_)) =
     "eqtype " ^ a ^ pp_idx es ^ " = " ^ a' ^ pp_idx es'
   | pp_decl env (A.ExpDec(f,vs,con,(D,pot,zC),_)) =
-    "proc " ^ f ^ P.pp_vars vs ^ P.pp_con con ^ " : "
+    "decl " ^ f ^ P.pp_vars vs ^ P.pp_con con ^ " : "
     ^ pp_context_compact env D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp_compact env zC
-  | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) = pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P
+  | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) =
+    "proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = \n"
+    ^ pp_exp_after env 0 ("  ") P
+    (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P *)
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line
 
