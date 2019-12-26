@@ -358,9 +358,10 @@ and p_tpopr_rtri ST = case first ST of
   | T.LBRACE => ST |> p_idx >> p_terminal T.RANGLE
   | t => error_expected_list (here ST, [T.RANGLE, T.LBRACE], t)
 
-(* <con> '.' *)
+(* <con> '.' | <id> '.' *)
 and p_con_dot ST = case first ST of
     T.LBRACE => ST |> shift >> p_prop >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.PERIOD
+  | T.IDENT(id) => ST |> shift >> p_terminal T.PERIOD
   | t => error_expected (here ST, T.LBRACE, t)
 
 (* reduce <con> ::= '{' <prop> '}' *)
@@ -413,6 +414,8 @@ and r_type (S $ Tok(T.NAT(1),r)) = S $ Tp(A.One, r)
   | r_type (S $ Tok(T.BAR,r1) $ Arith(p,_) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(p,tp), join r1 r2)
   | r_type (S $ Tok(T.QUESTION,r1) $ Prop(phi,_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Exists(phi,tp), join r1 r2)
   | r_type (S $ Tok(T.EXCLAMATION,r1) $ Prop(phi,_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(phi,tp), join r1 r2)
+  | r_type (S $ Tok(T.QUESTION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsNat(id,tp), join r1 r2)
+  | r_type (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
   | r_type (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
   | r_type (S $ Tok(T.PERIOD,r)) = S $ Tp(A.Dot,r) (* only for lhs of turnstile *)
   (* should be the only possibilities *)
