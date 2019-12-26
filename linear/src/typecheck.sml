@@ -447,9 +447,9 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     (* orelse C.contradictory ctx con phi *)
 
   | eq_tp env ctx con seen (A.ExistsNat(v,A)) (A.ExistsNat(v',A')) =
-    eq_tp' env (v::ctx) con seen A (A.apply_tp (R.zip [v'] [R.Var(v)]) A') (* !!!FIX!!! *)
+    eq_tp_bind env ctx con seen (v,A) (v',A')
   | eq_tp env ctx con seen (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
-    eq_tp' env (v::ctx) con seen A (A.apply_tp (R.zip [v'] [R.Var(v)]) A') (* !!!FIX!!! *)
+    eq_tp_bind env ctx con seen (v,A) (v',A')
 
   | eq_tp env ctx con seen (A.PayPot(p,A)) (A.PayPot(p',A')) =
     eq_id ctx con p p' andalso eq_tp' env ctx con seen A A'
@@ -477,6 +477,13 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
 
   | eq_tp env ctx con seen A.Dot A.Dot = true
   | eq_tp env ctx con seen A A' = false
+
+and eq_tp_bind env ctx con seen (v,A) (v',A') =
+    let val sigma = R.zip ctx (R.create_idx ctx)
+        val w = R.fresh_var sigma v
+        val wA = A.apply_tp ((v, R.Var(w))::sigma) A
+        val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
+    in eq_tp' env (w::ctx) con seen wA wA' end
 
 and eq_choice env ctx con seen nil nil = true
   | eq_choice env ctx con seen ((l,A)::choice) ((l',A')::choice') = (* order must be equal *)

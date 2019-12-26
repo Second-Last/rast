@@ -272,10 +272,13 @@ fun apply_tp sg (One) = One
   | apply_tp sg (PayPot(p,A)) = PayPot(R.apply sg p,apply_tp sg A)
   | apply_tp sg (Exists(phi,A)) = Exists(R.apply_prop sg phi, apply_tp sg A)
   | apply_tp sg (Forall(phi,A)) = Forall(R.apply_prop sg phi, apply_tp sg A)
-  | apply_tp sg (ExistsNat(v,A)) = ExistsNat(v, apply_tp sg A) (* !!!FIX!!! *)
-  | apply_tp sg (ForallNat(v,A)) = ForallNat(v, apply_tp sg A) (* !!!FIX!!! *)
+  | apply_tp sg (ExistsNat(v,A)) = ExistsNat(apply_tp_bind sg (v,A))
+  | apply_tp sg (ForallNat(v,A)) = ForallNat(apply_tp_bind sg (v,A))
   | apply_tp sg (TpName(a,es)) = TpName(a, R.apply_list sg es)
   | apply_tp sg (Dot) = Dot
+and apply_tp_bind sg (v,A) =
+    let val v' = R.fresh_var sg v
+    in (v', apply_tp ((v,R.Var(v'))::sg) A) end
 
 and apply_choices sg choices = List.map (fn (l,Al) => (l, apply_tp sg Al)) choices
 
@@ -298,12 +301,14 @@ fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (Get(x,p,P)) = Get(x,R.apply sg p, apply_exp sg P)
   | apply_exp sg (Assert(x,phi,P)) = Assert(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (SendNat(x,e,P)) = SendNat(x,R.apply sg e, apply_exp sg P)
-  | apply_exp sg (RecvNat(x,v,P)) = RecvNat(x,v,apply_exp sg P) (* !!!FIX!!! *)
+  | apply_exp sg (RecvNat(x,v,P)) = RecvNat(apply_exp_bind sg (x,v,P))
   | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
   | apply_exp sg (ExpName(x,f,es,xs)) = ExpName(x,f, R.apply_list sg es, xs)
   | apply_exp sg (Marked(marked_P)) = Marked(Mark.mark' (Mark.data marked_P, Mark.ext marked_P))
-
+and apply_exp_bind sg (x,v,P) =
+    let val v' = R.fresh_var sg v
+    in (x,v',apply_exp ((v,R.Var(v'))::sg) P) end
 and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P)) branches
 
 (* Environments *)
