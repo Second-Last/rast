@@ -34,8 +34,8 @@ poly-queue.ss -- linear work queue, syntax=explicit
 queue.ss -- no-element fake queue, syntax = explicit 
 queues-quant.ss -- incomplete queues
 
-primes-idx.ss
-primes.ss
+primes-idx.ss -- prime sieve implementation, work=none, idx on values and length
+primes.ss -- prime sieve (no indices)
 
 scan.ss -- in progress
 
