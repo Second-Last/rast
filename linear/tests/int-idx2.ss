@@ -1,5 +1,5 @@
 #test success
-#options --work=none --time=none --syntax=implicit
+#options --work=none --time=none --syntax=implicit --equality=refl
 
 % copied from primes-idx.ss
 
