@@ -31,6 +31,7 @@ datatype option =
        | Work of string
        | Syntax of string
        | Terminate of string
+       | Equality of string
        | Verbose of int
        | Help of bool
 
@@ -67,7 +68,10 @@ val options : option G.opt_descr list =
       help = "Syntax, one of 'implicit' (default) or 'explicit'"},
      {short = "e", long = ["terminate"],
       desc = G.ReqArg ((fn r => Terminate(r)), "<recursion>"),
-      help = "Perform termination checking, on 'equi' or 'iso' recursive syntax"}
+      help = "Perform termination checking, on 'equi' or 'iso' recursive syntax"},
+     {short = "u", long = ["equality"],
+      desc = G.ReqArg ((fn r => Equality(r)), "<type equality algorithm>"),
+      help = "Type equality algorithm, one of 'subsumerefl' (default), 'subsume', or 'refl'"}
     ]
 
 val usage_info = G.usageInfo {header = header, options = options}
@@ -98,6 +102,10 @@ fun process_option (Time(s)) =
     (case Flags.parseRecursion r
       of NONE => exit_failure ("recursion style " ^ r ^ " not recognized")
        | SOME(recursion) => Flags.terminate := SOME(recursion))
+  | process_option (Equality(r)) =
+    (case Flags.parseEquality r
+      of NONE => exit_failure ("type equality algorithm " ^ r ^ " not recognized")
+       | SOME(equality) => Flags.equality := equality )
   | process_option (Verbose(level)) = Flags.verbosity := level
   | process_option (Help(true)) = exit_success usage_info
   | process_option (Help(false)) = ()

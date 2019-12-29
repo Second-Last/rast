@@ -1,5 +1,5 @@
-#test success
-#options --work=none --time=none --syntax=implicit --equality=refl
+#test error
+#options --work=none --time=none --syntax=implicit --equality=subsume
 
 % copied from primes-idx.ss
 
@@ -31,23 +31,15 @@ proc xx <- duplicate{n} <- x =
                    x2 <- zero <- ; send xx x2 ;
                    close xx )
 
+%--------------------
+
 type ord{x}{y} = +{ lt : ?{x < y}. 1,
                     eq : ?{x = y}. 1,
                     gt : ?{x > y}. 1 }
 
-% would like to express below, but it doesn't check...
-% eqtype ord{x+1}{y+1} = ord{x}{y}
-
-decl coerce{x}{y} : (o' : ord{x}{y}) |- (o : ord{x+1}{y+1})
-proc o <- coerce{x}{y} <- o' =
-  case o' ( lt => o.lt ; wait o' ; close o
-          | eq => o.eq ; wait o' ; close o
-          | gt => o.gt ; wait o' ; close o )
-
 decl compare{x}{y} : (n : nat{x}) (k : nat{y}) |- (o : ord{x}{y})
 proc o <- compare{x}{y} <- n k =
-  case n ( succ => case k ( succ => o' <- compare{x-1}{y-1} <- n k ;
-                                    o <- coerce{x-1}{y-1} <- o'
+  case n ( succ => case k ( succ => o <- compare{x-1}{y-1} <- n k
                           | zero => o.gt ; wait k ;
                                     u <- deallocate{x-1} <- n ; wait u ;
                                     close o )

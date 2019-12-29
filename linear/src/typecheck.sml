@@ -53,6 +53,11 @@ sig
     val syn_assumeR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
     val syn_assumeL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
 
+    val syn_sendNatR : Ast.env -> Arith.arith -> Ast.chan_tp -> Ast.chan_tp
+    val syn_sendNatL : Ast.env -> Ast.context -> Arith.arith -> Ast.chan -> Ast.context
+    val syn_recvNatR : Ast.env -> Arith.varname -> Ast.chan_tp -> Ast.chan_tp
+    val syn_recvNatL : Ast.env -> Ast.context -> Ast.chan -> Arith.varname -> Ast.context
+
     (*
     val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
     *)
@@ -105,6 +110,8 @@ fun closed_tp ctx (A.Plus(choice)) ext = closed_choice ctx choice ext
   | closed_tp ctx (A.One) ext = ()
   | closed_tp ctx (A.Exists(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp ctx A ext )
   | closed_tp ctx (A.Forall(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp ctx A ext )
+  | closed_tp ctx (A.ExistsNat(v,A)) ext = closed_tp (v::ctx) A ext
+  | closed_tp ctx (A.ForallNat(v,A)) ext = closed_tp (v::ctx) A ext
   | closed_tp ctx (A.PayPot(p,A)) ext = ( closed ctx p ext ; closed_tp ctx A ext )
   | closed_tp ctx (A.GetPot(p,A)) ext = ( closed ctx p ext ; closed_tp ctx A ext )
   | closed_tp ctx (A.Next(t,A)) ext = ( closed ctx t ext ; closed_tp ctx A ext )
@@ -133,6 +140,8 @@ fun closed_exp ctx (A.Id _) ext = ()
                                       
   | closed_exp ctx (A.Assert(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
   | closed_exp ctx (A.Assume(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
+  | closed_exp ctx (A.SendNat(x,e,P)) ext = (closed ctx e ext ; closed_exp ctx P ext )
+  | closed_exp ctx (A.RecvNat(x,v,P)) ext = closed_exp (v::ctx) P ext
   | closed_exp ctx (A.Imposs) ext = ()
 
   | closed_exp ctx (A.Work(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
@@ -181,6 +190,10 @@ fun valid env ctx con _ (A.Plus(choice)) ext = valid_choice env ctx con Pos choi
   | valid env ctx con _ (A.Exists(phi, A)) ext = valid env ctx (R.And(con,phi)) Zero A ext
   | valid env ctx con Neg (A.Forall(phi, A)) ext = valid env ctx (R.And(con,phi)) Neg A ext
   | valid env ctx con _ (A.Forall(phi, A)) ext = valid env ctx (R.And(con,phi)) Zero A ext
+  | valid env ctx con Pos (A.ExistsNat(v,A)) ext = valid env (v::ctx) con Pos A ext
+  | valid env ctx con _ (A.ExistsNat(v,A)) ext = valid env (v::ctx) con Zero A ext
+  | valid env ctx con Neg (A.ForallNat(v,A)) ext = valid env (v::ctx) con Neg A ext
+  | valid env ctx con _ (A.ForallNat(v,A)) ext = valid env (v::ctx) con Zero A ext
 
   | valid env ctx con Pos (A.PayPot(e,A)) ext =
     if not (C.entails ctx con (R.Ge(e,R.Int(0)))) (* allowing 0, for uniformity *)
@@ -433,6 +446,11 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
 
+  | eq_tp env ctx con seen (A.ExistsNat(v,A)) (A.ExistsNat(v',A')) =
+    eq_tp_bind env ctx con seen (v,A) (v',A')
+  | eq_tp env ctx con seen (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
+    eq_tp_bind env ctx con seen (v,A) (v',A')
+
   | eq_tp env ctx con seen (A.PayPot(p,A)) (A.PayPot(p',A')) =
     eq_id ctx con p p' andalso eq_tp' env ctx con seen A A'
   | eq_tp env ctx con seen (A.GetPot(p,A)) (A.GetPot(p',A')) = 
@@ -446,7 +464,11 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     eq_tp' env ctx con seen A A'
 
   | eq_tp env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
-    if a = a' then eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* reflexivity *)
+    if a = a'
+    then case !Flags.equality
+          of Flags.SubsumeRefl => eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* both *)
+           | Flags.Subsume => eq_name_name env ctx con seen A A' (* only coinductive equality *)
+           | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
   | eq_tp env ctx con seen (A as A.TpName(a,es)) A' =
     eq_tp' env ctx con seen (A.expd_tp env (a,es)) A'
@@ -455,6 +477,13 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
 
   | eq_tp env ctx con seen A.Dot A.Dot = true
   | eq_tp env ctx con seen A A' = false
+
+and eq_tp_bind env ctx con seen (v,A) (v',A') =
+    let val sigma = R.zip ctx (R.create_idx ctx)
+        val w = R.fresh_var sigma v
+        val wA = A.apply_tp ((v, R.Var(w))::sigma) A
+        val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
+    in eq_tp' env (w::ctx) con seen wA wA' end
 
 and eq_choice env ctx con seen nil nil = true
   | eq_choice env ctx con seen ((l,A)::choice) ((l',A')::choice') = (* order must be equal *)
@@ -656,6 +685,22 @@ fun syn_assumeL' env x (A.Exists(phi,A)) D' = (x,A)::D'
 fun syn_assumeL env ((x',A)::D') x =
     if x = x' then syn_assumeL' env x (expand env A) D'
     else (x',A)::syn_assumeL env D' x
+
+fun syn_sendNatR' env z e (A.ExistsNat(v,C)) = (z,A.apply_tp [(v,e)] C)
+fun syn_sendNatR env e (z,C) = syn_sendNatR' env z e (expand env C)
+
+fun syn_sendNatL' env x e (A.ForallNat(v,A)) D = (x,A.apply_tp [(v,e)] A)::D
+fun syn_sendNatL env ((x',A)::D') e x =
+    if x = x' then syn_sendNatL' env x e (expand env A) D'
+    else (x',A)::syn_sendNatL env D' e x
+
+fun syn_recvNatR' env v' z (A.ForallNat(v,C)) = (z,A.apply_tp [(v,R.Var(v'))] C)
+fun syn_recvNatR env v' (z,C) = syn_recvNatR' env v' z (expand env C)
+
+fun syn_recvNatL' env x v' (A.ExistsNat(v,A)) D' = (x,A.apply_tp [(v,R.Var(v'))] A)::D'
+fun syn_recvNatL env ((x',A)::D') x v' =
+    if x = x' then syn_recvNatL' env x v' (expand env A) D'
+    else (x',A)::syn_recvNatL env D' x v'
 
 (*************************************)
 (* Type checking process expressions *)
@@ -916,6 +961,26 @@ and existsL trace env ctx con D (A.Exists(phi',A)) pot (A.Assume(x,phi,P)) zC ex
   | existsL trace env ctx con D A pot (A.Assume(x,phi,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected exists, found: " ^ PP.pp_tp_compact env A)
 
+and existsNatR trace env ctx con D pot (A.SendNat(x,e,P)) (z,A.ExistsNat(v,C)) ext (* z = x *) =
+    check_exp' trace env ctx con D pot P (z, A.apply_tp (R.zip [v] [e]) C) ext
+  | existsNatR trace env ctx con D pot (A.SendNat(x,e,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected ?<id>._, found: " ^ PP.pp_tp_compact env C)
+
+and forallNatL trace env ctx con D (A.ForallNat(v,A)) pot (A.SendNat(x,e,P)) zC ext (* z != x *) =
+    check_exp' trace env ctx con (update_tp (x, A.apply_tp (R.zip [v] [e]) A) D) pot P zC ext
+  | forallNatL trace env ctx con D A pot (A.SendNat(x,e,P)) zC ext (* z != x *) =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected !<id>._, found: " ^ PP.pp_tp_compact env A)
+
+and forallNatR trace env ctx con D pot (A.RecvNat(x,v,P)) (z,A.ForallNat(v',C)) ext (* z = x *) =
+    check_exp' trace env (v::ctx) con D pot P (z, A.apply_tp (R.zip [v'] [R.Var(v)]) C) ext
+  | forallNatR trace env ctx con D pot (A.RecvNat(x,v,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected !<id>._, found: " ^ PP.pp_tp_compact env C)
+
+and existsNatL trace env ctx con D (A.ExistsNat(v',A)) pot (A.RecvNat(x,v,P)) zC ext (* z != x *) =
+    check_exp' trace env (v::ctx) con (update_tp (x, A.apply_tp (R.zip [v'] [R.Var(v)]) A) D) pot P zC ext
+  | existsNatL trace env ctx con D A pot (A.RecvNat(x,v,P)) zC ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected ?<id>._, found: " ^ PP.pp_tp_compact env A)
+
 and work trace env ctx con D pot (A.Work(p,P)) zC ext =
     if not (C.entails ctx con (R.Ge(p,R.Int(0))))
     then ERROR ext ("potential not positive: " ^ C.pp_jfail con (R.Ge(p,R.Int(0))))
@@ -1036,6 +1101,16 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     if x = z
     then forallR trace env ctx con D pot (A.Assume(x,phi,Q)) (z,expand env C) ext
     else existsL trace env ctx con D (lookup_context env x D ext) pot (A.Assume(x,phi,Q)) (z,C) ext    
+
+  (* quantified types ?v.A, !v.A *)
+  | check_exp trace env ctx con D pot (A.SendNat(x,e,P)) (z,C) ext =
+    if x = z
+    then existsNatR trace env ctx con D pot (A.SendNat(x,e,P)) (z,expand env C) ext
+    else forallNatL trace env ctx con D (lookup_context env x D ext) pot (A.SendNat(x,e,P)) (z,C) ext
+  | check_exp trace env ctx con D pot (A.RecvNat(x,v,P)) (z,C) ext =
+    if x = z
+    then forallNatR trace env ctx con D pot (A.RecvNat(x,v,P)) (z,expand env C) ext
+    else existsNatL trace env ctx con D (lookup_context env x D ext) pot (A.RecvNat(x,v,P)) (z,C) ext
 
   (* impossibility *)
   | check_exp trace env ctx con D pot (A.Imposs) zC ext =

@@ -20,6 +20,8 @@ datatype tp =
        | One                       (* 1 *)
        | Exists of Arith.prop * tp (* ?{phi}. A *)
        | Forall of Arith.prop * tp (* !{phi}. A *)
+       | ExistsNat of Arith.varname * tp (* ?n. A *)
+       | ForallNat of Arith.varname * tp (* !n. A *)
        | PayPot of pot * tp        (* |> A  or  |{p}> A *)
        | GetPot of pot * tp        (* <| A  or  <{p}| A *)
        | Next of time * tp         (* ()A  or  ({t}) A *)
@@ -55,6 +57,10 @@ datatype exp =
        (* existential quantifier ?{phi}. A *)
        | Assert of chan * Arith.prop * exp           (* assertR{phi} ; P *)
        | Assume of chan * Arith.prop * exp           (* assumeL{phi} ; P *)
+
+       (* quantifying variables ?n. A and !n. A *)
+       | SendNat of chan * Arith.arith * exp         (* send x {e} *)
+       | RecvNat of chan * Arith.varname * exp       (* {v} <- recv x *)                       
 
        (* impossibility; no concrete syntax for now *)
        | Imposs                                      (* impossible *)             
@@ -177,6 +183,8 @@ datatype tp =
        | One                       (* 1 *)
        | Exists of R.prop * tp     (* ?{phi}. A *)
        | Forall of R.prop * tp     (* !{phi}. A *)
+       | ExistsNat of Arith.varname * tp (* ?n. A *)
+       | ForallNat of Arith.varname * tp (* !n. A *)
        | PayPot of pot * tp        (* |> A  or  |{p}> A *)
        | GetPot of pot * tp        (* <| A  or  <{p}| A *)
        | Next of time * tp         (* ()A  or  ({t}) A *)
@@ -211,6 +219,10 @@ datatype exp =
        (* existential quantifier ?{phi}. A *)
        | Assert of chan * Arith.prop * exp           (* assertR{phi} ; P *)
        | Assume of chan * Arith.prop * exp           (* assumeL{phi} ; P *)
+
+       (* quantifying variables ?n. A and !n. A *)
+       | SendNat of chan * Arith.arith * exp         (* send x {e} *)
+       | RecvNat of chan * Arith.varname * exp       (* {v} <- recv x *)
 
        (* impossibility; no concrete syntax for now *)
        | Imposs                                      (* impossible *)             
@@ -260,8 +272,13 @@ fun apply_tp sg (One) = One
   | apply_tp sg (PayPot(p,A)) = PayPot(R.apply sg p,apply_tp sg A)
   | apply_tp sg (Exists(phi,A)) = Exists(R.apply_prop sg phi, apply_tp sg A)
   | apply_tp sg (Forall(phi,A)) = Forall(R.apply_prop sg phi, apply_tp sg A)
+  | apply_tp sg (ExistsNat(v,A)) = ExistsNat(apply_tp_bind sg (v,A))
+  | apply_tp sg (ForallNat(v,A)) = ForallNat(apply_tp_bind sg (v,A))
   | apply_tp sg (TpName(a,es)) = TpName(a, R.apply_list sg es)
   | apply_tp sg (Dot) = Dot
+and apply_tp_bind sg (v,A) =
+    let val v' = R.fresh_var sg v
+    in (v', apply_tp ((v,R.Var(v'))::sg) A) end
 
 and apply_choices sg choices = List.map (fn (l,Al) => (l, apply_tp sg Al)) choices
 
@@ -283,11 +300,15 @@ fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (Pay(x,p,P)) = Pay(x,R.apply sg p, apply_exp sg P)
   | apply_exp sg (Get(x,p,P)) = Get(x,R.apply sg p, apply_exp sg P)
   | apply_exp sg (Assert(x,phi,P)) = Assert(x,R.apply_prop sg phi, apply_exp sg P)
+  | apply_exp sg (SendNat(x,e,P)) = SendNat(x,R.apply sg e, apply_exp sg P)
+  | apply_exp sg (RecvNat(x,v,P)) = RecvNat(apply_exp_bind sg (x,v,P))
   | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
   | apply_exp sg (ExpName(x,f,es,xs)) = ExpName(x,f, R.apply_list sg es, xs)
   | apply_exp sg (Marked(marked_P)) = Marked(Mark.mark' (Mark.data marked_P, Mark.ext marked_P))
-
+and apply_exp_bind sg (x,v,P) =
+    let val v' = R.fresh_var sg v
+    in (x,v',apply_exp ((v,R.Var(v'))::sg) P) end
 and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P)) branches
 
 (* Environments *)
@@ -361,6 +382,8 @@ fun strip_exts (Id(x,y)) = Id(x,y)
   | strip_exts (Wait(x,Q)) = Wait(x,strip_exts Q)
   | strip_exts (Assert(x,phi,P)) = Assert(x,phi, strip_exts P)
   | strip_exts (Assume(x,phi,Q)) = Assume(x,phi, strip_exts Q)
+  | strip_exts (SendNat(x,e,P)) = SendNat(x,e,strip_exts P)
+  | strip_exts (RecvNat(x,v,P)) = RecvNat(x,v,strip_exts P)
   | strip_exts (Imposs) = Imposs
   | strip_exts (Work(p,P)) = Work(p,strip_exts P)
   | strip_exts (Pay(x,p,P)) = Pay(x,p,strip_exts P)
@@ -398,6 +421,8 @@ type config = proc list
 structure Print =
 struct
 
+fun pp_arith e = "{" ^ RP.pp_arith e ^ "}"
+
 fun pp_pot (R.Int(0)) = ""
   | pp_pot e = "{" ^ RP.pp_arith e ^ "}"
 
@@ -427,6 +452,8 @@ fun pp_tp (One) = "1"
   | pp_tp (PayPot(p,A)) = "|" ^ pp_potpos p ^ ">" ^ pp_tp A
   | pp_tp (Exists(phi,A)) = "?" ^ pp_prop phi ^ ". " ^ pp_tp A
   | pp_tp (Forall(phi,A)) = "!" ^ pp_prop phi ^ ". " ^ pp_tp A
+  | pp_tp (ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp A
+  | pp_tp (ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp A
   | pp_tp (TpName(a,l)) = a ^ pp_idx l
   | pp_tp (Dot) = "."
 and pp_choice nil = ""
@@ -454,6 +481,8 @@ fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
   | pp_exp (Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potpos p ^ " ; " ^ pp_exp P
   | pp_exp (Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
   | pp_exp (Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
+  | pp_exp (SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_arith e ^ " ; " ^ pp_exp P
+  | pp_exp (RecvNat(x,v,P)) = pp_arith (R.Var(v)) ^ " <- recv " ^ x ^ " ; " ^ pp_exp P
   | pp_exp (Imposs) = "impossible"
   | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
   | pp_exp (Marked(marked_exp)) = pp_exp (Mark.data marked_exp)

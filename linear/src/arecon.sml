@@ -110,7 +110,7 @@ and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
     (* do not check type equality here, just remove w *)
     A.Send(x,w,recon env (TC.remove_chan w D ext) P (z,B) ext)
   | tensorR env D (A.Send(x,w,P)) (z,C) ext =
-    ERROR ext ("type mismacth of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
 
 and lolliL env D (A.Lolli(A,B)) (A.Send(x,w,P)) zC ext = (* x <> z *)
     A.Send(x,w,recon env (TC.update_tp (x,B) (TC.remove_chan w D ext)) P zC ext)
@@ -137,6 +137,23 @@ and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
     A.Wait(x,recon env (TC.remove_chan x D ext) P zC ext)
   | oneL env D A (A.Wait(x,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env A)
+
+and existsNatR env D (A.SendNat(x,e,P)) (z,A.ExistsNat(v,C)) ext =
+    A.SendNat(x,e,recon env D P (z,C) ext) (* Q: any reason to substitute here? *)
+  | existsNatR env D (A.SendNat(x,e,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected ?v._, found: " ^ PP.pp_tp_compact env C)
+and forallNatL env D (A.ForallNat(v,A)) (A.SendNat(x,e,P)) zC ext = (* Q: any reason to substitute here? *)
+    A.SendNat(x,e,recon env (TC.update_tp (x,A) D) P zC ext)
+  | forallNatL env D A (A.SendNat(x,e,P)) zC ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected !v._, found: " ^ PP.pp_tp_compact env A)
+and forallNatR env D (A.RecvNat(x,v,P)) (z,A.ForallNat(v',C)) ext = (* Q: any reason to alpha-convert here? *)
+    A.RecvNat(x,v,recon env D P (z,C) ext)
+  | forallNatR env D (A.RecvNat(x,v,P)) (z,C) ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected !v._, found: " ^ PP.pp_tp_compact env C)
+and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any reason to alpha-convert here? *)
+    A.RecvNat(x,v,recon env (TC.update_tp (x,A) D) P zC ext)
+  | existsNatL env D A (A.RecvNat(x,v,P)) zC ext =
+    ERROR ext ("type mismatch of " ^ x ^ ": expected ?v._, found: " ^ PP.pp_tp_compact env A)
 
 (* recon' env A P C ext
  * assumes A, C are structural
@@ -186,6 +203,16 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
     if x = z
     then ERROR ext ("name mismatch on left: " ^ x ^ " <> " ^ z) (* strange error message *)
     else oneL env D (lookup_skip env x D ext) P (z,C) ext
+
+  | recon' env D (P as A.SendNat(x,e,P')) (z,C) ext =
+    if x = z
+    then existsNatR env D P (z, skip env C) ext
+    else forallNatL env D (lookup_skip env x D ext) P (z,C) ext
+
+  | recon' env D (P as A.RecvNat(x,v,P')) (z,C) ext =
+    if x = z
+    then forallNatR env D P (z, skip env C) ext
+    else existsNatL env D (lookup_skip env x D ext) P (z,C) ext
 
   (* work, which is allowed before reconstruction *)
   | recon' env D (A.Work(p,P')) zC ext =

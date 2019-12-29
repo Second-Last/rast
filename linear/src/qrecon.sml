@@ -347,13 +347,37 @@ and recon'' env D (P as A.Id(z',y)) (z,C) ext =
 
   | recon'' env D (P as A.Close(x)) (z,C) ext = (* x = z *)
     addR_assert env P (z,skip env C)
+
   | recon'' env D (A.Wait(x,P)) (z,C) ext = (* x <> z *)
     let val A = TC.lookup_context env x D ext
         val D' = TC.syn_waitL env (TC.update_tp (x,skipQ env A) D) x
         val P' = recon env D' P (z,C) ext
         val P'' = addL_assert env (x,skip env A) (A.Wait(x,P'))
     in P'' end
-                                                         
+
+  | recon'' env D (A.SendNat(x,e,P)) (z,C) ext =
+    if x = z
+    then let val P' = recon_assumeR env D P (TC.syn_sendNatR env e (z, skipQ env C)) ext
+             val P'' = addR_assert env (A.SendNat(x,e,P')) (z, skip env C)
+         in P'' end
+    else let val A = TC.lookup_context env x D ext
+             val D' = TC.syn_sendNatL env (TC.update_tp (x, skipQ env A) D) e x
+             val P' = recon_assumeL env D' (x, TC.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_assert env (x,skip env A) (A.SendNat(x,e,P'))
+         in P'' end
+
+  | recon'' env D (A.RecvNat(x,v,P)) (z,C) ext =
+    if x = z
+    then let val D' = D (* v goes into index variable context, which we don't track *)
+             val P' = recon_assumeR env D' P (TC.syn_recvNatR env v (z, skipQ env C)) ext
+             val P'' = addR_assert env (A.RecvNat(x,v,P')) (x, skip env C)
+         in P'' end
+    else let val A = TC.lookup_context env x D ext
+             val D' = TC.syn_recvNatL env (TC.update_tp (x, skipQ env A) D) x v
+             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_assert env (x,skip env A) (A.RecvNat(x,v,P'))
+         in P'' end
+
   (* work, which is allowed before reconstruction *)
   | recon'' env D (A.Work(p,P')) zC ext =
     A.Work(p, recon env D P' zC ext)

@@ -50,6 +50,7 @@ sig
     val apply : subst -> arith -> arith                (* [sigma]e *)
     val apply_list : subst -> arith list -> arith list (* [sigma](e1,...,en) *)
     val apply_prop : subst -> prop -> prop             (* [sigma]phi *)
+    val fresh_var : subst -> varname -> varname        (* variable not free in codom(sigma) *)
 
     val create_idx : ctx -> arith list                 (* {x1}...{xn} *)
 
@@ -185,6 +186,15 @@ fun free_prop (Eq(e1,e2)) ctx = free_vars e2 (free_vars e1 ctx)
   | free_prop (Implies(phi1,phi2)) ctx = free_prop phi2 (free_prop phi1 ctx)
   | free_prop (Not(phi)) ctx = free_prop phi ctx
 
+fun free_in v (Int(n)) = false
+  | free_in v (Add(s,t)) = free_in v s orelse free_in v t
+  | free_in v (Sub(s,t)) = free_in v s orelse free_in v t
+  | free_in v (Mult(s,t)) = free_in v s orelse free_in v t
+  | free_in v (Var(v')) = v = v'
+
+fun free_in_subst v nil = false
+  | free_in_subst v ((v',e)::sigma) = free_in v e orelse free_in_subst v sigma
+
 fun free_anon_vars (Int(n)) ctx = ctx
   | free_anon_vars (Add(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
   | free_anon_vars (Sub(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
@@ -244,6 +254,13 @@ fun apply_prop sg (Eq(e1,e2)) = Eq(apply sg e1, apply sg e2)
   | apply_prop sg (And(F,G)) = And(apply_prop sg F, apply_prop sg G)
   | apply_prop sg (Implies(F,G)) = Implies(apply_prop sg F, apply_prop sg G)
   | apply_prop sg (Not(F)) = Not(apply_prop sg F)
+
+fun next_name v = v ^ "^"
+
+fun fresh_var sigma v =
+    if free_in_subst v sigma
+    then fresh_var sigma (next_name v)
+    else v
 
 fun create_idx vs = List.map (fn v => Var(v)) vs
 

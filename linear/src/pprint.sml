@@ -157,6 +157,8 @@ fun ext_tp env (A.One) = A.One
   | ext_tp env (A.PayPot(p,A)) = A.PayPot(p,ext_tp env A)
   | ext_tp env (A.Exists(phi,A)) = A.Exists(phi,ext_tp env A)
   | ext_tp env (A.Forall(phi,A)) = A.Forall(phi,ext_tp env A)
+  | ext_tp env (A.ExistsNat(v,A)) = A.ExistsNat(v,ext_tp env A)
+  | ext_tp env (A.ForallNat(v,A)) = A.ForallNat(v,ext_tp env A)
   | ext_tp env (A as A.TpName(a,es)) =
     if is_internal a
     then ext_tp env (A.expd_tp env (a,es))   (* must be defined to be mentioned *)
@@ -202,6 +204,8 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.PayPot(p,A)) = "|" ^ pp_potpos p ^ "> " ^ pp_tp (i+len(pp_potpos(p))+3) A
   | pp_tp i (A.Exists(phi,A)) = "?" ^ pp_con phi ^ ". " ^ pp_tp (i+len(pp_con(phi))+3) A
   | pp_tp i (A.Forall(phi,A)) = "!" ^ pp_con phi ^ ". " ^ pp_tp (i+len(pp_con(phi))+3) A
+  | pp_tp i (A.ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
+  | pp_tp i (A.ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.TpName(a,l)) = a ^ pp_idx l
   | pp_tp i (A.Dot) = "."
 and pp_tp_indent i A = spaces i ^ pp_tp i A
@@ -277,6 +281,8 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
   | pp_exp env i (A.Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potpos p ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_con phi ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Imposs) = "impossible"
   | pp_exp env i (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
   | pp_exp env i (A.Marked(marked_exp)) = pp_exp env i (Mark.data marked_exp)
@@ -313,6 +319,8 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
   | pp_exp_prefix env (A.Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potpos p ^ " ; ..."
   | pp_exp_prefix env (A.Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_con phi ^ " ; ..."
   | pp_exp_prefix env (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ; ..."
+  | pp_exp_prefix env (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ; ..."
+  | pp_exp_prefix env (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Imposs) = "impossible"
   | pp_exp_prefix env (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
   | pp_exp_prefix env (A.Marked(marked_exp)) = pp_exp_prefix env (Mark.data marked_exp)
@@ -328,9 +336,12 @@ fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
   | pp_decl env (A.TpEq(ctx,con,A.TpName(a,es),A.TpName(a',es'),_)) =
     "eqtype " ^ a ^ pp_idx es ^ " = " ^ a' ^ pp_idx es'
   | pp_decl env (A.ExpDec(f,vs,con,(D,pot,zC),_)) =
-    "proc " ^ f ^ P.pp_vars vs ^ P.pp_con con ^ " : "
+    "decl " ^ f ^ P.pp_vars vs ^ P.pp_con con ^ " : "
     ^ pp_context_compact env D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp_compact env zC
-  | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) = pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P
+  | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) =
+    "proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = \n"
+    ^ pp_exp_after env 0 ("  ") P
+    (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P *)
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line
 

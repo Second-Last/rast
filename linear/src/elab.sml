@@ -199,6 +199,10 @@ and tp_name_subtp ctx con (A.Plus(choices)) env = apply_fst A.Plus (tp_name_subc
     apply_fst (fn A => (A.Exists(phi,A))) (tp_name_subtp' ctx (R.And(con,phi)) A' env)
   | tp_name_subtp ctx con (A.Forall(phi,A')) env =
     apply_fst (fn A => (A.Forall(phi,A))) (tp_name_subtp' ctx (R.And(con,phi)) A' env)
+  | tp_name_subtp ctx con (A.ExistsNat(v,A')) env =
+    apply_fst (fn A => (A.ExistsNat(v,A))) (tp_name_subtp' (v::ctx) con A' env)
+  | tp_name_subtp ctx con (A.ForallNat(v,A')) env =
+    apply_fst (fn A => (A.ForallNat(v,A))) (tp_name_subtp' (v::ctx) con A' env)
   | tp_name_subtp ctx con (A.PayPot(p,A')) env = apply_fst (fn A => (A.PayPot(p,A))) (tp_name_subtp' ctx con A' env)
   | tp_name_subtp ctx con (A.GetPot(p,A')) env = apply_fst (fn A => (A.GetPot(p,A))) (tp_name_subtp' ctx con A' env)
   | tp_name_subtp ctx con (A.Next(t,A')) env = apply_fst (fn A => (A.Next(t,A))) (tp_name_subtp' ctx con A' env)
