@@ -616,6 +616,94 @@ fun simplify (Lt(Int(k),Int(k'))) = if k < k' then True else False
   | simplify (And(F,G)) = and_ (simplify F) (simplify G)
   | simplify (Not(F)) = not_ (simplify F)
 
+(* preprocess *)
+(* all disabled right now except for substitution *)
+(*
+fun eq_prod (Mult(Int(k),Var(x)), Mult(Int(k'),Var(x'))) =
+    k = k' andalso x = x'
+
+fun prod_in p (Int(k)) = NONE
+  | prod_in p (Add(q,s)) =
+    (if eq_prod (p,q)
+     then SOME(s)
+     else case prod_in p s
+           of NONE => NONE
+            | SOME(s') => SOME(Add(q,s')))
+
+fun eq_lin (Int(k), Int(k')) = k = k'
+  | eq_lin (Int(k), Add _) = false
+  | eq_lin (Add(p,t), s) =
+    (case prod_in p s
+      of NONE => false
+       | SOME(s') => eq_lin(t, s'))
+
+fun eq_arith s t = eq_lin (linearize s , linearize t)
+
+fun refl (Eq(s,t)) = eq_arith s t
+  | refl (Le(s,t)) = eq_arith s t
+  | refl (Ge(s,t)) = eq_arith s t
+  | refl phi = false
+
+fun id (Eq(e1,e2)) (Eq(e1',e2')) =
+    let val s1 = linearize e1
+        val s2 = linearize e2
+        val t1 = linearize e1'
+        val t2 = linearize e2'
+    in (eq_lin (s1,t1) andalso eq_lin (s2,t2))
+       orelse eq_lin (s1,t2) andalso eq_lin (s2,t1)
+    end
+
+  | id (Lt(e1,e2)) (Lt(e1',e2')) =
+    let val s1 = linearize e1
+        val s2 = linearize e2
+        val t1 = linearize e1'
+        val t2 = linearize e2'
+    in eq_lin (s1,t1) andalso eq_lin (s2,t2) end
+  | id (Gt(e1,e2)) (Lt(e1',e2')) = id (Lt(e2,e1)) (Lt(e1',e2'))
+  | id (Lt(e1,e2)) (Gt(e1',e2')) = id (Lt(e1,e2)) (Lt(e2',e1'))
+  | id (Gt(e1,e2)) (Gt(e1',e2')) = id (Lt(e2,e1)) (Lt(e2',e1'))
+
+  | id (Le(e1,e2)) (Le(e1',e2')) =
+    let val s1 = linearize e1
+        val s2 = linearize e2
+        val t1 = linearize e1'
+        val t2 = linearize e2'
+    in eq_lin (s1,t1) andalso eq_lin (s2,t2) end
+  | id (Ge(e1,e2)) (Le(e1',e2')) = id (Le(e2,e1)) (Le(e1',e2'))
+  | id (Le(e1,e2)) (Ge(e1',e2')) = id (Le(e1,e2)) (Le(e2',e1'))
+  | id (Ge(e1,e2)) (Ge(e1',e2')) = id (Le(e2,e1)) (Le(e2',e1'))
+
+  (* assume here we do not have 'divides', 'not', 'or', 'implies', 'false' *)
+  | id psi phi = false
+
+fun is_true (True) = true
+  | is_true _ = false
+
+fun mem (True) phi = false
+  | mem (And(con1,con2)) phi = mem con1 phi orelse mem con2 phi
+  | mem psi phi = id psi phi
+ *)
+                        
+fun rev (And(con,psi)) con' = rev con (And(con',psi))
+  | rev (True) con' = con'
+
+fun subst_eq (True) con' phi = (rev con' True, phi)
+  | subst_eq (And(con,Eq(Var(x),e))) con' phi =
+    subst_eq (apply_prop [(x,e)] con) (apply_prop [(x,e)] con') (apply_prop [(x,e)] phi)
+  | subst_eq (And(con,Eq(e,Var(x)))) con' phi =
+    subst_eq (apply_prop [(x,e)] con) (apply_prop [(x,e)] con') (apply_prop [(x,e)] phi)
+  | subst_eq (And(con,psi)) con' phi = subst_eq con (And(con',psi)) phi
+  | subst_eq psi con' phi = ( rev con' psi, phi)
+
+fun preprocess xs con phi =
+(*
+    if is_true phi then (True,True)    (* needed? *)
+    else if refl phi then (True,True)
+    else if mem con phi then (True,True)
+    else
+*)
+    subst_eq con True phi
+
 (* elim x F = G, where (exists x. F) <=> G and x does not occur in G
  * assume F is in strict nnf; ensure G is in strict nnf
  * relativize implicit quantifier to express we are solving over nat
@@ -650,7 +738,8 @@ fun elim_vars nil F = F
   | elim_vars (x::xs) F = elim_vars xs (elim_nnf x F)
 
 fun valid xs con phi =
-    let val F = And(Not(phi), con)
+    let val (con',phi') = preprocess xs con phi
+        val F = And(Not(phi'), con')
         val F = nnf F           (* convert to strict normal form *)
         val F = simplify F      (* only useful if xs = [] *)
         val G = elim_vars xs F
