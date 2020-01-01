@@ -268,7 +268,7 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
     pp_exp env i P ^ " ;\n" ^ pp_exp_indent env i Q
   | pp_exp env i (A.Id(x,y)) = x ^ " <- " ^ y
   | pp_exp env i (A.Lab(x,k,P)) = x ^ "." ^ k ^ " ;\n" ^ pp_exp_indent env i P
-  | pp_exp env i (A.Case(x,branches)) = "case " ^ x ^ " (" ^ pp_branches env (i+7+len(x)) branches ^ " )"
+  | pp_exp env i (A.Case(x,branches)) = "case " ^ x ^ " ( " ^ pp_branches env (i+8+len(x)) branches ^ " )"
   | pp_exp env i (A.Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Recv(x,y,Q)) = y ^ " <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i Q
   | pp_exp env i (A.Close(x)) = "close " ^ x

@@ -1,11 +1,23 @@
 #test success
 #options --work=send --syntax=implicit
 
+%%% Lists, indexed by their size and potential carried by
+%%% each element.  Since true polymorphism isn't currently
+%%% supported, we just have lists of natural numbers
+%%% but all code is parametric in this choice
+%%%
+%%% Examples:
+%%%
+%%% append, reverse, alternate, split
+%%% map, fold, filter
+%%% stack as a list, stack as a chain
+%%% queue as two lists, queue as a bucket brigade
+
 %%% natural numbers as "generic" list elements
 type nat = +{zero : 1, succ : nat}
 
-type list{n}{p} = +{cons : ?{n > 0}. |{p}> nat * list{n-1}{p},
-                    nil : ?{n = 0}. 1}
+type list{n}{p} = +{ cons : ?{n > 0}. |{p}> nat * list{n-1}{p},
+                     nil : ?{n = 0}. 1 }
 
 decl nil{p} : . |{2}- (l : list{0}{p})
 proc l <- nil{p} <- = l.nil ; close l
@@ -13,6 +25,7 @@ proc l <- nil{p} <- = l.nil ; close l
 decl cons{n}{p} : (x : nat) (t : list{n}{p}) |{p+2}- (l : list{n+1}{p})
 proc l <- cons{n}{p} <- x t = l.cons ; send l x ; l <- t
 
+%%% append
 decl append{n}{k}{p} : (l1 : list{n}{p+2}) (l2 : list{k}{p}) |- (l : list{n+k}{p})
 proc l <- append{n}{k}{p} <- l1 l2 =
   case l1 ( cons => l.cons ;
@@ -20,65 +33,24 @@ proc l <- append{n}{k}{p} <- l1 l2 =
                     l <- append{n-1}{k}{p} <- l1 l2
           | nil => wait l1 ; l <- l2 )
 
+%%% reverse
 decl rev{n}{k}{p} : (l : list{n}{p+2}) (a : list{k}{p}) |- (r : list{n+k}{p})
-
 proc r <- rev{n}{k}{p} <- l a =
   case l ( cons => x <- recv l ;
                    a' <- cons{k}{p} <- x a ;
                    r <- rev{n-1}{k+1}{p} <- l a'
          | nil => wait l ; r <- a )
 
-decl drain2{n}{p} : (k : list{n}{p+2}) |{2}- (l : list{n}{p})
-proc l <- drain2{n}{p} <- k =
-  case k ( cons => x <- recv k ;
-                   l.cons ; send l x ;
-                   l <- drain2{n-1}{p} <- k
-         | nil => wait k ; l.nil ; close l )
+decl reverse{n}{p} : (l : list{n}{p+2}) |{2}- (r : list{n}{p})
+proc r <- reverse{n}{p} <- l =
+  a <- nil{p} <- ;
+  r <- rev{n}{0}{p} <- l a
 
-decl charge2{n}{p} : (k : list{n}{p}) |{4*n+2}- (l : list{n}{p+2})
-proc l <- charge2{n}{p} <- k =
-  case k ( cons => x <- recv k ;
-                   l.cons ; send l x ;
-                   l <- charge2{n-1}{p} <- k
-         | nil => wait k ; l.nil ; close l )
-
-
-decl alternate{m}{n}{p} : (l1 : list{m}{p+2}) (l2 : list{n}{p+2}) |{2}- (l : list{m+n}{p})
-proc l <- alternate{m}{n}{p} <- l1 l2 =
-  case l1 ( cons => x <- recv l1 ;
-                    l.cons ; send l x ;
-                    l <- alternate{n}{m-1}{p} <- l2 l1
-          | nil => wait l1 ;
-                   l <- drain2{n}{p} <- l2 )
-
-type mapper = &{ next : nat -o nat * mapper,
-                 done : 1 }
-
-decl map{n}{p} : (k : list{n}{p+4}) (m : mapper) |{3}- (l : list{n}{p})
-
-proc l <- map{n}{p} <- k m =
-  case k ( cons => x <- recv k ;
-                   m.next ; send m x ;
-                   y <- recv m ;
-                   l.cons ; send l y ;
-                   l <- map{n-1}{p} <- k m
-         | nil => wait k ;
-                  m.done ; wait m ;
-                  l.nil ; close l )
-
-type folder = &{ next : nat -o nat -o nat * folder,
-                 done : 1 }
-
-decl fold{n}{p} :  (f : folder) (k : list{n}{p+3}) (y : nat) |{1}- (r : nat)
-proc r <- fold{n}{p} <- f k y =
-  case k ( cons => x <- recv k ;
-                   f.next ; send f x ; send f y ; 
-                   y' <- recv f ;
-                   r <- fold{n-1}{p} <- f k y'
-         | nil => wait k ;                   
-                  f.done ; wait f ;
-                  r <- y )
-
+%%% Split a list into two: one with the even elements and one with the odd ones
+%%% We could also have l12 : list{n}{p} * list{n}{p} with less work required,
+%%% but the code is somewhat asymmetric.
+%%% This example illustrates that cases that are impossible, according to the
+%%% type, are reconstructed
 decl split{n}{p} : (l : list{2*n}{p+5}) |{7}- (l12 : list{n}{p} * list{n}{p} * 1)
 decl split'{n}{p} : (l : list{2*n+1}{p+5}) |{7}- (l12 : list{n}{p} * list{n+1}{p} * 1)
 
@@ -99,6 +71,108 @@ proc l12 <- split'{n}{p} <- l =
                   send l12 l1' ; send l12 l2 ; close l12
          % no nil case
          )
+
+%%% Draining and recharging of potential
+%%% We could drain arbitrary potential q, but recharging arbitrary
+%%% potential would require (simple) nonlinear constraints.
+decl drain2{n}{p} : (k : list{n}{p+2}) |{2}- (l : list{n}{p})
+proc l <- drain2{n}{p} <- k =
+  case k ( cons => x <- recv k ;
+                   l.cons ; send l x ;
+                   l <- drain2{n-1}{p} <- k
+         | nil => wait k ; l.nil ; close l )
+
+decl charge2{n}{p} : (k : list{n}{p}) |{4*n+2}- (l : list{n}{p+2})
+proc l <- charge2{n}{p} <- k =
+  case k ( cons => x <- recv k ;
+                   l.cons ; send l x ;
+                   l <- charge2{n-1}{p} <- k
+         | nil => wait k ; l.nil ; close l )
+
+
+%%% Alternating elements of two lists 
+decl alternate{m}{n}{p} : (l1 : list{m}{p+2}) (l2 : list{n}{p+2}) |{2}- (l : list{m+n}{p})
+proc l <- alternate{m}{n}{p} <- l1 l2 =
+  case l1 ( cons => x <- recv l1 ;
+                    l.cons ; send l x ;
+                    l <- alternate{n}{m-1}{p} <- l2 l1
+          | nil => wait l1 ;
+                   l <- drain2{n}{p} <- l2 )
+
+%%% map
+%%% Due to linearity, this is implemented using a mapper
+%%% process of recursive type
+type mapper = &{ next : nat -o nat * mapper,
+                 done : 1 }
+
+decl map{n}{p} : (k : list{n}{p+4}) (m : mapper) |{3}- (l : list{n}{p})
+
+proc l <- map{n}{p} <- k m =
+  case k ( cons => x <- recv k ;
+                   m.next ; send m x ;
+                   y <- recv m ;
+                   l.cons ; send l y ;
+                   l <- map{n-1}{p} <- k m
+         | nil => wait k ;
+                  m.done ; wait m ;
+                  l.nil ; close l )
+
+%%% fold
+%%% Due to linearity, this is implemented using a folder
+%%% process of recursive type
+type folder = &{ next : nat -o nat -o nat * folder,
+                 done : 1 }
+
+decl fold{n}{p} :  (f : folder) (k : list{n}{p+3}) (y : nat) |{1}- (r : nat)
+proc r <- fold{n}{p} <- f k y =
+  case k ( cons => x <- recv k ;
+                   f.next ; send f x ; send f y ; 
+                   y' <- recv f ;
+                   r <- fold{n-1}{p} <- f k y'
+         | nil => wait k ;                   
+                  f.done ; wait f ;
+                  r <- y )
+
+%%% filter
+%%% Due to linearity, this is implemented using a selector process
+%%% of recursive type which returns the element it is given to test.
+type selector = &{ next : nat -o +{ false : selector, true : nat * selector },
+                   done : 1 }
+
+%%% This example illustrates one way to deal with lists of uncertain
+%%% length, here bounded by the length of the input list
+
+%%% bdd_list{n} is a list of some length m <= n
+%%% The nil, cons, and resize operations could be expanded in-line, but
+%%% we separate them out to isolate them.
+type bdd_list{n}{p} = ?m. ?{m <= n}. list{m}{p}
+
+decl bdd_nil{p} : . |{2}- (l : bdd_list{0}{p})
+proc l <- bdd_nil{p} <- = send l {0} ; l.nil ; close l
+
+decl bdd_cons{n}{p} : (x : nat) (k : bdd_list{n}{p}) |{p+2}- (l : bdd_list{n+1}{p})
+proc l <- bdd_cons{n}{p} <- x k =
+  {m} <- recv k ;
+  send l {m+1} ;
+  l.cons ; send l x ; l <- k
+
+decl bdd_resize{n}{p} : (k : bdd_list{n}{p}) |- (l : bdd_list{n+1}{p})
+proc l <- bdd_resize{n}{p} <- k =
+  {m} <- recv k ;
+  send l {m} ;
+  l <- k
+
+decl filter{n}{p} : (s : selector) (k : list{n}{p+4}) |{3}- (l : bdd_list{n}{p})
+proc l <- filter{n}{p} <- s k =
+  case k ( cons => x <- recv k ;
+                   s.next ; send s x ;
+                   case s ( false => l' <- filter{n-1}{p} <- s k ;
+                                     l <- bdd_resize{n-1}{p} <- l'
+                          | true => x' <- recv s ;
+                                    l' <- filter{n-1}{p} <- s k ;
+                                    l <- bdd_cons{n-1}{p} <- x' l' )
+          | nil => wait k ; s.done ; wait s ;
+                   send l {0} ; l.nil ; close l )
 
 %%% Stack data structure
 %%% Prepay for pop during push operation
@@ -166,8 +240,7 @@ proc q <- queue_lists{n1}{n2} <- in out =
                                     q <- queue_rev{n1} <- in ) )
 
 proc q <- queue_rev{n1} <- in =
-  out0 <- nil{2} <- ;
-  out <- rev{n1}{0}{2} <- in out0 ;
+  out <- reverse{n1}{2} <- in ;
   case out ( cons => x <- recv out ;
                      q.some ; send q x ;
                      in0 <- nil{4} <- ;

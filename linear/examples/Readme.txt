@@ -1,12 +1,12 @@
 Current status
 
 Todo
-- various list processing, and queues (idx, some with work) 
 - stacks and stack-based computation (idx, but not work, currently does not compile)
 - Turing machine encodings
 - modular arithmetic (idx, time, but not work, just ss)
 
 Done
+. various list processing, and queues (idx, some with work) 
 . binary arithmetic (idx, time, but not work, just ss) 
 . integers as pairs of natural numbers (idx, not work)
 . linear lambda-calculus (idx, not work, quant)
