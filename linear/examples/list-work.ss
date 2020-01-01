@@ -28,9 +28,18 @@ proc l <- cons{n}{p} <- x t = l.cons ; send l x ; l <- t
 %%% append
 decl append{n}{k}{p} : (l1 : list{n}{p+2}) (l2 : list{k}{p}) |- (l : list{n+k}{p})
 proc l <- append{n}{k}{p} <- l1 l2 =
-  case l1 ( cons => l.cons ;
-                    n <- recv l1 ; send l n ;
+  case l1 ( cons => n <- recv l1 ;
+                    l.cons ; send l n ;
                     l <- append{n-1}{k}{p} <- l1 l2
+          | nil => wait l1 ; l <- l2 )
+
+%%% Version of append where all lists have the same
+%%% potential and we pay the cost up front, externally
+decl append'{n}{k}{p} : (l1 : list{n}{p}) (l2 : list{k}{p}) |{2*n}- (l : list{n+k}{p})
+proc l <- append'{n}{k}{p} <- l1 l2 =
+  case l1 ( cons => n <- recv l1 ;
+                    l.cons ; send l n ;
+                    l <- append'{n-1}{k}{p} <- l1 l2
           | nil => wait l1 ; l <- l2 )
 
 %%% reverse
@@ -55,20 +64,20 @@ decl split{n}{p} : (l : list{2*n}{p+5}) |{7}- (l12 : list{n}{p} * list{n}{p} * 1
 decl split'{n}{p} : (l : list{2*n+1}{p+5}) |{7}- (l12 : list{n}{p} * list{n+1}{p} * 1)
 
 proc l12 <- split{n}{p} <- l =
-  case l (cons => x <- recv l ;
-                  l12' <- split'{n-1}{p} <- l ;
-                  l1' <- recv l12' ; l2' <- recv l12' ; wait l12' ;
-                  l1 <- cons{n-1}{p} <- x l1' ;
-                  send l12 l1 ; send l12 l2' ; close l12
+  case l ( cons => x <- recv l ;
+                   l12' <- split'{n-1}{p} <- l ;
+                   l1' <- recv l12' ; l2' <- recv l12' ; wait l12' ;
+                   l1 <- cons{n-1}{p} <- x l1' ;
+                   send l12 l1 ; send l12 l2' ; close l12
          | nil => wait l ;
                   l1 <- nil{p} <- ; send l12 l1 ;
                   l2 <- nil{p} <- ; send l12 l2 ; close l12 )
 proc l12 <- split'{n}{p} <- l =                   
-  case l (cons => x <- recv l ;
-                  l12' <- split{n}{p} <- l ;
-                  l1' <- recv l12' ; l2' <- recv l12' ; wait l12' ;
-                  l2 <- cons{n}{p} <- x l2' ;
-                  send l12 l1' ; send l12 l2 ; close l12
+  case l ( cons => x <- recv l ;
+                   l12' <- split{n}{p} <- l ;
+                   l1' <- recv l12' ; l2' <- recv l12' ; wait l12' ;
+                   l2 <- cons{n}{p} <- x l2' ;
+                   send l12 l1' ; send l12 l2 ; close l12
          % no nil case
          )
 
