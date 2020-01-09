@@ -306,6 +306,9 @@ fun elab_tps env nil = nil
 (* Elaboration, Second Pass *)
 (****************************)
 
+val recon_time = ref 0
+val tc_time = ref 0
+
 (* elab_env env decls = env' if all declarations in decls
  * are well-typed with respect to env, elaborating to env'
  * raises exception otherwise.
@@ -353,7 +356,11 @@ and elab_exps env nil = nil
              val (D,zC) = (subst_chans D xs, subst_chan zC x)
              val () = TC.closed_exp vs P ext
              (* val P' = Cost.apply_cost_model P *) (* cost model now applied during reconstruction *)
+             val trecon_init = Time.toMicroseconds (Time.now ())
              val P' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con D pot P zC ext
+             val trecon_final = Time.toMicroseconds (Time.now ())
+             val trecon = trecon_final - trecon_init
+             val () = recon_time := !recon_time + trecon
              val () = case !Flags.syntax                     (* print reconstructed term *)
                        of Flags.Implicit =>                  (* if syntax implicit *)
                           if !Flags.verbosity >= 2           (* and verbose *)
@@ -366,6 +373,7 @@ and elab_exps env nil = nil
                                ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,(xs,P',x),ext)) ^ "\n") )
                           else ()
              (* is necessary for implicit syntax, since reconstruction is approximate *)
+             val tc_init = Time.toMicroseconds (Time.now ())
              val () = TC.check_exp false env vs con D pot P' zC ext (* type check *)
                  handle ErrorMsg.Error =>
                         (* if verbosity >= 2, type-check again, this time with tracing *)
@@ -373,6 +381,9 @@ and elab_exps env nil = nil
                         then ( TextIO.print ("% tracing type checking...\n")
                              ; TC.check_exp true env vs con D pot P' zC ext ) (* will re-raise ErrorMsg.Error *)
                         else raise ErrorMsg.Error (* re-raise if not in verbose mode *)
+             val tc_final = Time.toMicroseconds (Time.now ())
+             val tc = tc_final - tc_init
+             val () = tc_time := !tc_time + tc
              val P' = A.strip_exts P' (* always strip extents whether implicit or explicit syntax *)
          in
              A.ExpDef(f,vs,(xs,P',x),ext)::elab_exps' env decls
@@ -396,6 +407,8 @@ fun elab_decls env decls =
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'
+        val () = TextIO.print ("% recon time: " ^ LargeInt.toString (!recon_time) ^ " us\n")
+        val () = TextIO.print ("% TC time: " ^ LargeInt.toString (!tc_time) ^ " us\n")
         (*
         val () = case !Flags.terminate
                   of NONE => ()
