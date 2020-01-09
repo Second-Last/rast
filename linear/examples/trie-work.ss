@@ -117,18 +117,14 @@ proc t <- leaf <- =
                            l <- leaf <- ;
                            c0 <- empty <- ;
                            r <- leaf <- ;
-                           l.ins ;
-                           send l {k'} ;
-                           send l x ;
+                           l.ins ; send l {k'} ; send l x ;
                            t <- node{1}{0}{0} <- l c0 r
                          | b1 =>
                            {k'} <- recv x ;
                            l <- leaf <- ;
                            c0 <- empty <- ;
                            r <- leaf <- ;
-                           r.ins ;
-                           send r {k'} ;
-                           send r x ;
+                           r.ins ; send r {k'} ; send r x ;
                            t <- node{0}{0}{1} <- l c0 r
                          | e =>
                            wait x ;
@@ -152,13 +148,11 @@ proc t <- node{n0}{m}{n1} <- l c r =
                   x <- recv t ;
                   case x ( b0 =>
                            {k'} <- recv x ;
-                           l.ins ; send l {k'} ;
-                           send l x ;
+                           l.ins ; send l {k'} ; send l x ;
                            t <- node{n0+1}{m}{n1} <- l c r
                          | b1 =>
                            {k'} <- recv x ;
-                           r.ins ; send r {k'} ;
-                           send r x ;
+                           r.ins ; send r {k'} ; send r x ;
                            t <- node{n0}{m}{n1+1} <- l c r
                          | e =>
                            wait x ;
@@ -168,29 +162,21 @@ proc t <- node{n0}{m}{n1} <- l c r =
                    x <- recv t ;
                    case x ( b0 =>
                             {k'} <- recv x ;
-                            l.del ;
-                            send l {k'} ;
-                            send l x ;
+                            l.del ; send l {k'} ; send l x ;
                             {m1} <- recv l ;
-                            a <- recv l ;
-                            send t {m1} ;
-                            send t a ;
+                            a <- recv l ; send t {m1} ; send t a ;
                             t <- node{n0-m1}{m}{n1} <- l c r
                           | b1 =>
                             {k'} <- recv x ;
-                            r.del ;
-                            send r {k'} ;
-                            send r x ;
+                            r.del ; send r {k'} ; send r x ;
                             {m2} <- recv r ;
                             a <- recv r ;
-                            send t {m2} ;
-                            send t a ;
+                            send t {m2} ; send t a ;
                             t <- node{n0}{m}{n1-m2} <- l c r
                           | e =>
                             wait x ;
                             send t {m} ;
-                            c.val ; 
-                            send t c ;
+                            c.val ; send t c ;
                             c0 <- empty <- ;
                             t <- node{n0}{0}{n1} <- l c0 r
                           )
