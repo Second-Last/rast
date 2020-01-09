@@ -28,8 +28,8 @@ proc l <- cons{n}{p} <- x t = l.cons ; send l x ; l <- t
 %%% append
 decl append{n}{k}{p} : (l1 : list{n}{p+2}) (l2 : list{k}{p}) |- (l : list{n+k}{p})
 proc l <- append{n}{k}{p} <- l1 l2 =
-  case l1 ( cons => n <- recv l1 ;
-                    l.cons ; send l n ;
+  case l1 ( cons => x <- recv l1 ;
+                    l.cons ; send l x ;
                     l <- append{n-1}{k}{p} <- l1 l2
           | nil => wait l1 ; l <- l2 )
 
@@ -37,8 +37,8 @@ proc l <- append{n}{k}{p} <- l1 l2 =
 %%% potential and we pay the cost up front, externally
 decl append'{n}{k}{p} : (l1 : list{n}{p}) (l2 : list{k}{p}) |{2*n}- (l : list{n+k}{p})
 proc l <- append'{n}{k}{p} <- l1 l2 =
-  case l1 ( cons => n <- recv l1 ;
-                    l.cons ; send l n ;
+  case l1 ( cons => x <- recv l1 ;
+                    l.cons ; send l x ;
                     l <- append'{n-1}{k}{p} <- l1 l2
           | nil => wait l1 ; l <- l2 )
 
@@ -181,7 +181,7 @@ proc l <- filter{n}{p} <- s k =
                                     l' <- filter{n-1}{p} <- s k ;
                                     l <- bdd_cons{n-1}{p} <- x' l' )
           | nil => wait k ; s.done ; wait s ;
-                   send l {0} ; l.nil ; close l )
+                   l <- bdd_nil{p} <- )
 
 %%% Stack data structure
 %%% Prepay for pop during push operation

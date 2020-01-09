@@ -73,6 +73,18 @@ proc y <- dbl0{n} <- x =
                  y <- x
          | e => y.e ; wait x ; close y )
 
+(*
+proc y <- dbl0{n} <- x =
+  y.b0 ; send y {n} ;
+  y <- x
+*)
+% gives error
+% arith.ss:79.10-79.20:error:assertion not entailed: true |/= 2*n > 0
+%  y.b0 ; send y {n} ;
+%         ~~~~~~~~~~ 
+% because it could introduce leading zeros.
+
+
 proc y <- dbl1{n} <- x =
   y.b1 ; send y {n} ;
   y <- x
@@ -105,6 +117,17 @@ proc y <- pred{n} <- x =
   case x ( b0 => {n'} <- recv x ;    % 2*k-1 = 2*(k-1)+1
                  y.b1 ; send y {n'-1} ;
                  y <- pred{n'} <- x
+         | b1 => {n'} <- recv x ;
+                 y <- dbl0{n'} <- x  % 2*k+1-1 = 2*k
+         % no case for e
+         )
+
+% Alternative formulation without explicit constraint
+decl pred'{n} : (x : bin{n+1}) |- (y : bin{n})
+proc y <- pred'{n} <- x =
+  case x ( b0 => {n'} <- recv x ;    % 2*k-1 = 2*(k-1)+1
+                 y.b1 ; send y {n'-1} ;
+                 y <- pred'{n'-1} <- x
          | b1 => {n'} <- recv x ;
                  y <- dbl0{n'} <- x  % 2*k+1-1 = 2*k
          % no case for e
@@ -159,7 +182,6 @@ proc o <- compare{m}{n} <- x y =
                                                 o.gt ; close o )
                         | e => wait y ; u <- drop{m'} <- x ; wait u ;
                                o.gt ; close o )
-         
          | e => wait x ;
                 case y ( b0 => {n'} <- recv y ;
                                u <- drop{n'} <- y ; wait u ;
