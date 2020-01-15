@@ -13,7 +13,7 @@ ss: *.mlb *.sml
 ss-test: *.mlb *.sml
 	$(MLTON) -output ss-test sources-test.mlb
 
-all: ss ss-test
+all: lin lin-test
 
 .PHONY: clean
 clean:
