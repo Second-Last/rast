@@ -36,11 +36,9 @@ type children{w}{h} = +{nil : ?{w = 0}. 1,
 
 type list{n} = +{nil : ?{n = 0}. 1, cons : ?{n > 0}. A * list{n-1}}
 
+(*
 decl bfs{w}{h} : (t : tree{w}{h}) (q : queue{0}) |- (n : list{w*h})
 decl bfs_helper{w}{h}{n} : (t : tree{w}{h}) (q : queue{n}) |- (n : list{w*h})
 
 proc n <- bfs_helper{w}{h}{n} <- t q =
-  q.del ;
-  case q (
-    
-  )
+*)

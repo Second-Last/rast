@@ -1,6 +1,8 @@
 #test success
 #options --work=send --syntax=explicit
 
+type A = 1
+
 type listA1 = +{cons : |{2}> A * listA1, nil : 1}
 type listA0 = +{cons : A * listA0, nil : 1}
 

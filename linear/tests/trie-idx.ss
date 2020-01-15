@@ -1,3 +1,6 @@
+#options --syntax=explicit
+#test error
+
 % bin{n} = binary numbers of value n
 % leading 0s are allowed here, but could be
 % eliminated with b0 : ?{k}. ?{n > 0 & n = 2*k}. bin{k}

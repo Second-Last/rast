@@ -1,7 +1,6 @@
 #test success
 #options --syntax=implicit
 
-
 type A = 1
 
 type stack{n} = &{ins : A -o stack{n+1},
@@ -190,7 +189,7 @@ decl eval2{n}{v} : (e : postfix{n}{v+2}) (s : natstack{v+2}) |- (N : nat)
 decl eval11{n}{v} : (e : postfix{n}{v+1}) (s : natstack{v+1}) |- (N : nat)
 
 
-proc v <- evaluate{n} <- e =
+proc N <- evaluate{n} <- e =
   s <- natempty <- ;
   N <- eval0{n} <- e s
 

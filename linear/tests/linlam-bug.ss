@@ -1,4 +1,4 @@
-#test success
+#test error
 #options --work=none --time=none --syntax=implicit
 
 % linear lambda-calculus with "subtyping"

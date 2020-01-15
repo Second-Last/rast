@@ -1,4 +1,4 @@
-#test success
+#test error
 #options --work=send --time=none --syntax=implicit
 
 %%% Linear lambda calculus using ideas from HOAS,
