@@ -530,7 +530,7 @@ fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
 fun update_tp (x,A) ((y,B)::D') = if x = y then (x,A)::D' else (y,B)::(update_tp (x,A) D')
 
 fun remove_chan x ((y,B)::D') ext = if x = y then D' else (y,B)::(remove_chan x D' ext)
-  | remove_chan x [] ext = ERROR ext ("cannot remove " ^ x ^ " from context")
+  | remove_chan x [] ext = ERROR ext ("channel " ^ x ^ " not present in context")
 
 fun remove_chans [] D ext = D
   | remove_chans (x::xs) D ext = remove_chans xs (remove_chan x D ext) ext

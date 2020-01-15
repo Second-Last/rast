@@ -407,8 +407,11 @@ fun elab_decls env decls =
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'
-        val () = TextIO.print ("% recon time: " ^ LargeInt.toString (!recon_time) ^ " us\n")
-        val () = TextIO.print ("% TC time: " ^ LargeInt.toString (!tc_time) ^ " us\n")
+        val () = if !Flags.verbosity = ~1 then TextIO.print "\n" else ()
+        val () = if !Flags.verbosity = ~1 orelse !Flags.verbosity >= 2
+                 then ( TextIO.print ("% recon time: " ^ LargeInt.toString (!recon_time) ^ " us\n")
+                      ; TextIO.print ("% check time: " ^ LargeInt.toString (!tc_time) ^ " us\n") )
+                 else ()
         (*
         val () = case !Flags.terminate
                   of NONE => ()

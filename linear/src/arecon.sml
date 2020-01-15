@@ -42,6 +42,10 @@ fun check_declared env (f,es) ext =
                          ^ "but defined with " ^ Int.toString (List.length vs))
        | NONE => E.error_undeclared (f, ext))
 
+fun pp_channels (nil) = ""
+  | pp_channels ((x,A)::nil) = x
+  | pp_channels ((x,A)::D) = x ^ " " ^ pp_channels D
+
 (* recon env A P C ext = P' where P' == P
  * may raise ErrorMsg.error
  *
@@ -128,8 +132,10 @@ and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env A)
 
 and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
-    (* tolerate non-empty context *)
-    A.Close(x)
+    let val () = case D
+                  of nil => ()
+                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D ^ " at close")
+    in A.Close(x) end
   | oneR env D (A.Close(x)) (z,C) ext =
     ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env C)
 
@@ -161,17 +167,23 @@ and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any r
  *)
 (* judgmental constructs: id, cut, spawn *)
 and recon' env D (P as A.Id(x,y)) (z,C) ext =
-    if x = z andalso (ignore (TC.lookup_context env y D ext) ; true)
-    then P
-    else ERROR ext ("incorrect channels in forward")
+    let val () = if x <> z then ERROR ext ("name mismatch " ^ x ^ " <> " ^ x) else ()
+        val D' = TC.remove_chan y D ext
+        val () = case D'
+                  of nil => ()
+                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " in forward")
+    in P end
   | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) zC ext =
     let val D' = TC.syn_call env D P ext
     in A.Spawn(P, recon env D' Q zC ext) end
-  | recon' env A (P as A.ExpName(x,f,es,xs)) (z,C) ext =
-    ( if x <> z then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z) else ()
-      (* also check context? *)
-    ; check_declared env (f,es) ext
-    ; P )
+  | recon' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+    let val () = if x <> z then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z) else ()
+        val D' = TC.remove_chans xs D ext
+        val () = case D'
+                  of nil => ()
+                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " in tail call")
+        val () = check_declared env (f,es) ext
+    in P end
 
   (* begin cases for each action matching their type *)
   | recon' env D (P as A.Lab(x,k,P')) (z,C) ext =
