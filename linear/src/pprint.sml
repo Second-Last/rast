@@ -126,9 +126,12 @@ fun pp_idx nil = ""
 fun pp_pot (R.Int(0)) = ""
   | pp_pot e = "{" ^ pp_arith e ^ "}"
 
-(* pp_pospos p = "{p}", "" if p = 1 *)
+(* pp_potpos p = "{p}", "" if p = 1 *)
 fun pp_potpos (R.Int(1)) = ""
   | pp_potpos e = "{" ^ pp_arith e ^ "}"
+
+(* pp_potany p = "{p}" *)
+fun pp_potany e = "{" ^ pp_arith e ^ "}"
 
 (* pp_time t = "{t}", "" if t = 1 *)
 fun pp_time (R.Int(1)) = ""
@@ -200,8 +203,8 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.Next(t,A)) = "(" ^ pp_time t ^ ") " ^ pp_tp (i+len(pp_time t)+3) A
   | pp_tp i (A.Box(A)) = "[]" ^ pp_tp (i+2) A
   | pp_tp i (A.Dia(A)) = "<>" ^ pp_tp (i+2) A
-  | pp_tp i (A.GetPot(p,A)) = "<" ^ pp_potpos p ^ "| " ^ pp_tp (i+len(pp_potpos(p))+3) A
-  | pp_tp i (A.PayPot(p,A)) = "|" ^ pp_potpos p ^ "> " ^ pp_tp (i+len(pp_potpos(p))+3) A
+  | pp_tp i (A.GetPot(p,A)) = "<" ^ pp_potany p ^ "| " ^ pp_tp (i+len(pp_potany(p))+3) A
+  | pp_tp i (A.PayPot(p,A)) = "|" ^ pp_potany p ^ "> " ^ pp_tp (i+len(pp_potany(p))+3) A
   | pp_tp i (A.Exists(phi,A)) = "?" ^ pp_con phi ^ ". " ^ pp_tp (i+len(pp_con(phi))+3) A
   | pp_tp i (A.Forall(phi,A)) = "!" ^ pp_con phi ^ ". " ^ pp_tp (i+len(pp_con(phi))+3) A
   | pp_tp i (A.ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
@@ -276,9 +279,9 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
   | pp_exp env i (A.Delay(t,P)) = "delay " ^ pp_time t ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.When(x,P)) = "when? " ^ x ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Now(x,Q)) = "now! " ^ x ^ " ;\n" ^ pp_exp_indent env i Q
-  | pp_exp env i (A.Work(p, P)) = "work " ^ pp_potpos p ^ " ;\n" ^ pp_exp_indent env i P
-  | pp_exp env i (A.Pay(x,p,P)) = "pay " ^ x ^ " " ^ pp_potpos p ^ " ;\n" ^ pp_exp_indent env i P
-  | pp_exp env i (A.Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potpos p ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.Work(p, P)) = "work " ^ pp_potany p ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.Pay(x,p,P)) = "pay " ^ x ^ " " ^ pp_potany p ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potany p ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_con phi ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ;\n" ^ pp_exp_indent env i P
@@ -314,9 +317,9 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
   | pp_exp_prefix env (A.Delay(t,P)) = "delay " ^ pp_time t ^ " ; ..."
   | pp_exp_prefix env (A.When(x,P)) = "when? " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Now(x,Q)) = "now! " ^ x ^ " ; ..."
-  | pp_exp_prefix env (A.Work(p,P)) = "work " ^ pp_potpos p ^ " ; ..."
-  | pp_exp_prefix env (A.Pay(x,p,P)) = "pay " ^ x ^ " " ^ pp_potpos p ^ " ; ..."
-  | pp_exp_prefix env (A.Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potpos p ^ " ; ..."
+  | pp_exp_prefix env (A.Work(p,P)) = "work " ^ pp_potany p ^ " ; ..."
+  | pp_exp_prefix env (A.Pay(x,p,P)) = "pay " ^ x ^ " " ^ pp_potany p ^ " ; ..."
+  | pp_exp_prefix env (A.Get(x,p,P)) = "get " ^ x ^ " " ^ pp_potany p ^ " ; ..."
   | pp_exp_prefix env (A.Assert(x,phi,P)) = "assert " ^ x ^ " " ^ pp_con phi ^ " ; ..."
   | pp_exp_prefix env (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ; ..."
   | pp_exp_prefix env (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ; ..."

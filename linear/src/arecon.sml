@@ -65,19 +65,19 @@ and plusR env D (A.Lab(x,k,P)) (z,C as A.Plus(choices)) ext = (* x = z *)
       of SOME(Ck) => A.Lab(x,k,recon env D P (z,Ck) ext)
        | NONE => E.error_label_invalid env (k, C, ext))
   | plusR env D (A.Lab(x,k,P)) (z,C) ext = (* x = z *)
-    ERROR ext ("type mismatch for " ^ x ^ ": expected internal choice, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch for " ^ x ^ ": expected internal choice +{...}, found: " ^ PP.pp_tp_compact env C)
 
 and withL env D (A as A.With(choices)) (A.Lab(x,k,P)) zC ext =
     (case A.lookup_choice choices k
       of SOME(Ak) => A.Lab(x,k,recon env (TC.update_tp (x,Ak) D) P zC ext)
        | NONE => E.error_label_invalid env (k, A, ext))
   | withL env D A (A.Lab(x,k,P)) zC ext =
-    ERROR ext ("type mismatch for " ^ x ^ ": expected external choice, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch for " ^ x ^ ": expected external choice &{...}, found: " ^ PP.pp_tp_compact env A)
 
 and withR env D (A.Case(x,branches)) (z,A.With(choices)) ext = (* x = z *)
     A.Case(x,recon_branchesR env D branches (z,choices) ext)
   | withR env D (A.Case(x,branches)) (z,C) ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected external choice, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected external choice &{...}, found: " ^ PP.pp_tp_compact env C)
 
 (* branchesR for case handling external choice *)
 (* tolerate missing branches *)
@@ -95,7 +95,7 @@ and recon_branchesR env D nil (z,nil) ext = nil
 and plusL env D (A.Plus(choices)) (A.Case(x,branches)) zC ext = (* z <> x *)
     A.Case(x,recon_branchesL env D (x,choices) branches zC ext)
   | plusL env D A (A.Case(x,branches)) zC ext =
-    ERROR ext ("type miscmatch of " ^ x ^ ": expected internal choice, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type miscmatch of " ^ x ^ ": expected internal choice +{...}, found: " ^ PP.pp_tp_compact env A)
 
 (* branchesL for case handling internal choice *)
 (* tolerate missing branches *)
@@ -114,22 +114,22 @@ and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
     (* do not check type equality here, just remove w *)
     A.Send(x,w,recon env (TC.remove_chan w D ext) P (z,B) ext)
   | tensorR env D (A.Send(x,w,P)) (z,C) ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor (_ * _), found: " ^ PP.pp_tp_compact env C)
 
 and lolliL env D (A.Lolli(A,B)) (A.Send(x,w,P)) zC ext = (* x <> z *)
     A.Send(x,w,recon env (TC.update_tp (x,B) (TC.remove_chan w D ext)) P zC ext)
   | lolliL env D A (A.Send(x,w,P)) zC ext =
-    ERROR ext ("type mismatch for " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch for " ^ x ^ ": expected lolli (_ -o _), found: " ^ PP.pp_tp_compact env A)
 
 and lolliR env D (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext = (* x = z *)
     A.Recv(x,y,recon env ((y,A)::D) P (z,B) ext)        (* check if y is fresh here? *)
   | lolliR env D (A.Recv(x,y,P)) (z,C) ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected lolli, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected lolli (_ -o _), found: " ^ PP.pp_tp_compact env C)
 
 and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
     A.Recv(x,y,recon env ((y,A)::TC.update_tp (x,B) D) P zC ext) (* check if y is fresh here? *)
   | tensorL env D A (A.Recv(x,y,P)) zC ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected tensor (_ * _), found: " ^ PP.pp_tp_compact env A)
 
 and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
     let val () = case D
@@ -137,29 +137,29 @@ and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
                    | _ => ERROR ext ("unclosed channels " ^ pp_channels D ^ " at close")
     in A.Close(x) end
   | oneR env D (A.Close(x)) (z,C) ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected unit (1), found: " ^ PP.pp_tp_compact env C)
 
 and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
     A.Wait(x,recon env (TC.remove_chan x D ext) P zC ext)
   | oneL env D A (A.Wait(x,P)) zC ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected '1', found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected unit (1), found: " ^ PP.pp_tp_compact env A)
 
 and existsNatR env D (A.SendNat(x,e,P)) (z,A.ExistsNat(v,C)) ext =
     A.SendNat(x,e,recon env D P (z,C) ext) (* Q: any reason to substitute here? *)
   | existsNatR env D (A.SendNat(x,e,P)) (z,C) ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected ?v._, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected existential (?v._), found: " ^ PP.pp_tp_compact env C)
 and forallNatL env D (A.ForallNat(v,A)) (A.SendNat(x,e,P)) zC ext = (* Q: any reason to substitute here? *)
     A.SendNat(x,e,recon env (TC.update_tp (x,A) D) P zC ext)
   | forallNatL env D A (A.SendNat(x,e,P)) zC ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected !v._, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected universal (!v._), found: " ^ PP.pp_tp_compact env A)
 and forallNatR env D (A.RecvNat(x,v,P)) (z,A.ForallNat(v',C)) ext = (* Q: any reason to alpha-convert here? *)
     A.RecvNat(x,v,recon env D P (z,C) ext)
   | forallNatR env D (A.RecvNat(x,v,P)) (z,C) ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected !v._, found: " ^ PP.pp_tp_compact env C)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected universal (!v._), found: " ^ PP.pp_tp_compact env C)
 and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any reason to alpha-convert here? *)
     A.RecvNat(x,v,recon env (TC.update_tp (x,A) D) P zC ext)
   | existsNatL env D A (A.RecvNat(x,v,P)) zC ext =
-    ERROR ext ("type mismatch of " ^ x ^ ": expected ?v._, found: " ^ PP.pp_tp_compact env A)
+    ERROR ext ("type mismatch of " ^ x ^ ": expected existential (?v._), found: " ^ PP.pp_tp_compact env A)
 
 (* recon' env A P C ext
  * assumes A, C are structural
@@ -167,17 +167,23 @@ and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any r
  *)
 (* judgmental constructs: id, cut, spawn *)
 and recon' env D (P as A.Id(x,y)) (z,C) ext =
-    let val () = if x <> z then ERROR ext ("name mismatch " ^ x ^ " <> " ^ x) else ()
+    let val () = if x = z then ()
+                 else ERROR ext ("name mismatch in forward\n"
+                                 ^ "providing     " ^ z ^ "\n"
+                                 ^ "forwarding to " ^ x)
         val D' = TC.remove_chan y D ext
         val () = case D'
                   of nil => ()
-                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " in forward")
+                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " at forward")
     in P end
   | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) zC ext =
     let val D' = TC.syn_call env D P ext
     in A.Spawn(P, recon env D' Q zC ext) end
   | recon' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
-    let val () = if x <> z then ERROR ext ("name mismatch: " ^ x ^ " <> " ^ z) else ()
+    let val () = if x = z then ()
+                 else ERROR ext ("name mismatch in tail call:\n"
+                                 ^ "providing " ^ z ^ "\n"
+                                 ^ "tail call " ^ x)
         val D' = TC.remove_chans xs D ext
         val () = case D'
                   of nil => ()
@@ -209,11 +215,14 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
   | recon' env D (P as A.Close(x)) (z,C) ext =
     if x = z
     then oneR env D P (z,skip env C) ext
-    else ERROR ext ("name mismatch on right: " ^ x ^ " <> " ^ z)
+    else ERROR ext ("name mismatch at 'close':\n"
+                    ^ "providing " ^ z ^ "\n"
+                    ^ "closing   " ^ x)
 
   | recon' env D (P as A.Wait(x,P')) (z,C) ext =
     if x = z
-    then ERROR ext ("name mismatch on left: " ^ x ^ " <> " ^ z) (* strange error message *)
+    then ERROR ext ("name mismatch at 'wait':\n"
+                    ^ "waiting on provided channel " ^ z)
     else oneL env D (lookup_skip env x D ext) P (z,C) ext
 
   | recon' env D (P as A.SendNat(x,e,P')) (z,C) ext =

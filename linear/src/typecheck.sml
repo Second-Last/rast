@@ -519,27 +519,52 @@ fun expd env (A.TpName(a,es)) = A.expd_tp env (a,es)
 fun expand env (A.TpName(a,es)) = expand env (A.expd_tp env (a,es))
   | expand env A = A
 
-fun eq_context env ctx con nil nil = true
-  | eq_context env ctx con ((x,A)::D) ((x',A')::D') =
+(*
+fun eq_context env ctx con ((x,A)::D) ((x',A')::D') =
       eq_tp' env ctx con nil A A' andalso eq_context env ctx con D D'
+  | eq_context env ctx con nil nil = true
   | eq_context env ctx con _ _ = false
+*)
 
-fun lookup_context env x [] ext = ERROR ext ("unknown channel " ^ x)
-  | lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context env x D' ext
+(* match_contexts env ctx con D D' ext = ()
+ * D is typing of channels passed to a process f in call
+ * D' is typing of parameter channels in declaration of process f
+ * Order should match, types should match, channel names may be different
+ *)
+fun match_contexts env ctx con ((x,A)::D) ((x',A')::D') ext =
+    if eq_tp' env ctx con nil A A'
+    then match_contexts env ctx con D D' ext
+    else let val (x_len,x'_len) = (String.size x, String.size x')
+             val var_len = Int.max(x_len, x'_len)
+             val (x_str,x'_str) = (StringCvt.padRight #" " var_len x,
+                                   StringCvt.padRight #" " var_len x')
+         in
+             ERROR ext ("type mismatch in call:\n"
+                        ^ "parameter " ^ x'_str ^ " : " ^ PP.pp_tp_compact env A' ^ "\n"
+                        ^ "argument  " ^ x_str ^ " : " ^ PP.pp_tp_compact env A)
+         end
+  | match_contexts env ctx con nil nil ext = ()
+  | match_contexts env ctx con D D' ext =
+    ERROR ext ("wrong number of arguments in call:\n"
+               ^ "parameters " ^ PP.pp_context_compact env D' ^ "\n"
+               ^ "arguments  " ^ PP.pp_context_compact env D)
+
+fun lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context env x D' ext
+  | lookup_context env x nil ext = ERROR ext ("channel " ^ x ^ " not present in context")
 
 fun update_tp (x,A) ((y,B)::D') = if x = y then (x,A)::D' else (y,B)::(update_tp (x,A) D')
+    (* nil should be impossible *)
 
 fun remove_chan x ((y,B)::D') ext = if x = y then D' else (y,B)::(remove_chan x D' ext)
-  | remove_chan x [] ext = ERROR ext ("channel " ^ x ^ " not present in context")
+  | remove_chan x nil ext = ERROR ext ("channel " ^ x ^ " not present in context")
 
-fun remove_chans [] D ext = D
-  | remove_chans (x::xs) D ext = remove_chans xs (remove_chan x D ext) ext
+fun remove_chans (x::xs) D ext = remove_chans xs (remove_chan x D ext) ext
+  | remove_chans nil D ext = D
 
 fun gen_context env xs D ext = List.map (fn x => (x,lookup_context env x D ext)) xs
 
-fun exists x [] = false
-  | exists x ((y,A)::D) = if x = y then true else exists x D
-
+fun exists x ((y,A)::D) = if x = y then true else exists x D
+  | exists x [] = false
 
 (* zip_check f vs es ext = [es/vs]
  * raises ErrorMsg.Error if |es| <> |vs|
@@ -779,8 +804,7 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
                       else ERROR ext ("process defined with " ^ Int.toString (List.length D') ^
                                       " arguments but called with " ^ Int.toString (List.length xs))
              val cutD = gen_context env xs D ext
-             val () = if eq_context env ctx con cutD D' then ()
-                      else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
+             val () = match_contexts env ctx con cutD D' ext (* should this be after entails? *)
              val () = if not (C.entails ctx con (R.Ge(pot, pot')))
                       then ERROR ext ("insufficient potential to spawn: " ^ C.pp_jfail con (R.Ge(pot, pot')))
                       else ()
@@ -794,7 +818,7 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
              val contD = remove_chans xs D ext
              val () = if exists x (zC::D) then ERROR ext ("variable " ^ x ^ " not fresh") else ()
          in
-         check_exp' trace env ctx con ((x,B)::contD) (R.minus(pot,pot')) Q zC ext
+             check_exp' trace env ctx con ((x,B)::contD) (R.minus(pot,pot')) Q zC ext
          end
     )
   | spawn trace env ctx con D pot (A.Spawn(A.Marked(marked_P),Q)) zC ext =
@@ -813,8 +837,11 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
                       else ERROR ext ("process defined with " ^ Int.toString (List.length D') ^
                                       " arguments but called with " ^ Int.toString (List.length xs))
              val cutD = gen_context env xs D ext
+             val () = match_contexts env ctx con cutD D' ext
+             (*
              val () = if eq_context env ctx con cutD D' then ()
                       else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
+             *)
              val () = if eq_tp' env ctx con nil C' C then ()
                       else ERROR ext ("type " ^ PP.pp_tp_compact env C' ^ " not equal " ^ PP.pp_tp_compact env C)
              val () = if not (C.entails ctx con (R.Eq(pot, pot')))
