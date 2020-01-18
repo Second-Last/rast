@@ -13,6 +13,9 @@ sig
   val check_normal : Arith.arith -> bool
   val compare : normal -> normal -> bool
 
+  datatype outcome = Valid | NotValid | Unknown
+  val decide : Arith.varname list -> Arith.prop -> Arith.prop -> outcome
+
 end
 
 structure Normalize :> NORMALIZE =
@@ -120,5 +123,67 @@ struct
     | subset p1 s2 = member p1 s2
 
   fun compare s1 s2 = subset s1 s2 andalso subset s2 s1
+
+  datatype outcome = Valid | NotValid | Unknown
+
+  fun and_ (R.True, phi2) = phi2
+    | and_ (phi1, R.True) = phi1
+    | and_ (R.False, phi2) = R.False
+    | and_ (phi1, R.False) = R.False
+    | and_ (phi1, phi2) = R.And(phi1, phi2)
+
+  fun or_ (R.True, phi2) = R.True
+    | or_ (phi1, R.True) = R.True
+    | or_ (R.False, phi2) = phi2
+    | or_ (phi1, R.False) = phi1
+    | or_ (phi1, phi2) = R.Or(phi1, phi2)
+
+  fun normalize_prop (R.Eq(e1,e2)) = R.Eq (normalize e1, normalize e2)
+    | normalize_prop (R.Lt(e1,e2)) = normalize_prop (R.Gt(e2,e1))
+    | normalize_prop (R.Gt(e1,e2)) = R.Gt (normalize (R.Sub(e1,e2)), R.Int(0))
+    | normalize_prop (R.Le(e1,e2)) = normalize_prop (R.Ge(e2,e1))
+    | normalize_prop (R.Ge(e1,e2)) = R.Ge (normalize (R.Sub(e1,e2)), R.Int(0))
+    | normalize_prop (R.Divides(n,e)) = R.Divides(n, normalize e)
+    | normalize_prop (R.True) = R.True
+    | normalize_prop (R.False) = R.False
+    | normalize_prop (R.Or(phi1,phi2)) = or_ (normalize_prop phi1, normalize_prop phi2)
+    | normalize_prop (R.And(phi1,phi2)) = and_ (normalize_prop phi1, normalize_prop phi2)
+    | normalize_prop (R.Implies(phi1,phi2)) = or_ (normalize_not phi1, normalize_prop phi2)
+    | normalize_prop (R.Not(phi)) = normalize_not phi
+  and normalize_not (R.Eq(e1,e2)) = R.Not (R.Eq(normalize e1, normalize e2))
+    | normalize_not (R.Lt(e1,e2)) = normalize_prop (R.Ge(e1,e2))
+    | normalize_not (R.Gt(e1,e2)) = normalize_prop (R.Le(e1,e2))
+    | normalize_not (R.Le(e1,e2)) = normalize_prop (R.Gt(e1,e2))
+    | normalize_not (R.Ge(e1,e2)) = normalize_prop (R.Lt(e1,e2))
+    | normalize_not (R.Divides(n,e)) = R.Not (R.Divides(n, normalize e))
+    | normalize_not (R.True) = R.False
+    | normalize_not (R.False) = R.True
+    | normalize_not (R.Or(phi1,phi2)) = and_ (normalize_not phi1, normalize_not phi2)
+    | normalize_not (R.And(phi1,phi2)) = or_ (normalize_not phi1, normalize_not phi2)
+    | normalize_not (R.Implies(phi1,phi2)) = and_ (normalize_prop phi1, normalize_not phi2)
+    | normalize_not (R.Not(phi)) = normalize_prop (phi)
+
+  fun all_pos_atom (R.Int(n)) = (n >= 0)
+    | all_pos_atom (R.Var(v)) = true
+  fun all_pos_prod (R.Mult(s,t)) = all_pos_prod s andalso all_pos_prod t
+    | all_pos_prod s = all_pos_atom s
+  fun all_pos_sum (R.Add(s,t)) = all_pos_sum s andalso all_pos_sum t
+    | all_pos_sum s = all_pos_prod s
+  fun all_pos s = all_pos_sum s
+
+  datatype outcome = Valid | NotValid | Unknown
+
+  fun decide_norm ctx con (R.Eq(s,t)) =
+      if compare s t then Valid else Unknown
+    | decide_norm ctx con (R.Ge(s,R.Int(0))) =
+      if all_pos s then Valid else Unknown
+    | decide_norm ctx con phi = Unknown
+                                
+  fun decide ctx con phi =
+      let val (con', phi') = R.subst_eq con R.True phi (* substitute out equalities *)
+          val phi'' = normalize_prop phi'
+      in
+          decide_norm ctx con phi''
+      end
 
 end  (* structure Normalize *)

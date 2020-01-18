@@ -152,9 +152,12 @@ fun entails ctx con phi =
       handle R.NonLinear =>
              if quick_check_valid ctx con phi (* quick check, for arbitrary propositions *)
              then (* yes: may or may not be valid *)
-                 ( TextIO.print ("Trusting: " ^ pp_jhold con phi ^ "\n")
-                 ; approx := true
-                 ; true )
+                 case N.decide ctx con phi
+                  of N.Valid => true
+                   | N.NotValid => false
+                   | N.Unknown => ( TextIO.print ("Trusting: " ^ pp_jhold con phi ^ "\n")
+                                  ; approx := true
+                                  ; true )
              else (* no: definitely not valid *)
                  false
             | R.Anonymous =>
@@ -197,9 +200,12 @@ fun contradictory ctx con phi =
       handle R.NonLinear =>
              if quick_check_unsat ctx con phi
              then (* yes: may or may not be contradictory *)
-                 ( TextIO.print ("Trusting: " ^ pp_junsat con phi ^ "\n")
-                 ; approx := true
-                 ; true )
+                 case N.decide ctx (R.And(con,phi)) R.False
+                  of N.Valid => true
+                   | N.NotValid => false
+                   | N.Unknown => ( TextIO.print ("Trusting: " ^ pp_junsat con phi ^ "\n")
+                                  ; approx := true
+                                  ; true )
              else (* no: definitely not contradictory *)
                  false
            | R.Anonymous =>

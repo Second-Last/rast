@@ -519,13 +519,6 @@ fun expd env (A.TpName(a,es)) = A.expd_tp env (a,es)
 fun expand env (A.TpName(a,es)) = expand env (A.expd_tp env (a,es))
   | expand env A = A
 
-(*
-fun eq_context env ctx con ((x,A)::D) ((x',A')::D') =
-      eq_tp' env ctx con nil A A' andalso eq_context env ctx con D D'
-  | eq_context env ctx con nil nil = true
-  | eq_context env ctx con _ _ = false
-*)
-
 (* match_contexts env ctx con D D' ext = ()
  * D is typing of channels passed to a process f in call
  * D' is typing of parameter channels in declaration of process f

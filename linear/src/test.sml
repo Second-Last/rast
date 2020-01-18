@@ -96,6 +96,13 @@ fun extract_outcome nil = (* nothing specified, default to Success *)
 
 exception Outcome of outcome * outcome (* expected, actual *)
 
+fun accept_outcome (StaticError, StaticError) = true
+  | accept_outcome (Success, Success) = true
+  | accept_outcome (ApproxDynSuccess, ApproxDynSuccess) = true
+  | accept_outcome (ApproxDynSuccess, Success) = true (* constraint actually solved *)
+  | accept_outcome (ApproxDynError, ApproxDynError) = true
+  | accept_outcome (_, _) = false
+
 fun test_file2 expected filename =
     let val env = Top.load nil [filename]
             handle ErrorMsg.Error => raise Outcome(expected, StaticError)
@@ -149,7 +156,7 @@ fun test_file filename =
     ; test_file1 filename
       handle Outcome(expected, actual) =>
              ( total := !total+1
-             ; if expected = actual
+             ; if accept_outcome (expected,actual)
                then success (expected, actual)
                else failure (expected, actual) ))
 

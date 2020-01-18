@@ -60,6 +60,11 @@ sig
     val plus : arith * arith -> arith                  (* preserve integer values *)
     val minus : arith * arith -> arith                 (* preserve integer values *)
 
+    val subst_eq : prop -> prop -> prop -> prop * prop (* subst_eq con1 con2 phi = (con1' /\ con2', phi')
+                                                        * where con1 /\ con2 |= phi iff con1' /\ con2 |= phi'
+                                                        * and equality x = t or t = x are substituted out
+                                                        *)
+
     (* Presburger arithmetic *)
     exception NonLinear
     (* Anonymous variables *)
