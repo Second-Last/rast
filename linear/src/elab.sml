@@ -64,13 +64,13 @@ fun valid_con env ctx con ext =
 fun validL env ctx con [] ext = ()
   | validL env ctx con ((x,A)::D) ext =
     ( TC.closed_tp ctx A ext
-    ; TC.valid env ctx con TC.Zero A ext
+    ; TC.valid env ctx con A ext
     ; validL env ctx con D ext )
 
 (* valid right types are closed and valid *)
 fun validR env ctx con A ext =
     ( TC.closed_tp ctx A ext
-    ; TC.valid env ctx con TC.Zero A ext )
+    ; TC.valid env ctx con A ext )
 
 fun pp_costs () =
     "--work=" ^ Flags.pp_cost (!Flags.work) ^ " "
@@ -283,8 +283,8 @@ fun elab_tps env nil = nil
         val ctx0 = R.free_prop con nil (* always nil, in current syntax *)
         val ctx1 = R.free_varlist es ctx0
         val ctx2 = R.free_varlist es' ctx1
-        val () = TC.valid env ctx2 con TC.Zero A ext
-        val () = TC.valid env ctx2 con TC.Zero A' ext
+        val () = TC.valid env ctx2 con A ext
+        val () = TC.valid env ctx2 con A' ext
         val decl' = A.TpEq(ctx2,con,A,A',ext)
     in
         decl'::elab_tps env decls
@@ -306,8 +306,8 @@ fun elab_tps env nil = nil
 (* Elaboration, Second Pass *)
 (****************************)
 
-val recon_time = ref 0
-val tc_time = ref 0
+val recon_time : LargeInt.int ref = ref (LargeInt.fromInt 0)
+val tc_time : LargeInt.int ref = ref (LargeInt.fromInt 0)
 
 (* elab_env env decls = env' if all declarations in decls
  * are well-typed with respect to env, elaborating to env'

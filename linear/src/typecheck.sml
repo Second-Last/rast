@@ -11,9 +11,10 @@ sig
     val closed_tp : Arith.ctx -> Ast.tp -> Ast.ext -> unit       (* may raise ErrorMsg.Error *)
     val closed_exp : Arith.ctx -> Ast.exp -> Ast.ext -> unit     (* may raise ErrorMsg.Error *)
 
+    val valid : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
+
     datatype polarity = Pos | Neg | Zero
-    val valid : Ast.env -> Arith.ctx -> Arith.prop
-                -> polarity -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
+    val valid_implicit : polarity -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
 
     (* properties of types *)
     val contractive : Ast.env -> Ast.tp -> bool
@@ -46,6 +47,7 @@ sig
     val syn_waitL : Ast.env -> Ast.context -> Ast.chan -> Ast.context
 
     val syn_branchesR : Ast.env -> Ast.chan_tp -> Ast.chan * Ast.choices
+
     val syn_branchesL : Ast.env -> Ast.context -> Ast.chan -> Ast.chan * Ast.choices
 
     val syn_assertR : Ast.env -> Ast.chan_tp -> Ast.chan_tp
@@ -159,65 +161,44 @@ and closed_branches ctx nil ext = ()
     ( closed_exp ctx P ext'
     ; closed_branches ctx branches ext )
 
-(* Occurrences of |> and <| are restricted to
- * positive and negative positions in a type, respectively
- *)
-datatype polarity = Pos | Neg | Zero
-
-(* valid env ctx con polarity A ext = ()
+(* valid_explicit env ctx con A ext = ()
  * raises ErrorMsg.Error if not a valid type
  * env must be the full environment which checking any
  * type to allow mutually recursive definitions
  * Type A must be an actual type (not '.' = A.Dot)
  *)
-fun valid env ctx con _ (A.Plus(choice)) ext = valid_choice env ctx con Pos choice ext
-  | valid env ctx con _ (A.With(choice)) ext = valid_choice env ctx con Neg choice ext
-  | valid env ctx con _ (A.Tensor(A,B)) ext =
-    let val () = valid env ctx con Zero A ext
-        val () = valid env ctx con Pos B ext
-    in
-    ()
-    end
-  | valid env ctx con _ (A.Lolli(A,B)) ext =
-    let val () = valid env ctx con Zero A ext
-        val () = valid env ctx con Neg B ext
-    in
-    ()
-    end
-  | valid env ctx con _ A.One ext = ()
+fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con choice ext
+  | valid_explicit env ctx con (A.With(choice)) ext = valid_choice env ctx con choice ext
+  | valid_explicit env ctx con (A.Tensor(A,B)) ext =
+    ( valid_explicit env ctx con A ext
+    ; valid_explicit env ctx con B ext )
+  | valid_explicit env ctx con (A.Lolli(A,B)) ext =
+    ( valid_explicit env ctx con A ext
+    ; valid_explicit env ctx con B ext )
+  | valid_explicit env ctx con A.One ext = ()
 
-  | valid env ctx con Pos (A.Exists(phi, A)) ext = valid env ctx (R.And(con,phi)) Pos A ext
-  | valid env ctx con _ (A.Exists(phi, A)) ext = valid env ctx (R.And(con,phi)) Zero A ext
-  | valid env ctx con Neg (A.Forall(phi, A)) ext = valid env ctx (R.And(con,phi)) Neg A ext
-  | valid env ctx con _ (A.Forall(phi, A)) ext = valid env ctx (R.And(con,phi)) Zero A ext
-  | valid env ctx con Pos (A.ExistsNat(v,A)) ext = valid env (v::ctx) con Pos A ext
-  | valid env ctx con _ (A.ExistsNat(v,A)) ext = valid env (v::ctx) con Zero A ext
-  | valid env ctx con Neg (A.ForallNat(v,A)) ext = valid env (v::ctx) con Neg A ext
-  | valid env ctx con _ (A.ForallNat(v,A)) ext = valid env (v::ctx) con Zero A ext
+  | valid_explicit env ctx con (A.Exists(phi,A)) ext = valid_explicit env ctx (R.And(con,phi)) A ext
+  | valid_explicit env ctx con (A.Forall(phi,A)) ext = valid_explicit env ctx (R.And(con,phi)) A ext
+  | valid_explicit env ctx con (A.ExistsNat(v,A)) ext = valid_explicit env (v::ctx) con A ext
+  | valid_explicit env ctx con (A.ForallNat(v,A)) ext = valid_explicit env (v::ctx) con A ext
 
-  | valid env ctx con Pos (A.PayPot(e,A)) ext =
+  | valid_explicit env ctx con (A.PayPot(e,A)) ext =
     if not (C.entails ctx con (R.Ge(e,R.Int(0)))) (* allowing 0, for uniformity *)
     then ERROR ext ("potential " ^ PP.pp_arith e ^ " not positive under constraints " ^ PP.pp_prop con)
-    else valid env ctx con Pos A ext
-  | valid env ctx con Neg (A.PayPot(_,A)) ext = ERROR ext ("|> appears in a negative context")
-  | valid env ctx con Zero (A.PayPot(_,A)) ext = ERROR ext ("|> appears in a neutral context")
-
-  | valid env ctx con Pos (A.GetPot(_,A)) ext = ERROR ext ("<| appears in a positive context")
-  | valid env ctx con Zero (A.GetPot(_,A)) ext = ERROR ext ("<| appears in a neutral context")
-  | valid env ctx con Neg (A.GetPot(e,A)) ext =
+    else valid_explicit env ctx con A ext
+  | valid_explicit env ctx con (A.GetPot(e,A)) ext =
     if not (C.entails ctx con (R.Ge(e,R.Int(0)))) (* allowing 0, for uniformity *)
     then ERROR ext ("potential " ^ PP.pp_arith e ^ " not positive under constraints " ^ PP.pp_prop con)
-    else valid env ctx con Neg A ext
+    else valid_explicit env ctx con A ext
 
-    (* propagate polarity for temporal types -fp Wed Feb 13 07:27:24 2019 *)
-  | valid env ctx con polarity (A.Next(t,A)) ext =
+  | valid_explicit env ctx con (A.Next(t,A)) ext =
     if not (C.entails ctx con (R.Ge(t,R.Int(0))))
     then ERROR ext ("time " ^ PP.pp_arith t ^ " not positive under constraints " ^ PP.pp_prop con)
-    else valid env ctx con polarity A ext
-  | valid env ctx con polarity (A.Dia(A)) ext = valid env ctx con polarity A ext
-  | valid env ctx con polarity (A.Box(A)) ext = valid env ctx con polarity A ext
+    else valid_explicit env ctx con A ext
+  | valid_explicit env ctx con (A.Dia(A)) ext = valid_explicit env ctx con A ext
+  | valid_explicit env ctx con (A.Box(A)) ext = valid_explicit env ctx con A ext
 
-  | valid env ctx con _ (A.TpName(a,es)) ext =
+  | valid_explicit env ctx con (A.TpName(a,es)) ext =
     (* allow forward references since 'env' is the full environment *)
     (case A.lookup_tp env a
       of NONE => ERROR ext ("type name " ^ a ^ " undefined")
@@ -233,10 +214,66 @@ fun valid env ctx con _ (A.Plus(choice)) ext = valid_choice env ctx con Pos choi
                                           ^ " not satisfied")
                           else ())
   (* A.Dot impossible *)
-and valid_choice env ctx con pol nil ext = ()
-  | valid_choice env ctx con pol ((l,Al)::choices) ext =
-    ( valid env ctx con pol Al ext
-    ; valid_choice env ctx con pol choices ext )
+and valid_choice env ctx con nil ext = ()
+  | valid_choice env ctx con ((l,Al)::choices) ext =
+    ( valid_explicit env ctx con Al ext
+    ; valid_choice env ctx con choices ext )
+
+(* Occurrences of |> and <| are restricted to
+ * positive and negative positions in a type, respectively
+ *)
+datatype polarity = Pos | Neg | Zero
+
+(* valid_implicit polarity A ext = ()
+ * raises ErrorMsg.Error if not a valid in implicit form
+ * (for reconstruction).  In particular, there must be
+ * no polarity alternation on types whose process expressions
+ * are implicit.
+ * Assume the type has already been check as valid in the usual
+ * sense.
+ *)
+fun valid_implicit _ (A.Plus(choice)) ext = valid_implicit_choice Zero choice ext
+  | valid_implicit _ (A.With(choice)) ext = valid_implicit_choice Zero choice ext
+  | valid_implicit _ (A.Tensor(A,B)) ext =
+    ( valid_implicit Zero A ext
+    ; valid_implicit Zero B ext )
+  | valid_implicit _ (A.Lolli(A,B)) ext =
+    ( valid_implicit Zero A ext
+    ; valid_implicit Zero B ext )
+  | valid_implicit _ A.One ext = ()
+
+  | valid_implicit Neg (A.Exists(phi, A)) ext = ERROR ext ("?{...} appears in negative context")
+  | valid_implicit _ (A.Exists(phi, A)) ext = valid_implicit Pos A ext
+  | valid_implicit Pos (A.Forall(phi, A)) ext = ERROR ext ("!{...} appears in positive context")
+  | valid_implicit _ (A.Forall(phi, A)) ext = valid_implicit Neg A ext
+
+  | valid_implicit _ (A.ExistsNat(v,A)) ext = valid_implicit Pos A ext
+  | valid_implicit _ (A.ForallNat(v,A)) ext = valid_implicit Neg A ext
+
+  | valid_implicit Neg (A.PayPot(e,A)) ext = ERROR ext ("|> appears in negative context")
+  | valid_implicit _ (A.PayPot(_,A)) ext = valid_implicit Pos A ext
+  | valid_implicit Pos (A.GetPot(_,A)) ext = ERROR ext ("<| appears in a positive context")
+  | valid_implicit _ (A.GetPot(_,A)) ext = valid_implicit Neg A ext
+
+  (* propagate polarity for temporal types -fp Wed Feb 13 07:27:24 2019 *)
+  | valid_implicit polarity (A.Next(t,A)) ext = valid_implicit polarity A ext
+  | valid_implicit polarity (A.Dia(A)) ext = valid_implicit polarity A ext
+  | valid_implicit polarity (A.Box(A)) ext = valid_implicit polarity A ext
+
+  | valid_implicit _ (A.TpName(a,es)) ext = ()
+
+and valid_implicit_choice pol nil ext = ()
+  | valid_implicit_choice pol ((l,Al)::choices) ext =
+    ( valid_implicit pol Al ext
+    ; valid_implicit_choice pol choices ext )
+
+fun valid env ctx con A ext =
+    ( valid_explicit env ctx con A ext
+    ; case !Flags.syntax
+       of Flags.Implicit => ( valid_implicit Zero A ext
+                              handle ErrorMsg.Error => ( TextIO.print "% Warning: reconstruction may be incomplete\n"
+                                                       ; TextIO.print "% Treating error as warning\n" ; () ) )
+        | _ => () )
 
 (***********************)
 (* Properties of types *)
