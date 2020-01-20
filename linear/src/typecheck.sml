@@ -11,10 +11,13 @@ sig
     val closed_tp : Arith.ctx -> Ast.tp -> Ast.ext -> unit       (* may raise ErrorMsg.Error *)
     val closed_exp : Arith.ctx -> Ast.exp -> Ast.ext -> unit     (* may raise ErrorMsg.Error *)
 
-    val valid : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
-
+    (*
     datatype polarity = Pos | Neg | Zero
-    val valid_implicit : polarity -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
+    val valid_implicit : polarity -> Ast.tp -> Ast.ext -> unit   (* may raise ErrorMsg.Error *)
+    *)
+
+    val valid : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
+    val valid_top : Ast.env -> Ast.tp -> Ast.ext -> unit         (* may raise ErrorMsg.Error *)
 
     (* properties of types *)
     val contractive : Ast.env -> Ast.tp -> bool
@@ -275,11 +278,23 @@ fun valid env ctx con A ext =
                                                        ; TextIO.print "% Treating error as warning\n" ; () ) )
         | _ => () )
 
+fun valid_top' env (A.TpName(a,es)) ext = valid_top' env (A.expd_tp env (a,es)) ext
+  | valid_top' env (A.Exists(phi,A)) ext = ERROR ext ("?{...} appears at top level of process type")
+  | valid_top' env (A.Forall(phi,A)) ext = ERROR ext ("!{...} appears at top level of process type")
+  | valid_top' env (A.PayPot(phi,A)) ext = ERROR ext ("|> appears at top level of process type")
+  | valid_top' env (A.GetPot(phi,A)) ext = ERROR ext ("<| appears at top level of process type")
+  | valid_top' env A ext = ()
+
+fun valid_top env A ext =
+    ( case !Flags.syntax
+       of Flags.Implicit => valid_top' env A ext
+        | _ => () )
+
 (***********************)
 (* Properties of types *)
 (***********************)
 
-(* Next(t,a) is not constructive because for t = 0
+(* Next(t,a) is not contractive because for t = 0
  * this can lead to an infinite loop in type-checking
  *)
 fun contractive env (A as A.Next(_,A')) = contractive env A'

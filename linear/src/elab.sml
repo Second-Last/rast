@@ -65,12 +65,14 @@ fun validL env ctx con [] ext = ()
   | validL env ctx con ((x,A)::D) ext =
     ( TC.closed_tp ctx A ext
     ; TC.valid env ctx con A ext
+    ; TC.valid_top env A ext
     ; validL env ctx con D ext )
 
 (* valid right types are closed and valid *)
 fun validR env ctx con A ext =
     ( TC.closed_tp ctx A ext
-    ; TC.valid env ctx con A ext )
+    ; TC.valid env ctx con A ext
+    ; TC.valid_top env A ext )
 
 fun pp_costs () =
     "--work=" ^ Flags.pp_cost (!Flags.work) ^ " "
