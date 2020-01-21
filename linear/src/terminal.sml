@@ -8,15 +8,15 @@ datatype terminal =
          LBRACE | RBRACE | LPAREN | RPAREN
        | LBRACKET | RBRACKET | LANGLE | RANGLE
        | COLON | COMMA | SEMICOLON | PERIOD
-       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION
+       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION | LOLLI
        | BAR | DOUBLEBAR | EQ | RARROW | LRARROW | LARROW
        | LEQ | GEQ
-       | CASER | CASEL | R | L | CLOSER | WAITL
-       | TICK | DELAY | WHENR | WHENL | NOWR | NOWL
-       | WORK | PAYL | PAYR | GETL | GETR
-       | ASSERTR | ASSERTL | ASSUMER | ASSUMEL | IMPOSSIBLER | IMPOSSIBLEL
+       | CASE | CLOSE | WAIT | SEND | RECV
+       | TICK | DELAY | WHEN | NOW
+       | WORK | PAY | GET
+       | ASSERT | ASSUME | IMPOSSIBLE
        | TURNSTILE
-       | TYPE | EQTYPE | PROC | EXEC
+       | TYPE | EQTYPE | PROC | EXEC | DECL
        | IDENT of string | NAT of int
        | EOF | LEX_ERROR
        | PRAGMA of string * string (* pragma and rest of line *)
@@ -32,15 +32,15 @@ datatype terminal =
          LBRACE | RBRACE | LPAREN | RPAREN
        | LBRACKET | RBRACKET | LANGLE | RANGLE
        | COLON | COMMA | SEMICOLON | PERIOD
-       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION
+       | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION | LOLLI
        | BAR | DOUBLEBAR | EQ | RARROW | LRARROW | LARROW
        | LEQ | GEQ
-       | CASER | CASEL | R | L | CLOSER | WAITL
-       | TICK | DELAY | WHENR | WHENL | NOWR | NOWL
-       | WORK | PAYL | PAYR | GETL | GETR
-       | ASSERTR | ASSERTL | ASSUMER | ASSUMEL | IMPOSSIBLER | IMPOSSIBLEL
+       | CASE | CLOSE | WAIT | SEND | RECV
+       | TICK | DELAY | WHEN | NOW
+       | WORK | PAY | GET
+       | ASSERT | ASSUME | IMPOSSIBLE
        | TURNSTILE
-       | TYPE | EQTYPE | PROC | EXEC
+       | TYPE | EQTYPE | PROC | EXEC | DECL
        | IDENT of string | NAT of int
        | EOF | LEX_ERROR
        | PRAGMA of string * string (* pragma and rest of line *)
@@ -50,16 +50,18 @@ fun toString t =
      of LBRACE => "{" | RBRACE => "}" | LPAREN => "(" | RPAREN => ")"
       | LBRACKET => "[" | RBRACKET => "]" | LANGLE => "<" | RANGLE => ">"
       | COLON => ":" | COMMA => "," | SEMICOLON => ";" | PERIOD => "."
-      | BACKQUOTE => "`" | PLUS => "+" | MINUS => "-" | STAR => "*" | AMPERSAND => "&" | QUESTION => "?" | EXCLAMATION => "!"
+      | BACKQUOTE => "`" | PLUS => "+" | MINUS => "-" | STAR => "*"
+      | AMPERSAND => "&" | QUESTION => "?" | EXCLAMATION => "!" | LOLLI => "-o"
       | BAR => "|" | DOUBLEBAR => "||" | EQ => "=" | RARROW => "=>" | LRARROW => "<->" | LARROW => "<-"
       | LEQ => "<=" | GEQ => ">="
-      | CASER => "caseR" | CASEL => "caseL" | R => "R" | L => "L"
-      | CLOSER => "closeR" | WAITL => "waitL"
+      | CASE => "case"
+      | SEND => "send" | RECV => "recv"
+      | CLOSE => "close" | WAIT => "wait"
       | TICK => "tick" | DELAY => "delay"
-      | WHENR => "whenR" | WHENL => "whenL" | NOWR => "nowR" | NOWL => "nowL"
-      | WORK => "work" | PAYL => "payL" | PAYR => "payR" | GETL => "getL" | GETR => "getR"
+      | WHEN => "when?" | NOW => "now!"
+      | WORK => "work" | PAY => "pay" | GET => "get"
       | TURNSTILE => "|-"
-      | TYPE => "type" | EQTYPE => "eqtype" | PROC => "proc" | EXEC => "exec"
+      | TYPE => "type" | EQTYPE => "eqtype" | PROC => "proc" | EXEC => "exec" | DECL => "decl"
       | IDENT(s) => s | NAT(n) => Int.toString n
       | EOF => "<eof>" | LEX_ERROR => "<lex error>"
       | PRAGMA(pragma,line) => pragma ^ line

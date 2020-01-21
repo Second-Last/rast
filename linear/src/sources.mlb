@@ -34,10 +34,10 @@ local
     recon-sig.sml
 
     arecon.sml
-    (*
-    brecon.sml
     qrecon.sml
     wrecon.sml
+    (*
+    brecon.sml
     trecon-util.sml
     trecon.sml
     trecon-bt.sml

@@ -35,11 +35,11 @@
 
 (defvar ss-font-lock-keywords
   '(("type\\|eqtype\\|decl\\|proc\\|exec" . font-lock-decl-face)
-    ("<->\\|L\\.\\|R\\.\\|caseL\\|caseR\\|waitL\\|closeR" . font-lock-keyword-face)
+    ("case\\|wait\\|close\\|send\\|recv" . font-lock-keyword-face)
     ("tick\\|work" . font-lock-cost-face)
-    ("payR\\|payL\\|getR\\|getL" . font-lock-work-face)
-    ("assertR\\|assertL\\|assumeR\\|assumeL\\|impossibleR\\|impossibleL" . font-lock-constraints-face)
-    ("delay\\|whenL\\|whenR\\|nowL\\|nowR" . font-lock-time-face)
+    ("pay\\|get" . font-lock-work-face)
+    ("assert\\|assume\\|impossible" . font-lock-constraints-face)
+    ("delay\\|when\\|now" . font-lock-time-face)
     ))
 
 (setq ss-mode-syntax-table
