@@ -400,14 +400,17 @@ and p_con_dot ST = case first ST of
 and r_con (S $ Tok(T.LBRACE,r1) $ Prop(phi,_) $ Tok(T.RBRACE,r2)) = S $ Prop(phi,join r1 r2)
 
 (* <prop> *)
-(*
+
 and p_prop ST = ST |> p_arith >> p_rel >> p_arith >> reduce r_prop
-*)
+
+(*
 and p_prop ST = case first ST of
     T.AND => ST |> drop >> push (PropInfix(1, R.And, here ST)) >> p_prop_prec
   | T.OR => ST |> drop >> push (PropInfix(1, R.Or, here ST)) >> p_prop_prec
   | T.RARROW => ST |> drop >> push (PropInfix(2, R.Implies, here ST)) >> p_prop_prec
   | t => ST |> reduce r_prop
+*)
+
 
 (* reduce <prop> *)
 and r_prop (S $ Arith(e1,r1) $ Tok(T.EQ,_) $ Arith(e2,r2)) = S $ Prop(R.Eq(e1,e2),join r1 r2)
