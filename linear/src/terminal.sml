@@ -10,7 +10,7 @@ datatype terminal =
        | COLON | COMMA | SEMICOLON | PERIOD
        | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION | LOLLI
        | BAR | DOUBLEBAR | EQ | RARROW | LRARROW | LARROW
-       | LEQ | GEQ | NEQ | AND | OR | SLASH | BACKSLASH
+       | LEQ | GEQ | NEQ | AND | OR | SLASH | BACKSLASH | NOT
        | CASE | CLOSE | WAIT | SEND | RECV
        | TICK | DELAY | WHEN | NOW
        | WORK | PAY | GET
@@ -34,7 +34,7 @@ datatype terminal =
        | COLON | COMMA | SEMICOLON | PERIOD
        | BACKQUOTE | PLUS | MINUS | STAR | AMPERSAND | QUESTION | EXCLAMATION | LOLLI
        | BAR | DOUBLEBAR | EQ | RARROW | LRARROW | LARROW
-       | LEQ | GEQ | NEQ | AND | OR | SLASH | BACKSLASH
+       | LEQ | GEQ | NEQ | AND | OR | SLASH | BACKSLASH | NOT
        | CASE | CLOSE | WAIT | SEND | RECV
        | TICK | DELAY | WHEN | NOW
        | WORK | PAY | GET
@@ -53,7 +53,7 @@ fun toString t =
       | BACKQUOTE => "`" | PLUS => "+" | MINUS => "-" | STAR => "*"
       | AMPERSAND => "&" | QUESTION => "?" | EXCLAMATION => "!" | LOLLI => "-o"
       | BAR => "|" | DOUBLEBAR => "||" | EQ => "=" | RARROW => "=>" | LRARROW => "<->" | LARROW => "<-"
-      | LEQ => "<=" | GEQ => ">=" | NEQ => "<>" | AND => "/\\" | OR => "\\/" | SLASH => "/" | BACKSLASH => "\\"
+      | LEQ => "<=" | GEQ => ">=" | NEQ => "<>" | AND => "/\\" | OR => "\\/" | SLASH => "/" | BACKSLASH => "\\" | NOT => "~"
       | CASE => "case"
       | SEND => "send" | RECV => "recv"
       | CLOSE => "close" | WAIT => "wait"

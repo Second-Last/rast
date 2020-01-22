@@ -74,6 +74,7 @@ fun lex_code (pos, charstream) =
       | M.Cons (#"&", cs) => (T.AMPERSAND, pos, pos+1, cs)
       | M.Cons (#"?", cs) => (T.QUESTION, pos, pos+1, cs)
       | M.Cons (#"!", cs) => (T.EXCLAMATION, pos, pos+1, cs)
+      | M.Cons (#"~", cs) => (T.NOT, pos, pos+1, cs)
       (* Short sequences *)
       | M.Cons (#"=", cs) =>
         (case M.force cs
@@ -86,7 +87,6 @@ fun lex_code (pos, charstream) =
                of M.Cons(#">", cs) => (T.LRARROW, pos, pos+3, cs)
                 | _ => (T.LARROW, pos, pos+2, cs))
            | M.Cons(#"=", cs) => (T.LEQ, pos, pos+2, cs)
-           | M.Cons(#">", cs) => (T.NEQ, pos, pos+2, cs)
            | _ => (T.LANGLE, pos, pos+1, cs))
       | M.Cons (#">", cs) =>
         (case M.force cs
