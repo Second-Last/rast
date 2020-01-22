@@ -86,6 +86,7 @@ fun lex_code (pos, charstream) =
                of M.Cons(#">", cs) => (T.LRARROW, pos, pos+3, cs)
                 | _ => (T.LARROW, pos, pos+2, cs))
            | M.Cons(#"=", cs) => (T.LEQ, pos, pos+2, cs)
+           | M.Cons(#">", cs) => (T.NEQ, pos, pos+2, cs)
            | _ => (T.LANGLE, pos, pos+1, cs))
       | M.Cons (#">", cs) =>
         (case M.force cs
@@ -102,6 +103,14 @@ fun lex_code (pos, charstream) =
           of M.Cons(#"*", cs) => lex_comment (pos+2, cs, 1)
            | _ => (T.LPAREN, pos, pos+1, cs))
       | M.Cons (#")", cs) => (T.RPAREN, pos, pos+1, cs)
+      | M.Cons (#"/", cs) =>
+        (case M.force cs
+          of M.Cons(#"\\", cs) => (T.AND, pos, pos+2, cs)
+           | _ => (T.SLASH, pos, pos+1, cs) )
+      | M.Cons (#"\\", cs) =>
+        (case M.force cs
+          of M.Cons(#"/", cs) => (T.OR, pos, pos+2, cs)
+           | _ => (T.BACKSLASH, pos, pos+1, cs) )
       | M.Cons (c, cs') =>
         if Char.isDigit c
         then let val (num_string, n, cs) = run_cond Char.isDigit (0, [], charstream)
