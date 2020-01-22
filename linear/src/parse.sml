@@ -346,7 +346,7 @@ and p_type ST = case first ST of
   | T.PLUS => ST |> shift >> p_choices >> reduce r_type >> p_type
   | T.AMPERSAND => ST |> shift >> p_choices >> reduce r_type >> p_type
   | T.BACKQUOTE => ST |> shift >> p_type >> reduce r_type >> p_type
-  | T.LPAREN => ST |> shift >> p_tpopr_next >> p_type >> reduce r_type >> p_type
+  | T.LPAREN => ST |> shift >> p_next_or_type
   | T.LBRACKET => ST |> shift >> p_terminal T.RBRACKET >> p_type >> reduce r_type >> p_type
   | T.LANGLE => ST |> shift >> p_tpopr_dia_ltri >> p_type >> reduce r_type >> p_type (* maybe not shift *)
   | T.BAR => ST |> shift >> p_tpopr_rtri >> p_type >> reduce r_type >> p_type        (* maybe not shift *)
@@ -369,10 +369,10 @@ and p_type_prec ST = case ST of
 
 (* ')' | <idx> ')' *)
 (* follows '(' to parse circle *)
-and p_tpopr_next ST = case first ST of
-    T.RPAREN => ST |> shift
-  | T.LBRACE => ST |> p_idx >> p_terminal T.RPAREN
-  | t => error_expected_list (here ST, [T.RPAREN, T.LBRACE], t)
+and p_next_or_type ST = case first ST of
+    T.RPAREN => ST |> shift >> p_type >> reduce r_type >> p_type
+  | T.LBRACE => ST |> p_idx >> p_terminal T.RPAREN >> p_type >> reduce r_type >> p_type
+  | t => ST |> p_type >> p_terminal T.RPAREN >> reduce r_type >> p_type 
 
 (* '>' | '|' | <idx> '|' *)
 (* follows '<' to parse diamond or left triangle *)
