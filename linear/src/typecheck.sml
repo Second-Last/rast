@@ -294,20 +294,6 @@ fun valid env ctx con A ext =
                                                        ; TextIO.print "% Treating error as warning\n" ; () ) )
         | _ => () )
 
-(*
-fun valid_top' env (A.TpName(a,es)) ext = valid_top' env (A.expd_tp env (a,es)) ext
-  | valid_top' env (A.Exists(phi,A)) ext = ERROR ext ("?{...} appears at top level of process type")
-  | valid_top' env (A.Forall(phi,A)) ext = ERROR ext ("!{...} appears at top level of process type")
-  | valid_top' env (A.PayPot(phi,A)) ext = ERROR ext ("|> appears at top level of process type")
-  | valid_top' env (A.GetPot(phi,A)) ext = ERROR ext ("<| appears at top level of process type")
-  | valid_top' env A ext = ()
-
-fun valid_top env A ext =
-    ( case !Flags.syntax
-       of Flags.Implicit => valid_top' env A ext
-        | _ => () )
- *)
-    
 (***********************)
 (* Properties of types *)
 (***********************)
@@ -603,14 +589,14 @@ fun match_contexts env ctx con ((x,A)::D) ((x',A')::D') ext =
                                    StringCvt.padRight #" " var_len x')
          in
              ERROR ext ("type mismatch in call:\n"
-                        ^ "parameter " ^ x'_str ^ " : " ^ PP.pp_tp_compact env A' ^ "\n"
-                        ^ "argument  " ^ x_str ^ " : " ^ PP.pp_tp_compact env A)
+                        ^ "expected " ^ x'_str ^ " : " ^ PP.pp_tp_compact env A' ^ "\n"
+                        ^ "found    " ^ x_str ^ " : " ^ PP.pp_tp_compact env A)
          end
   | match_contexts env ctx con nil nil ext = ()
   | match_contexts env ctx con D D' ext =
     ERROR ext ("wrong number of arguments in call:\n"
-               ^ "parameters " ^ PP.pp_context_compact env D' ^ "\n"
-               ^ "arguments  " ^ PP.pp_context_compact env D)
+               ^ "expected " ^ PP.pp_context_compact env D' ^ "\n"
+               ^ "found    " ^ PP.pp_context_compact env D)
 
 fun lookup_context env x ((y,A)::D') ext = if x = y then expand env A else lookup_context env x D' ext
   | lookup_context env x nil ext = ERROR ext ("channel " ^ x ^ " not present in context")
@@ -634,9 +620,9 @@ fun exists x ((y,A)::D) = if x = y then true else exists x D
  *)
 fun zip_check f vs es ext =
     let val () = if List.length es = List.length vs then ()
-                 else ERROR ext ("process " ^ f
-                                 ^ " called with " ^ Int.toString (List.length es) ^ " indices "
-                                 ^ "but defined with " ^ Int.toString (List.length vs))
+                 else ERROR ext ("process " ^ f ^ " called with incorrect number of indices:\n"
+                                 ^ "expected " ^ Int.toString (List.length vs) ^ "\n"
+                                 ^ "found " ^ Int.toString (List.length es))
     in R.zip vs es end
 
 (* expd_expdec_check env f{es} ext = [es/vs](con, (A, p, C))
@@ -851,7 +837,9 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
     let val A = lookup_context env y D ext
         val C = lookup_context env x [zC] ext
         val () = if eq_tp' env ctx con nil A C then ()
-                 else ERROR ext ("type " ^ PP.pp_tp_compact env A ^ " not equal " ^ PP.pp_tp_compact env C)
+                 else ERROR ext ("type mismatch in forward:\n"
+                                 ^ "expected " ^ y ^ " : " ^ PP.pp_tp_compact env C ^ "\n"
+                                 ^ "found    " ^ y ^ " : " ^ PP.pp_tp_compact env A)
         val () = if not (C.entails ctx con (R.Eq(pot, R.Int(0))))
                  then ERROR ext ("unconsumed potential: " ^ C.pp_jfail con (R.Eq(pot, R.Int(0))))
                  else ()
@@ -864,8 +852,9 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
     (case expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',B))) =>
          let val () = if List.length D' = List.length xs then ()
-                      else ERROR ext ("process defined with " ^ Int.toString (List.length D') ^
-                                      " arguments but called with " ^ Int.toString (List.length xs))
+                      else ERROR ext ("incorrect number of arguments in call:\n"
+                                      ^ "expected " ^ Int.toString (List.length D')
+                                      ^ "found    " ^ Int.toString (List.length xs))
              val cutD = gen_context env xs D ext
              val () = match_contexts env ctx con cutD D' ext (* should this be after entails? *)
              val () = if not (C.entails ctx con (R.Ge(pot, pot')))
@@ -897,16 +886,15 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
     (case expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',C'))) =>
          let val () = if List.length D' = List.length xs then ()
-                      else ERROR ext ("process defined with " ^ Int.toString (List.length D') ^
-                                      " arguments but called with " ^ Int.toString (List.length xs))
+                      else ERROR ext ("incorrect number of arguments in tail call:\n"
+                                      ^ "expected " ^ Int.toString (List.length D')
+                                      ^ "found    " ^ Int.toString (List.length xs))
              val cutD = gen_context env xs D ext
              val () = match_contexts env ctx con cutD D' ext
-             (*
-             val () = if eq_context env ctx con cutD D' then ()
-                      else ERROR ext ("context " ^ PP.pp_context_compact env cutD ^ " not equal " ^ PP.pp_context_compact env D')
-             *)
              val () = if eq_tp' env ctx con nil C' C then ()
-                      else ERROR ext ("type " ^ PP.pp_tp_compact env C' ^ " not equal " ^ PP.pp_tp_compact env C)
+                      else ERROR ext ("type mismatch in tail call:\n"
+                                      ^ "expected " ^ PP.pp_tp_compact env C'
+                                      ^ "found    " ^ PP.pp_tp_compact env C)
              val () = if not (C.entails ctx con (R.Eq(pot, pot')))
                       then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(pot, pot')))
                       else ()
@@ -915,7 +903,9 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
              val contD = remove_chans xs D ext
-             val () = if List.length contD > 0 then ERROR ext ("unconsumed channels: " ^ PP.pp_context_compact env contD) else ()
+             val () = if List.length contD > 0
+                      then ERROR ext ("unconsumed channels " ^ PP.pp_context_compact env contD ^ " at tail call")
+                      else ()
          in () end
     )
 
@@ -1237,34 +1227,6 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
   (* marked expressions *)
   | check_exp trace env ctx con D pot (A.Marked(marked_P)) zC ext =
     check_exp trace env ctx con D pot (Mark.data marked_P) zC (Mark.ext marked_P)
-
-(*
-  (* type definitions or error messages *)
-  | check_exp trace env ctx con nil pot P (z,C) ext =
-    if interactsL P
-    then ERROR ext ("cannot interact left with empty context")
-    else if interactsR P
-    then if is_tpname C
-         then check_exp' trace env ctx con nil pot P (z,expd env C) ext
-         else ERROR ext ("process interacts right but does not match right type\n"
-                         ^ PP.pp_tpj env nil pot (z,C))
-    else (* not sure if this is possible *)
-        ERROR ext ("process does not match types" ^ PP.pp_tpj env nil pot (z,C))
-  | check_exp trace env ctx con [(x,A)] pot P (z,C) ext =
-    if interactsL P
-    then if is_tpname A
-         then check_exp' trace env ctx con [(x,expd env A)] pot P (z,C) ext
-         else ERROR ext ("process interacts left but does not match left type\n"
-                         ^ PP.pp_tpj env [(x,A)] pot (z,C))
-    else if interactsR P
-    then if is_tpname C
-         then check_exp' trace env ctx con [(x,A)] pot P (z,expd env C) ext
-         else ERROR ext ("process interacts right but does not match right type\n"
-                         ^ PP.pp_tpj env [(x,A)] pot (z,C))
-    else (* not sure if this is possible *)
-        ERROR ext ("process does not match types" ^ PP.pp_tpj env [(x,A)] pot (z,C))
-*)
-
 
 (* external interface *)
 val check_exp = check_exp'      (* entry point for tracing *)
