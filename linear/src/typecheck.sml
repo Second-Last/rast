@@ -11,13 +11,7 @@ sig
     val closed_tp : Arith.ctx -> Ast.tp -> Ast.ext -> unit       (* may raise ErrorMsg.Error *)
     val closed_exp : Arith.ctx -> Ast.exp -> Ast.ext -> unit     (* may raise ErrorMsg.Error *)
 
-    (*
-    datatype polarity = Pos | Neg | Zero
-    val valid_implicit : polarity -> Ast.tp -> Ast.ext -> unit   (* may raise ErrorMsg.Error *)
-    *)
-
     val valid : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
-    val valid_top : Ast.env -> Ast.tp -> Ast.ext -> unit         (* may raise ErrorMsg.Error *)
 
     (* properties of types *)
     val contractive : Ast.env -> Ast.tp -> bool
@@ -225,9 +219,9 @@ and valid_choice env ctx con nil ext = ()
 (* Occurrences of |> and <| are restricted to
  * positive and negative positions in a type, respectively
  *)
-datatype polarity = Pos | Neg | Zero
+datatype polarity = Pos | Neg | Zero | Top
 
-(* valid_implicit polarity A ext = ()
+(* valid_implicit env polarity A ext = ()
  * raises ErrorMsg.Error if not a valid in implicit form
  * (for reconstruction).  In particular, there must be
  * no polarity alternation on types whose process expressions
@@ -235,49 +229,72 @@ datatype polarity = Pos | Neg | Zero
  * Assume the type has already been check as valid in the usual
  * sense.
  *)
-fun valid_implicit _ (A.Plus(choice)) ext = valid_implicit_choice Zero choice ext
-  | valid_implicit _ (A.With(choice)) ext = valid_implicit_choice Zero choice ext
-  | valid_implicit _ (A.Tensor(A,B)) ext =
-    ( valid_implicit Zero A ext
-    ; valid_implicit Zero B ext )
-  | valid_implicit _ (A.Lolli(A,B)) ext =
-    ( valid_implicit Zero A ext
-    ; valid_implicit Zero B ext )
-  | valid_implicit _ A.One ext = ()
+fun valid_implicit env _ (A.Plus(choice)) ext = valid_implicit_choice env Zero choice ext
+  | valid_implicit env _ (A.With(choice)) ext = valid_implicit_choice env Zero choice ext
+  | valid_implicit env _ (A.Tensor(A,B)) ext =
+    ( valid_implicit env Top A ext
+    ; valid_implicit env Zero B ext )
+  | valid_implicit env _ (A.Lolli(A,B)) ext =
+    ( valid_implicit env Top A ext
+    ; valid_implicit env Zero B ext )
+  | valid_implicit env _ A.One ext = ()
 
-  | valid_implicit Neg (A.Exists(phi, A)) ext = ERROR ext ("?{...} appears in negative context")
-  | valid_implicit _ (A.Exists(phi, A)) ext = valid_implicit Pos A ext
-  | valid_implicit Pos (A.Forall(phi, A)) ext = ERROR ext ("!{...} appears in positive context")
-  | valid_implicit _ (A.Forall(phi, A)) ext = valid_implicit Neg A ext
+  | valid_implicit env Neg (A as A.Exists _) ext =
+    ERROR ext ("implicit type ?{...} appears directly under !{...} or <|"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env Top (A as A.Exists _) ext =
+    ERROR ext ("implicit type ?{...} at top level or left of tensor (*) or lolli (-o):\n"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env _ (A.Exists(phi, A)) ext = valid_implicit env Pos A ext
 
-  | valid_implicit _ (A.ExistsNat(v,A)) ext = valid_implicit Pos A ext
-  | valid_implicit _ (A.ForallNat(v,A)) ext = valid_implicit Neg A ext
+  | valid_implicit env Pos (A as A.Forall _) ext = 
+    ERROR ext ("implicit type !{...} appears directly under ?{...} or |>"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env Top (A as A.Forall _) ext =
+    ERROR ext ("implicit type !{...} at top level or left of tensor (*) or lolli (-o):\n"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env _ (A.Forall(phi, A)) ext = valid_implicit env Neg A ext
 
-  | valid_implicit Neg (A.PayPot(e,A)) ext = ERROR ext ("|> appears in negative context")
-  | valid_implicit _ (A.PayPot(_,A)) ext = valid_implicit Pos A ext
-  | valid_implicit Pos (A.GetPot(_,A)) ext = ERROR ext ("<| appears in a positive context")
-  | valid_implicit _ (A.GetPot(_,A)) ext = valid_implicit Neg A ext
+  | valid_implicit env _ (A.ExistsNat(v,A)) ext = valid_implicit env Pos A ext
+  | valid_implicit env _ (A.ForallNat(v,A)) ext = valid_implicit env Neg A ext
+
+  | valid_implicit env Neg (A as A.PayPot _) ext =
+    ERROR ext ("implicit type |> appears directly under !{...} or <|"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env Top (A as A.PayPot _) ext =
+    ERROR ext ("implicit type |> at top level or left of tensor (*) or lolli (-o):\n"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env _ (A.PayPot(_,A)) ext = valid_implicit env Pos A ext
+
+  | valid_implicit env Pos (A as A.GetPot _) ext =
+    ERROR ext ("implicit type <| appears directly under ?{...} or <|"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env Top (A as A.GetPot _) ext =
+    ERROR ext ("implicit type <| at top level or left of tensor (*) or lolli (-o):\n"
+               ^ PP.pp_tp_compact env A)
+  | valid_implicit env _ (A.GetPot(_,A)) ext = valid_implicit env Neg A ext
 
   (* propagate polarity for temporal types -fp Wed Feb 13 07:27:24 2019 *)
-  | valid_implicit polarity (A.Next(t,A)) ext = valid_implicit polarity A ext
-  | valid_implicit polarity (A.Dia(A)) ext = valid_implicit polarity A ext
-  | valid_implicit polarity (A.Box(A)) ext = valid_implicit polarity A ext
+  | valid_implicit env polarity (A.Next(t,A)) ext = valid_implicit env polarity A ext
+  | valid_implicit env polarity (A.Dia(A)) ext = valid_implicit env polarity A ext
+  | valid_implicit env polarity (A.Box(A)) ext = valid_implicit env polarity A ext
 
-  | valid_implicit _ (A.TpName(a,es)) ext = ()
+  | valid_implicit env _ (A.TpName(a,es)) ext = ()
 
-and valid_implicit_choice pol nil ext = ()
-  | valid_implicit_choice pol ((l,Al)::choices) ext =
-    ( valid_implicit pol Al ext
-    ; valid_implicit_choice pol choices ext )
+and valid_implicit_choice env pol nil ext = ()
+  | valid_implicit_choice env pol ((l,Al)::choices) ext =
+    ( valid_implicit env pol Al ext
+    ; valid_implicit_choice env pol choices ext )
 
 fun valid env ctx con A ext =
     ( valid_explicit env ctx con A ext
     ; case !Flags.syntax
-       of Flags.Implicit => ( valid_implicit Zero A ext
+       of Flags.Implicit => ( valid_implicit env Top A ext
                               handle ErrorMsg.Error => ( TextIO.print "% Warning: reconstruction may be incomplete\n"
                                                        ; TextIO.print "% Treating error as warning\n" ; () ) )
         | _ => () )
 
+(*
 fun valid_top' env (A.TpName(a,es)) ext = valid_top' env (A.expd_tp env (a,es)) ext
   | valid_top' env (A.Exists(phi,A)) ext = ERROR ext ("?{...} appears at top level of process type")
   | valid_top' env (A.Forall(phi,A)) ext = ERROR ext ("!{...} appears at top level of process type")
@@ -289,7 +306,8 @@ fun valid_top env A ext =
     ( case !Flags.syntax
        of Flags.Implicit => valid_top' env A ext
         | _ => () )
-
+ *)
+    
 (***********************)
 (* Properties of types *)
 (***********************)
