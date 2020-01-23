@@ -401,29 +401,25 @@ and r_con (S $ Tok(T.LBRACE,r1) $ Prop(phi,_) $ Tok(T.RBRACE,r2)) = S $ Prop(phi
 
 (* <prop> *)
 
-and p_prop ST = ST |> p_arith >> p_rel >> p_arith >> reduce r_prop
-
-(*
 and p_prop ST = case first ST of
     T.AND => ST |> drop >> push (PropInfix(1, R.And, here ST)) >> p_prop_prec
   | T.OR => ST |> drop >> push (PropInfix(1, R.Or, here ST)) >> p_prop_prec
   | T.RARROW => ST |> drop >> push (PropInfix(2, R.Implies, here ST)) >> p_prop_prec
-  | t => ST |> reduce r_prop
-*)
+  | T.NOT => ST |> shift >> p_atomic_prop >> p_prop_prec
+  | T.LPAREN => ST |> shift >> p_prop >> p_terminal T.RPAREN >> reduce r_prop >> p_prop
+  | t => ST |> p_atomic_prop >> reduce r_prop
 
+and p_prop_prec ST = case ST of
+    (S $ Prop(phi1,r1) $ PropInfix(prec1, con1, _) $ Prop(phi2, r2) $ PropInfix(prec, con, r), ft) =>
+      if prec1 > prec
+      then p_prop_prec (S $ Prop(con1(phi1,phi2), join r1 r2) $ PropInfix(prec, con, r), ft) (* reduce *)
+      else p_prop ST
+  | (S $ Tok(T.NOT,r1) $ Prop(phi,r2), ft) => p_prop_prec (S $ Prop(R.Not(phi),join r1 r2), ft)
+  | (S $ Prop(_,_) $ PropInfix(_,_,_), _) => p_prop ST (* shift *)
+  | (S $ PropInfix(_,_,r1) $ PropInfix(_,_,r2), _) => parse_error (join r1 r2, "consecutive infix type operators")
+  | (S $ PropInfix(_,_,r), _) => parse_error (r, "leading infix type operator")
 
-(* reduce <prop> *)
-and r_prop (S $ Arith(e1,r1) $ Tok(T.EQ,_) $ Arith(e2,r2)) = S $ Prop(R.Eq(e1,e2),join r1 r2)
-  | r_prop (S $ Arith(e1,r1) $ Tok(T.RANGLE,_) $ Arith(e2,r2)) = S $ Prop(R.Gt(e1,e2),join r1 r2)
-  | r_prop (S $ Arith(e1,r1) $ Tok(T.LANGLE,_) $ Arith(e2,r2)) = S $ Prop(R.Lt(e1,e2),join r1 r2)
-  | r_prop (S $ Arith(e1,r1) $ Tok(T.GEQ,_) $ Arith(e2,r2)) = S $ Prop(R.Ge(e1,e2),join r1 r2)
-  | r_prop (S $ Arith(e1,r1) $ Tok(T.LEQ,_) $ Arith(e2,r2)) = S $ Prop(R.Le(e1,e2),join r1 r2)
-  | r_prop (S $ Arith(e1,r1) $ Tok(t,r) $ Arith(e2,r2)) = parse_error(r, "unrecognized operator, only '>' or '=' allowed ")
-  | r_prop (S $ Arith(e1,r1) $ Arith(e2,r2)) = parse_error (join r1 r2, "consecutive arithmetic expressions")
-  | r_prop (S $ Arith(e,r1) $ Tok(t,r2)) = parse_error (join r1 r2, "no trailing arithmetic expression")
-  | r_prop (S $ Tok(t,r1) $ Arith(e,r2)) = parse_error (join r1 r2, "no leading arithmetic expression")
-  | r_prop (S $ Arith(e,r)) = parse_error (r, "only one arithmetic expression")
-  | r_prop (S $ Tok(_,r)) = parse_error (r, "no arithmetic expression")
+and p_atomic_prop ST = ST |> p_arith >> p_rel >> p_arith >> reduce r_atomic_prop
 
 (* <rel> *)
 and p_rel ST = case first ST of
@@ -433,6 +429,26 @@ and p_rel ST = case first ST of
   | T.LEQ => ST |> shift
   | T.LANGLE => ST |> shift
   | t => error_expected_list (here ST, [T.RANGLE, T.EQ, T.GEQ, T.LEQ, T.LANGLE], t)
+
+(* reduce <prop> *)
+and r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.EQ,_) $ Arith(e2,r2)) = S $ Prop(R.Eq(e1,e2),join r1 r2)
+  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.RANGLE,_) $ Arith(e2,r2)) = S $ Prop(R.Gt(e1,e2),join r1 r2)
+  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.LANGLE,_) $ Arith(e2,r2)) = S $ Prop(R.Lt(e1,e2),join r1 r2)
+  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.GEQ,_) $ Arith(e2,r2)) = S $ Prop(R.Ge(e1,e2),join r1 r2)
+  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.LEQ,_) $ Arith(e2,r2)) = S $ Prop(R.Le(e1,e2),join r1 r2)
+  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(t,r) $ Arith(e2,r2)) = parse_error(r, "unrecognized operator, only '>' or '=' allowed ")
+  | r_atomic_prop (S $ Arith(e1,r1) $ Arith(e2,r2)) = parse_error (join r1 r2, "consecutive arithmetic expressions")
+  | r_atomic_prop (S $ Arith(e,r1) $ Tok(t,r2)) = parse_error (join r1 r2, "no trailing arithmetic expression")
+  | r_atomic_prop (S $ Tok(t,r1) $ Arith(e,r2)) = parse_error (join r1 r2, "no leading arithmetic expression")
+  | r_atomic_prop (S $ Arith(e,r)) = parse_error (r, "only one arithmetic expression")
+  | r_atomic_prop (S $ Tok(_,r)) = parse_error (r, "no arithmetic expression")
+
+and r_prop (S $ Tok(T.LPAREN, r1) $ Prop(phi,_) $ Tok(T.RPAREN, r2)) = S $ Prop(phi, join r1 r2)
+  | r_prop (S $ Prop(phi1, r1) $ PropInfix(_, con, _) $ Prop(phi2, r2)) = r_prop (S $ Prop(con(phi1,phi2), join r1 r2))
+  | r_prop (S $ Prop(_,r1) $ Prop(_,r2)) = parse_error (join r1 r2, "consecutive propositions")
+  | r_prop (S $ PropInfix(_,_,r)) = parse_error (r, "trailing infix prop operator")
+  | r_prop (S $ Prop(phi,r)) = S $ Prop(phi,r)
+  | r_prop (S $ Tok(_,r)) = parse_error (r, "unknown or empty proposition")
 
 (* <type_opt> *)
 and p_type_opt ST = case first ST of
