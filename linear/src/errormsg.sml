@@ -37,7 +37,10 @@ struct
       ; List.app TextIO.print [":", str, ":", note, "\n"]
       ; ignore (Option.map (TextIO.print o tabToSpace o Mark.show_source) ext)
       )
-    
+  
+  (* print error *)
+  (* ext: extent information *)
+  (* note: error msg to print *)
   fun error ext note =
       ( anyErrors := true
       ; if !Flags.verbosity >= 0 (* verbosity < 0: don't print error messages! *)

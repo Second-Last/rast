@@ -60,6 +60,7 @@ fun qcheck (v::vs) sigma con rhs_pred phi =
 fun quick_check_valid ctx con phi = qcheck ctx nil con (fn b => b) phi (* phi true *)
 fun quick_check_unsat ctx con phi = qcheck ctx nil con (fn b => not b) phi (* phi false *)
 
+(* Used to infer annotations using brute force *)
 fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,NONE) else v) ctx
 
 val global_prop = ref R.True
@@ -70,6 +71,7 @@ fun attach v n [] = [[(v,R.Int(n))]]
   | attach v n [x] = [(v,R.Int(n))::x]
   | attach v n (x::xs) = ((v,R.Int(n))::x)::(attach v n xs)
 
+(* Create all possibilities *)
 fun all_one v n l =
   if n > threshold
   then []
@@ -80,6 +82,8 @@ fun all [] = []
 
 exception Unsat
 
+
+(* Try each possibility if it satisifies all constraints *)
 fun try_sols (subst::substs) =
   let val phi = R.apply_prop subst (!global_prop)
       val ctx = R.free_prop phi nil
@@ -90,6 +94,7 @@ fun try_sols (subst::substs) =
   end
   | try_sols [] = raise Unsat
 
+(* Solve global constraints for inference *)
 fun solve_global () =
   let val ctx = R.free_anon_prop (!global_prop) nil
   in

@@ -37,7 +37,7 @@ fun check_declared env (f,es) ext =
       of SOME(vs,con,(A,pot,C)) =>
          if List.length es = List.length vs
          then ()
-         else ERROR ext ("process " ^ f ^ " called with wronger number of indices:\n"
+         else ERROR ext ("process " ^ f ^ " called with wrong number of indices:\n"
                          ^ "expected " ^ Int.toString (List.length vs)
                          ^ "found    " ^ Int.toString (List.length es))
        | NONE => E.error_undeclared (f, ext))
@@ -139,7 +139,7 @@ and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
 and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
     let val () = case D
                   of nil => ()
-                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D ^ " at close")
+                   | _ => ERROR ext ("unconsumed channels " ^ pp_channels D ^ " at close")
     in A.Close(x) end
   | oneR env D (A.Close(x)) (z,C) ext =
     error_mismatch env x C "1" ext

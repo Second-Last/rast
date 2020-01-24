@@ -28,7 +28,6 @@ datatype tp =
        | Dia of tp                 (* <> A *)
        | Box of tp                 (* [] A *)
        | TpName of tpname * Arith.arith list (* a  or  a{...} *)
-       | Dot                       (* pseudo-type for empty context *)
 type choices = (label * tp) list
 
 type chan = string
@@ -169,7 +168,6 @@ datatype tp =
        | Dia of tp                 (* <> A *)
        | Box of tp                 (* [] A *)
        | TpName of tpname * R.arith list (* a  or  a{...} *)
-       | Dot                       (* pseudo-type for empty context *)
 type choices = (label * tp) list
 
 type chan = string
@@ -253,7 +251,6 @@ fun apply_tp sg (One) = One
   | apply_tp sg (ExistsNat(v,A)) = ExistsNat(apply_tp_bind sg (v,A))
   | apply_tp sg (ForallNat(v,A)) = ForallNat(apply_tp_bind sg (v,A))
   | apply_tp sg (TpName(a,es)) = TpName(a, R.apply_list sg es)
-  | apply_tp sg (Dot) = Dot
 and apply_tp_bind sg (v,A) =
     let val v' = R.fresh_var sg v
     in (v', apply_tp ((v,R.Var(v'))::sg) A) end
@@ -417,7 +414,6 @@ fun pp_tp (One) = "1"
   | pp_tp (ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp A
   | pp_tp (ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp A
   | pp_tp (TpName(a,l)) = a ^ pp_idx l
-  | pp_tp (Dot) = "."
 and pp_choice nil = ""
   | pp_choice ((l,A)::nil) = l ^ " : " ^ pp_tp A
   | pp_choice ((l,A)::choices) =

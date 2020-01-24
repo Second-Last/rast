@@ -1,9 +1,5 @@
 (* Normalizing Arithmetic Expressions *)
 
-(* Presently dead code, but to be revived
- * for nonlinear index expressions
- *)
-
 signature NORMALIZE = 
 sig
 

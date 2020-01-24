@@ -163,7 +163,6 @@ fun ext_tp env (A.One) = A.One
     if is_internal a
     then ext_tp env (A.expd_tp env (a,es))   (* must be defined to be mentioned *)
     else A
-  | ext_tp env (A.Dot) = A.Dot
 
 and ext_choices env nil = nil
   | ext_choices env ((l,A)::choices) =
@@ -207,7 +206,6 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.TpName(a,l)) = a ^ pp_idx l
-  | pp_tp i (A.Dot) = "."
 and pp_tp_indent i A = spaces i ^ pp_tp i A
 and pp_tp_after i s A = s ^ pp_tp (i+len(s)) A
 
