@@ -174,25 +174,18 @@ fun init_pot env f =
 fun measure Flags.None = false
   | measure _ = true
 
-(*
 fun run env (A.Exec(f,ext)::decls) =
     let val () = if !Flags.verbosity >= 1
                  then TextIO.print (PP.pp_decl env (A.Exec(f,ext)) ^ "\n")
                  else ()
-        val p = init_pot env f
-        val config = Exec.exec env [A.Proc(0,(0,p),A.ExpName(f,[]))] (* may raise Exec.SoftError/Exec.HardError *)
+        val SOME([],([],P,x)) = A.lookup_expdef env f
+        val v = Eval.evaluate env P x
         val () = if !Flags.verbosity >= 1
-                 then TextIO.print (PP.pp_config (measure (!Flags.time)) (measure (!Flags.work)) config
-                                    ^ "%------------------------------\n")
+                 then TextIO.print (x ^ " = " ^ Eval.Print.pp_value v ^ "\n")
                  else ()
-    in
-        run env decls
-    end
+    in run env decls end
   | run env (_::decls) = run env decls
   | run env nil = ()
-*)
-
-fun run env decls = ()
 
 (* main function to run file *)
 fun test args =
@@ -205,8 +198,10 @@ fun test args =
         (* parse and load file, i.e., generate an environment *)
         val env = load nil filenames
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
+                 | e => exit_failure "% internal error (uncaught exception)"
         val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)
+            (* handle e => exit_failure "% internal dynamic error" *)
             (*
             handle Exec.SoftError => exit_failure "% execution failed (soft)"
                  | Exec.HardError => exit_failure "% execution failed (hard)"

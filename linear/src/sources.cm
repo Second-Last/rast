@@ -39,6 +39,7 @@ Group is
       *)
 
       elab.sml
+      eval.sml      
       (*
       exec.sml
       *)
