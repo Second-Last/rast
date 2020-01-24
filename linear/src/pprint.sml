@@ -34,9 +34,6 @@ sig
     (* declarations *)
     val pp_decl : Ast.env -> Ast.decl -> string
 
-    (* configurations *)
-    val pp_config : bool -> bool -> Ast.config -> string
-
 end
 
 structure PPrint :> PPRINT =
@@ -166,7 +163,6 @@ fun ext_tp env (A.One) = A.One
     if is_internal a
     then ext_tp env (A.expd_tp env (a,es))   (* must be defined to be mentioned *)
     else A
-  | ext_tp env (A.Dot) = A.Dot
 
 and ext_choices env nil = nil
   | ext_choices env ((l,A)::choices) =
@@ -210,7 +206,6 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.TpName(a,l)) = a ^ pp_idx l
-  | pp_tp i (A.Dot) = "."
 and pp_tp_indent i A = spaces i ^ pp_tp i A
 and pp_tp_after i s A = s ^ pp_tp (i+len(s)) A
 
@@ -245,23 +240,6 @@ fun pp_tpj_compact env D pot zC =
 (***********************)
 (* Process expressions *)
 (***********************)
-
-(* Cut is right associative, so we need paren around
- * the left-hand side of a cut if it is not atomic.
- * Atomic are Id, Case<dir>, CloseR, ExpName
- * Rather than propagating a binding strength downward,
- * we just peek ahead.
- *)
-fun atomic P = case P of
-    A.Id _ => true | A.Case _ => true
-  | A.Close _ => true | A.ExpName _ => true
-  | A.Marked(marked_exp) => atomic (Mark.data marked_exp)
-  | _ => false
-
-fun long P = case P of
-    A.Case _ => true
-  | A.Marked(marked_exp) => long (Mark.data marked_exp)
-  | _ => false
 
 fun pp_chanlist [] = ""
   | pp_chanlist [x] = x
@@ -347,22 +325,6 @@ fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
     (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P *)
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line
-
-(******************)
-(* Configurations *)
-(******************)
-
-fun pp_config mtime mwork nil = ""
-  | pp_config mtime mwork (A.Proc(t, (w, pot), P)::config) =
-    (if mtime then "$ " ^ Int.toString(t) ^ " " else "")
-    ^ (if mwork then "$ (" ^ Int.toString(w) ^ ", " ^ Int.toString(pot) ^ ") " else "")
-    ^ "$ " ^ P.pp_exp P ^ "\n"         (* print compactly *)
-    ^ pp_config mtime mwork config
-  | pp_config mtime mwork (A.Msg(t, (w, pot), M)::config) =
-    (if mtime then "@ " ^ Int.toString(t) ^ " " else "")
-    ^ (if mwork then "@ (" ^ Int.toString(w) ^ ", " ^ Int.toString(pot) ^ ") " else "")
-    ^ "@ " ^ P.pp_msg M ^ "\n"         (* print compactly *)
-    ^ pp_config mtime mwork config
 
 (**********************)
 (* External Interface *)

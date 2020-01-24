@@ -1,8 +1,12 @@
 signature COST =
 sig
-
+    (* applying cost models to programs *)
     val apply_cost_model : Ast.exp -> Ast.exp
+    
+    (* apply work cost model, pre-inserts ticks *)
     val apply_cost_work : Ast.exp -> Ast.exp
+
+    (* apply time cost model, post-inserts delays *)
     val apply_cost_time : Ast.exp -> Ast.exp
 
 end (* signature COST *)
@@ -13,6 +17,7 @@ struct
 structure R = Arith
 structure A = Ast
 
+(* insert a tick/delay with each receive operation *)
 fun cost_recv f (A.Id(x,y)) = A.Id(x,y)
   | cost_recv f (A.Spawn(P,Q)) = A.Spawn(cost_recv f P, cost_recv f Q)
   | cost_recv f (A.ExpName(x,g,es,xs)) = A.ExpName(x,g,es,xs)
@@ -47,8 +52,10 @@ and cost_recv_branches f nil = nil
   | cost_recv_branches f ((l,ext,P)::branches) =
     (l,ext,f(cost_recv f P))::cost_recv_branches f branches
 
+(* insert before/after operation *)
 datatype Sequence = Before | After
 
+(* insert a tick/delay with each send operation *)
 fun cost_send sf (A.Id(x,y)) = A.Id(x,y)
   | cost_send sf (A.Spawn(P,Q)) = A.Spawn(cost_send sf P, cost_send sf Q)
   | cost_send sf (A.ExpName(x,f,es,xs)) = A.ExpName(x,f,es,xs)
@@ -85,6 +92,10 @@ and cost_send_branches sf nil = nil
   | cost_send_branches sf ((l,ext,P)::branches) =
     (l,ext,cost_send sf P)::cost_send_branches sf branches
 
+(* applying cost models *)
+(* sf => before/after and quantity *)
+(* Flags => operation: recv/recvsend/send/none *)
+(* P => program *)
 fun cost_model sf (Flags.None) P = P
   | cost_model sf (Flags.Free) P = P
   | cost_model (_,f) (Flags.Recv) P = cost_recv f P

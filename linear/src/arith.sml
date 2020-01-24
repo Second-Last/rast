@@ -33,17 +33,17 @@ sig
     exception NotClosed
 
     (* contexts and variables *)
-    val anon : string -> bool
-    val drop_anon : arith -> arith
-    val drop_anon_prop : prop -> prop
+    val anon : string -> bool                          (* check if variable is for inference *)
+    val drop_anon : arith -> arith                     (* delete the _ from anon variables *)
+    val drop_anon_prop : prop -> prop                  (* delete the _ from propositions *)
 
-    val closed : ctx -> arith -> bool
-    val closed_prop : ctx -> prop -> bool
+    val closed : ctx -> arith -> bool                  (* check if arith is closed under ctx *)
+    val closed_prop : ctx -> prop -> bool              (* check if prop is closed under ctx *)
 
-    val free_vars : arith -> ctx -> ctx
-    val free_varlist : arith list -> ctx -> ctx
-    val free_prop : prop -> ctx -> ctx
-    val free_anon_prop : prop -> ctx -> ctx
+    val free_vars : arith -> ctx -> ctx                (* free variables of arith *)
+    val free_varlist : arith list -> ctx -> ctx        (* free variables of a list of arith *)
+    val free_prop : prop -> ctx -> ctx                 (* free variables of a prop *)
+    val free_anon_prop : prop -> ctx -> ctx            (* free anon variables of a prop *)
 
     val zip : ctx -> arith list -> subst               (* x1,...,xn\e1,...,en *)
                                                        (* may raise ListPair.UnequalLengths *)
@@ -123,6 +123,7 @@ type ctx = varname list
 type subst = (varname * arith) list
 exception NotClosed
 
+(* dropping the _ from anon variables, to be used by inference *)
 fun anon v = String.sub (v,0) = #"_"
 
 fun drop_anon (Int(n)) = Int(n)
@@ -144,6 +145,8 @@ fun drop_anon_prop (Eq(e1,e2)) = Eq(drop_anon e1, drop_anon e2)
   | drop_anon_prop (Implies(F,G)) = Implies(drop_anon_prop F, drop_anon_prop G)
   | drop_anon_prop (Not(F)) = Not(drop_anon_prop F)
 
+
+(* check if an arithmetic expression or proposition is closed under ctx *)
 fun closed ctx (Int(n)) = true
   | closed ctx (Add(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed ctx (Sub(e1,e2)) = closed ctx e1 andalso closed ctx e2
@@ -166,6 +169,8 @@ fun closed_prop ctx (Eq(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed_prop ctx (Implies(F,G)) = closed_prop ctx F andalso closed_prop ctx G
   | closed_prop ctx (Not(F)) = closed_prop ctx F
 
+
+(* compute the free variables of expressions and propositions *)
 fun free_vars (Int(n)) ctx = ctx
   | free_vars (Add(s,t)) ctx = free_vars t (free_vars s ctx)
   | free_vars (Sub(s,t)) ctx = free_vars t (free_vars s ctx)
@@ -224,6 +229,7 @@ fun free_anon_prop (Eq(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
   | free_anon_prop (Implies(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
   | free_anon_prop (Not(phi)) ctx = free_anon_prop phi ctx
 
+(* creates a substitution *)
 (* requires: length ctx = length es; raises ListPair.UnequalLengths otherwise *)
 fun zip ctx es = ListPair.zipEq (ctx, es)
 
@@ -620,74 +626,6 @@ fun simplify (Lt(Int(k),Int(k'))) = if k < k' then True else False
   | simplify (Or(F,G)) = or_ (simplify F) (simplify G)
   | simplify (And(F,G)) = and_ (simplify F) (simplify G)
   | simplify (Not(F)) = not_ (simplify F)
-
-(* preprocess *)
-(* all disabled right now except for substitution *)
-(*
-fun eq_prod (Mult(Int(k),Var(x)), Mult(Int(k'),Var(x'))) =
-    k = k' andalso x = x'
-
-fun prod_in p (Int(k)) = NONE
-  | prod_in p (Add(q,s)) =
-    (if eq_prod (p,q)
-     then SOME(s)
-     else case prod_in p s
-           of NONE => NONE
-            | SOME(s') => SOME(Add(q,s')))
-
-fun eq_lin (Int(k), Int(k')) = k = k'
-  | eq_lin (Int(k), Add _) = false
-  | eq_lin (Add(p,t), s) =
-    (case prod_in p s
-      of NONE => false
-       | SOME(s') => eq_lin(t, s'))
-
-fun eq_arith s t = eq_lin (linearize s , linearize t)
-
-fun refl (Eq(s,t)) = eq_arith s t
-  | refl (Le(s,t)) = eq_arith s t
-  | refl (Ge(s,t)) = eq_arith s t
-  | refl phi = false
-
-fun id (Eq(e1,e2)) (Eq(e1',e2')) =
-    let val s1 = linearize e1
-        val s2 = linearize e2
-        val t1 = linearize e1'
-        val t2 = linearize e2'
-    in (eq_lin (s1,t1) andalso eq_lin (s2,t2))
-       orelse eq_lin (s1,t2) andalso eq_lin (s2,t1)
-    end
-
-  | id (Lt(e1,e2)) (Lt(e1',e2')) =
-    let val s1 = linearize e1
-        val s2 = linearize e2
-        val t1 = linearize e1'
-        val t2 = linearize e2'
-    in eq_lin (s1,t1) andalso eq_lin (s2,t2) end
-  | id (Gt(e1,e2)) (Lt(e1',e2')) = id (Lt(e2,e1)) (Lt(e1',e2'))
-  | id (Lt(e1,e2)) (Gt(e1',e2')) = id (Lt(e1,e2)) (Lt(e2',e1'))
-  | id (Gt(e1,e2)) (Gt(e1',e2')) = id (Lt(e2,e1)) (Lt(e2',e1'))
-
-  | id (Le(e1,e2)) (Le(e1',e2')) =
-    let val s1 = linearize e1
-        val s2 = linearize e2
-        val t1 = linearize e1'
-        val t2 = linearize e2'
-    in eq_lin (s1,t1) andalso eq_lin (s2,t2) end
-  | id (Ge(e1,e2)) (Le(e1',e2')) = id (Le(e2,e1)) (Le(e1',e2'))
-  | id (Le(e1,e2)) (Ge(e1',e2')) = id (Le(e1,e2)) (Le(e2',e1'))
-  | id (Ge(e1,e2)) (Ge(e1',e2')) = id (Le(e2,e1)) (Le(e2',e1'))
-
-  (* assume here we do not have 'divides', 'not', 'or', 'implies', 'false' *)
-  | id psi phi = false
-
-fun is_true (True) = true
-  | is_true _ = false
-
-fun mem (True) phi = false
-  | mem (And(con1,con2)) phi = mem con1 phi orelse mem con2 phi
-  | mem psi phi = id psi phi
- *)
                         
 fun rev (And(con,psi)) con' = rev con (And(con',psi))
   | rev (True) con' = con'
@@ -701,12 +639,6 @@ fun subst_eq (True) con' phi = (rev con' True, phi)
   | subst_eq psi con' phi = ( rev con' psi, phi)
 
 fun preprocess xs con phi =
-(*
-    if is_true phi then (True,True)    (* needed? *)
-    else if refl phi then (True,True)
-    else if mem con phi then (True,True)
-    else
-*)
     subst_eq con True phi
 
 (* elim x F = G, where (exists x. F) <=> G and x does not occur in G

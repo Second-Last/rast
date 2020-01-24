@@ -13,6 +13,9 @@ structure PS = ParseState
 structure M = Stream
 structure T = Terminal
 
+(* lexing error *)
+(* (lpos,rpos) => source location information *)
+(* msg => error message *)
 fun error (lpos,rpos) msg = ( ErrorMsg.error (PS.ext(lpos,rpos)) msg
                             ; raise ErrorMsg.Error )
 

@@ -11,6 +11,8 @@ struct
 
 structure G = GetOpt        (* from $/smlnj-lib/Util/getopt-sig.sml *)
 
+(* options for the compiler *)
+(* printing: v - verbose, q - quiet, d - debug *)
 datatype option =
          Verbose of int
        | Help of bool
@@ -52,10 +54,12 @@ struct
     fun reset () = ( verbosity := 1 )
 end (* structure TestFlags *)
 
+(* set flags according to options given by the programmer *)
 fun process_option (Verbose(level)) = TestFlags.verbosity := level
   | process_option (Help(true)) = exit_success usage_info
   | process_option (Help(false)) = ()
 
+(* outcomes of compiling and executing programd *)
 datatype outcome =
          StaticError            (* includes lexer, parser, type-checker error *)
        | Success                (* parses, type-checks, and runs successfully *)

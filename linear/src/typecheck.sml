@@ -303,13 +303,11 @@ fun valid env ctx con A ext =
  *)
 fun contractive env (A as A.Next(_,A')) = contractive env A'
   | contractive env (A as A.TpName(a,l)) = false
-  | contractive env (A as A.Dot) = false
   | contractive env A = true
 
 fun eventually_box env (A.Box(A)) = true
   | eventually_box env (A.Next(_,A)) = eventually_box env A
   | eventually_box env (A.TpName(a,es)) = eventually_box env (A.expd_tp env (a,es))
-  | eventually_box env (A.Dot) = true (* pseudo-type *)
   | eventually_box _ _ = false
 
 fun eventually_box_ctx env [] ext = ()
@@ -320,7 +318,6 @@ fun eventually_box_ctx env [] ext = ()
 fun eventually_dia env (A.Dia(A)) = true
   | eventually_dia env (A.Next(_,A)) = eventually_dia env A
   | eventually_dia env (A.TpName(a,es)) = eventually_dia env (A.expd_tp env (a,es))
-  | eventually_dia env (A.Dot) = true (* pseudo-type *)
   | eventually_dia _ _ = false
 
 (***********************)
@@ -531,7 +528,6 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
   | eq_tp env ctx con seen A (A' as A.TpName(a',es')) =
     eq_tp' env ctx con seen A (A.expd_tp env (a',es'))
 
-  | eq_tp env ctx con seen A.Dot A.Dot = true
   | eq_tp env ctx con seen A A' = false
 
 and eq_tp_bind env ctx con seen (v,A) (v',A') =

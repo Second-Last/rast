@@ -36,11 +36,13 @@ struct
   fun pos (line, 0) = Int.toString line
     | pos (line, col) = Int.toString line ^ "." ^ Int.toString col
 
+  (* print the line and col number with file name *)
   fun show (left, right, file) = file ^ ":" ^ pos left ^ "-" ^ pos right
 
   fun show' (SOME(ext)) = show ext
     | show' (NONE) = "<unknown location>"
 
+  (* get line from source file *)
   fun theLine (NONE) = NONE
     | theLine (SOME(line)) = SOME(String.substring(line, 0, String.size(line)-1))
 
@@ -52,20 +54,6 @@ struct
           inputLines (n-1) instream
       end
 
-  (* first version: ^-----^ *)
-  (*
-  fun createLine col1 col2 =
-      String.implode (List.tabulate (col2, fn i =>
-        let val c = i+1
-        in
-            if c < col1 then #" "
-            else if c = col1 then #"^"
-            else if col1 < c andalso c < col2-1 then #"-"
-            else if c = col2-1 then #"^"
-            else #" "
-        end))
-  *)
-  (* second version: ~~~~~~~ *)
   fun createLine col1 col2 =
       String.implode (List.tabulate (col2, fn i =>
         let val c = i+1
@@ -75,11 +63,13 @@ struct
             else #" "
         end))
 
+  (* white space needed for underlining source code location of error *)
   fun count_whitespace i s =
       if i < String.size(s) andalso Char.isSpace(String.sub(s,i))
       then count_whitespace (i+1) s
       else i
 
+  (* main function showing the error message and highlighting the location in source *)
   fun show_source (left as (line1,col1), right as (line2,col2), file) =
       SafeIO.withOpenIn file (fn instream =>
         case inputLines line1 instream
