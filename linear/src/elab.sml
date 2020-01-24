@@ -390,7 +390,8 @@ and elab_exps env nil = nil
          end)
   | elab_exps env ((decl as A.Exec(f,ext))::decls) =
     (case A.lookup_expdef env f
-      of SOME(vs,P) => A.Exec(f,ext)::elab_exps' env decls
+      of SOME([],([],P,x)) => A.Exec(f,ext)::elab_exps' env decls
+       | SOME(vs,(ys,P,x)) => ERROR ext ("process " ^ f ^ " not closed")
        | NONE => ERROR ext ("process " ^ f ^ " undefined"))
   | elab_exps env ((decl as A.Pragma(p,line,ext))::decls) =
     ERROR ext ("unexpected pragma:\n" ^ PP.pp_decl env decl ^ "\n"

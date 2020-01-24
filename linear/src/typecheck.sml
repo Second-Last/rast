@@ -893,7 +893,7 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
              val () = match_contexts env ctx con cutD D' ext
              val () = if eq_tp' env ctx con nil C' C then ()
                       else ERROR ext ("type mismatch in tail call:\n"
-                                      ^ "expected " ^ PP.pp_tp_compact env C'
+                                      ^ "expected " ^ PP.pp_tp_compact env C' ^ "\n"
                                       ^ "found    " ^ PP.pp_tp_compact env C)
              val () = if not (C.entails ctx con (R.Eq(pot, pot')))
                       then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(pot, pot')))
