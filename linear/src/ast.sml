@@ -90,9 +90,9 @@ datatype decl =
        | TpDef of tpname * Arith.ctx * Arith.prop * tp * ext (* type a = A *)
        | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a = b *)
        | ExpDec of expname * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
-                                                             (* proc f : Delta |{pot}- C *)
+                                                             (* decl f{..} : Delta |{pot}- C *)
        | ExpDef of expname * Arith.ctx * (chan list * exp * chan) * ext
-                                                             (* proc x <- f <- xs = P *)
+                                                             (* proc x <- f{..} <- xs = P *)
        | Exec of expname * ext                               (* exec f *)
 
 type env = decl list
@@ -103,7 +103,7 @@ val apply_exp : Arith.subst -> exp -> exp (* [sigma]P *)
 val apply_chan_tp : Arith.subst -> chan_tp -> chan_tp
 val apply_context : Arith.subst -> context -> context
 
-(* Environments *)
+(* Environment Lookup *)
 val lookup_tp : env -> tpname -> (Arith.ctx * Arith.prop * tp) option
 val lookup_expdec : env -> expname -> (Arith.ctx * Arith.prop * (context * pot * chan_tp)) option
 val lookup_expdef : env -> expname -> (Arith.ctx * (chan list * exp * chan)) option
@@ -118,26 +118,6 @@ val expd_expdef : env -> expname * Arith.arith list -> exp option
 
 (* Operational Semantics *)
 val strip_exts : exp -> exp     (* remove all marks to support pattern matching *)
-
-(* Messages *)
-structure M : sig
-datatype msg =
-         LabR of label
-       | LabL of label
-       | CloseR
-       | AssertR of Arith.prop
-       | AssertL of Arith.prop
-       | PayR of pot
-       | PayL of pot
-       | NowR
-       | NowL
-end
-
-(* Semantic objects *)
-datatype proc = Proc of int * (int * int) * exp   (* Proc(time, (work, pot), P) *)
-              | Msg of int * (int * int) * M.msg  (* Msg(time, (work, pot), M) *)
-
-type config = proc list
 
 (* Printing *)
 (* for internal and debugging purposes only *)
@@ -154,8 +134,6 @@ sig
     val pp_pot : pot -> string
     val pp_potpos : pot -> string
     val pp_time : time -> string
-    val pp_msg : M.msg -> string
-    val pp_config : config -> string
 end
 
 end (* signature AST *)
@@ -311,7 +289,9 @@ and apply_exp_bind sg (x,v,P) =
     in (x,v',apply_exp ((v,R.Var(v'))::sg) P) end
 and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P)) branches
 
-(* Environments *)
+(**********************)
+(* Environment Lookup *)
+(**********************)
 
 fun lookup_tp (TpDef(a',vs,con,A,_)::env') a  =
     if a = a' then SOME(vs,con,A) else lookup_tp env' a
@@ -339,7 +319,7 @@ fun lookup_branch ((l:label,_,P)::branches) k =
   | lookup_branch nil k = NONE
 
 (********************************)
-(* Definitions and declarations *)
+(* Definitions and Declarations *)
 (********************************)
 
 (* expd_tp env (a,es) = [es/vs]A if a{vs} = A
@@ -395,24 +375,6 @@ fun strip_exts (Id(x,y)) = Id(x,y)
 and strip_exts_branches nil = nil
   | strip_exts_branches ((l,ext,P)::branches) =
     (l,ext,strip_exts P)::strip_exts_branches branches
-
-structure M = struct
-datatype msg =
-         LabR of label
-       | LabL of label
-       | CloseR
-       | AssertR of Arith.prop
-       | AssertL of Arith.prop
-       | PayR of pot
-       | PayL of pot
-       | NowR
-       | NowL
-end
-
-datatype proc = Proc of int * (int * int) * exp   (* Proc(time, (work, pot), P) *)
-              | Msg of int * (int * int) * M.msg  (* Msg(time, (work, pot), M) *)
-
-type config = proc list
 
 (************)
 (* Printing *)
@@ -507,24 +469,6 @@ fun pp_decl (TpDef(a,vs,R.True,A,_)) = "type " ^ a ^ pp_vars vs ^ " = " ^ pp_tp 
   | pp_decl (ExpDef(f,vs,(xs,P,x),_)) = "proc " ^ f ^ pp_vars vs ^ " : " ^ x ^ " <- " ^ pp_chanlist xs ^ " = " ^ pp_exp P
   | pp_decl (Exec(f,_)) = "exec " ^ f
   | pp_decl (Pragma(p,line,_)) = p ^ line
-
-fun pp_msg (M.LabR(k)) = "R." ^ k
-  | pp_msg (M.LabL(k)) = "L." ^ k
-  | pp_msg (M.CloseR) = "closeR"
-  | pp_msg (M.NowR) = "nowR"
-  | pp_msg (M.NowL) = "nowL"
-  | pp_msg (M.PayL(p)) = "payL " ^ pp_potpos p
-  | pp_msg (M.PayR(p)) = "payR " ^ pp_potpos p
-  | pp_msg (M.AssertR(phi)) = "assertR " ^ pp_prop phi
-  | pp_msg (M.AssertL(phi)) = "assertL " ^ pp_prop phi
-
-fun pp_config nil = ""
-  | pp_config (Proc(t, (w, pot), P)::config) =
-    "$ " ^ Int.toString(t) ^ " $ " ^ "(" ^ Int.toString(w) ^ ", " ^ Int.toString(pot) ^ ")" ^ " $ " ^ pp_exp P ^ "\n"
-    ^ pp_config config
-  | pp_config (Msg(t, (w, pot), M)::config) =
-    "@ " ^ Int.toString(t) ^ " @ " ^ "(" ^ Int.toString(w) ^ ", " ^ Int.toString(pot) ^ ")" ^ " @ " ^ pp_msg M ^ "\n"
-    ^ pp_config config
 
 end (* structure Print *)
 

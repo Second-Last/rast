@@ -34,9 +34,6 @@ sig
     (* declarations *)
     val pp_decl : Ast.env -> Ast.decl -> string
 
-    (* configurations *)
-    val pp_config : bool -> bool -> Ast.config -> string
-
 end
 
 structure PPrint :> PPRINT =
@@ -347,22 +344,6 @@ fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
     (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P *)
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line
-
-(******************)
-(* Configurations *)
-(******************)
-
-fun pp_config mtime mwork nil = ""
-  | pp_config mtime mwork (A.Proc(t, (w, pot), P)::config) =
-    (if mtime then "$ " ^ Int.toString(t) ^ " " else "")
-    ^ (if mwork then "$ (" ^ Int.toString(w) ^ ", " ^ Int.toString(pot) ^ ") " else "")
-    ^ "$ " ^ P.pp_exp P ^ "\n"         (* print compactly *)
-    ^ pp_config mtime mwork config
-  | pp_config mtime mwork (A.Msg(t, (w, pot), M)::config) =
-    (if mtime then "@ " ^ Int.toString(t) ^ " " else "")
-    ^ (if mwork then "@ (" ^ Int.toString(w) ^ ", " ^ Int.toString(pot) ^ ") " else "")
-    ^ "@ " ^ P.pp_msg M ^ "\n"         (* print compactly *)
-    ^ pp_config mtime mwork config
 
 (**********************)
 (* External Interface *)
