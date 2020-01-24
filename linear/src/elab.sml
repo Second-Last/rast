@@ -36,9 +36,6 @@ structure PP = PPrint
 structure C = Constraints
 structure TC = TypeCheck
 structure AR = ARecon
-(*
-structure BR = BRecon
-*)
 structure QR = QRecon
 structure WR = WRecon
 (*
@@ -76,15 +73,9 @@ fun pp_costs () =
     "--work=" ^ Flags.pp_cost (!Flags.work) ^ " "
     ^ "--time=" ^ Flags.pp_cost (!Flags.time)
 
-(* only for testing purposes *)
-fun arecon env ctx con A pot P C ext =
-    let val P' = AR.recon env ctx con A pot P C ext (* P' = P *)
-    in P' end
-
 (* quantifier reconstruction: first do approximate type checking *)
 fun qrecon env ctx con A pot P C ext =
     let val P' = AR.recon env ctx con A pot P C ext (* P' = P *)
-        (* add brecon here to simplify qrecon? *)
         val P'' = QR.recon env ctx con A pot P' C ext
     in P'' end
 
