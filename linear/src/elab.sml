@@ -282,6 +282,7 @@ fun elab_tps env nil = nil
     end
   | elab_tps env ((decl as A.ExpDec(f,vs,con,(D,pot,(z,C)),ext))::decls) =
     (* do not print process declaration so they are printed close to their use *)
+    (* check for duplicates and validity *)
     let
         val () = if dups vs then ERROR ext ("duplicate index variable in process declaration") else ()
         val () = valid_con env vs con ext
@@ -332,9 +333,11 @@ and elab_exps env nil = nil
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
   | elab_exps env ((decl as A.ExpDef(f,vs,(xs,P,x),ext))::decls) =
+    (* type check the process now *)
     (case A.lookup_expdec env f
       of NONE => ERROR ext ("process " ^ f ^ " undeclared")
        | SOME(vs',con',(D',pot',zC')) =>
+         (* check validity, duplicates, corresponds with the declaration *)
          let 
              val () = if dups vs then ERROR ext ("duplicate index variable in process definition") else ()
              val () = if List.length vs = List.length vs' then ()
@@ -343,11 +346,13 @@ and elab_exps env nil = nil
              val () = if List.length xs = List.length D' then ()
                       else ERROR ext ("process defined with " ^ Int.toString (List.length xs) ^ " arguments and "
                                       ^ "declared with " ^ Int.toString (List.length D'))
+             (* substitution in the declaration *)
              val (con, (D,pot,zC)) = subst (R.create_idx vs) (vs',con',(D',pot',zC'))
              val (D,zC) = (subst_chans D xs, subst_chan zC x)
              val () = TC.closed_exp vs P ext
-             (* val P' = Cost.apply_cost_model P *) (* cost model now applied during reconstruction *)
+             (* cost model now applied during reconstruction *)
              val trecon_init = Time.toMicroseconds (Time.now ())
+             (* reconstruction will insert assert, assume, pay, get, work *)
              val P' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con D pot P zC ext
              val trecon_final = Time.toMicroseconds (Time.now ())
              val trecon = trecon_final - trecon_init
@@ -365,6 +370,7 @@ and elab_exps env nil = nil
                           else ()
              (* is necessary for implicit syntax, since reconstruction is approximate *)
              val tc_init = Time.toMicroseconds (Time.now ())
+             (* type check now *)
              val () = TC.check_exp false env vs con D pot P' zC ext (* type check *)
                  handle ErrorMsg.Error =>
                         (* if verbosity >= 2, type-check again, this time with tracing *)
@@ -382,7 +388,8 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.Exec(f,ext))::decls) =
     (case A.lookup_expdef env f
       of SOME([],([],P,x)) => A.Exec(f,ext)::elab_exps' env decls
-       | SOME(vs,(ys,P,x)) => ERROR ext ("process " ^ f ^ " not closed")
+         (* cannot run processes with non-empty context *)
+       | SOME(vs,(ys,P,x)) => ERROR ext ("process " ^ f ^ " with non-empty context")
        | NONE => ERROR ext ("process " ^ f ^ " undefined"))
   | elab_exps env ((decl as A.Pragma(p,line,ext))::decls) =
     ERROR ext ("unexpected pragma:\n" ^ PP.pp_decl env decl ^ "\n"
@@ -393,9 +400,9 @@ and elab_exps env nil = nil
  * Returns NONE if there is a static error
  *)
 fun elab_decls env decls =
-    let
-        (* first pass: check validity of types and create internal names *)
-        val env' = elab_tps env decls
+
+    (* first pass: check validity of types and create internal names *)
+    let val env' = elab_tps env decls
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'
