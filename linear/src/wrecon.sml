@@ -2,9 +2,9 @@
  * applies to implicit syntax, after approximate and
  * quantifier reconstruction
  *
- * Fill is pay/get potential and additional work{p} expressions
+ * Fill in pay/get potential and additional work{p} expressions
  * The result is not always very clean (e.g., it might insert
- * work{0}), but we believe the algorithm is complete.  The result
+ * work{0}), but the algorithm is complete.  The result
  * is not necessarily well-typed, which is later verified via
  * type checking on the reconstructed expression
  *
@@ -12,8 +12,8 @@
  * constructs for invertible types are inserted as soon as possible
  * and for noninvertible types as late as possible.  That is, we
  * get potential as soon as we can and pay as late as we can.
- * Calls and cuts provide the main difficult part, since they fix
- * an interface types
+ * Calls provide the main difficult part, since they fix
+ * an interface type
  *)
 
 structure WRecon :> RECON =
@@ -40,130 +40,7 @@ fun skipW env A =
    | A.PayPot(p,A') => skipW env A'
    | A' => A'
 
-(* copied from qrecon.sml and updated *)
-(* is there a simple way to unify these? *)
-
-(*
-(* matching_wprefix env A B, where A = <| A' or A = |> A' *)
-fun matching_wprefix env A B = matching_wprefix' env (skip env A) (skip env B)
-and matching_wprefix' env (A.PayPot(p,A')) (A.PayPot(q,B')) = true
-  | matching_wprefix' env (A.GetPot(p,A')) (A.GetPot(q,B')) = true
-  | matching_wprefix' env A B = false
-
-(* we insert assumeL if must_postponeL is false *)
-fun must_postponeL env A' (A.Id) = false (* need not postpone *)
-  | must_postponeL env A' (A.Cut(P,lpot,B,Q)) = must_postponeL env A' P
-  | must_postponeL env A' (A.Spawn(P,Q)) = must_postponeL env A' P
-  | must_postponeL env A' (A.ExpName(f,es)) =
-    matching_wprefix env A' (TC.synL env (f,es))
-  (* left interactions *)
-  | must_postponeL env A' (A.LabL _) = false
-  | must_postponeL env A' (A.CaseL _) = false
-  | must_postponeL env A' (A.WaitL _) = false
-  | must_postponeL env A' (A.AssumeL _) = false
-  | must_postponeL env A' (A.AssertL _) = false
-  (* right interactions *)
-  | must_postponeL env A' (A.LabR(_, P))  = must_postponeL env A' P
-  | must_postponeL env A' (A.CaseR(branches)) = must_postpone_branchesL env A' branches
-  | must_postponeL env A' (A.CloseR) = false
-  | must_postponeL env A' (A.AssertR(phi, P)) = must_postponeL env A' P
-  | must_postponeL env A' (A.AssumeR(phi, P)) = must_postponeL env A' P
-  (* neutral *)
-  | must_postponeL env A' (A.Imposs) = false
-  | must_postponeL env A' (A.Work(p,P)) = must_postponeL env A' P
-  | must_postponeL env A' (A.Delay(t,P)) = must_postponeL env A' P
-  | must_postponeL env A' (A.Marked(marked_P)) = must_postponeL env A' (Mark.data marked_P)
-  (* illegal, catch later *)
-  | must_postponeL env A' P = false
-(* must postpone if just one branch forces it *)
-and must_postpone_branchesL env A' nil = false
-  | must_postpone_branchesL env A' ((l,_,P)::branches) =
-    must_postponeL env A' P orelse must_postpone_branchesL env A' branches
-
-(* we insert assumeR if must_postponeR is false *)
-fun must_postponeR env (A.Id) C' = false (* need not postpone *)
-  | must_postponeR env (A.Cut(P, _, _, Q)) C' = must_postponeR env Q C'
-  | must_postponeR env (A.Spawn(P,Q)) C' = must_postponeR env Q C'
-  | must_postponeR env (A.ExpName(f,es)) C' =
-    matching_wprefix env (TC.synR env (f,es)) C'
-  (* right interactions *)
-  | must_postponeR env (A.LabR _) C' = false
-  | must_postponeR env (A.CaseR _) C' = false
-  | must_postponeR env (A.CloseR) C' = false
-  | must_postponeR env (A.AssertR _) C' = false
-  | must_postponeR env (A.AssumeR _) C' = false
-  (* left interactions *)
-  | must_postponeR env (A.LabL(_, P)) C' = must_postponeR env P C'
-  | must_postponeR env (A.CaseL(branches)) C' = must_postpone_branchesR env branches C'
-  | must_postponeR env (A.WaitL(P)) C' = must_postponeR env P C'
-  | must_postponeR env (A.AssertL(_,P)) C' = must_postponeR env P C'
-  | must_postponeR env (A.AssumeL(_,P)) C' = must_postponeR env P C'
-  (* neutral *)
-  | must_postponeR env (A.Imposs) C' = false
-  | must_postponeR env (A.Work(p,P)) C' = must_postponeR env P C'
-  | must_postponeR env (A.Delay(t,P)) C' = must_postponeR env P C'
-  | must_postponeR env (A.Marked(marked_P)) C' = must_postponeR env (Mark.data marked_P) C'
-  (* illegal, catch later *)
-  | must_postponeR env P C' = false
-(* must postpoint if just one branch forces it *)
-and must_postpone_branchesR env nil C' = false
-  | must_postpone_branchesR env ((l,_,P)::branches) C' =
-    must_postponeR env P C' orelse must_postpone_branchesR env branches C'
-
-(* we insert payL if may_postponeL is false *)
-fun may_postponeL env A' (A.Id) = false (* cannot postpone past 'forward' *)
-  | may_postponeL env A' (A.Cut(P,lpot,B,Q)) = true
-  | may_postponeL env A' (A.Spawn(P,Q)) = may_postponeL env A' P
-  | may_postponeL env A' (A.ExpName(f,es)) =
-    matching_wprefix env A' (TC.synL env (f,es))
-  (* left interactions *)
-  | may_postponeL env A' (A.LabL _) = false
-  | may_postponeL env A' (A.CaseL _) = false
-  | may_postponeL env A' (A.WaitL _) = false
-  | may_postponeL env A' (A.AssertL _) = false
-  | may_postponeL env A' (A.AssumeL _) = false
-  (* right interactions *)
-  | may_postponeL env A' (A.LabR(_, P))  = true
-  | may_postponeL env A' (A.CaseR(branches)) = true (* push into each branch *)
-  | may_postponeL env A' (A.CloseR) = false (* can not postpone past closeR *)
-  | may_postponeL env A' (A.AssertR(_,P)) = true
-  | may_postponeL env A' (A.AssumeR(_,P)) = true
-  (* neutral *)
-  | may_postponeL env A' (A.Imposs) = false
-  | may_postponeL env A' (A.Work(p,P)) = true
-  | may_postponeL env A' (A.Delay(t,P)) = true
-  | may_postponeL env A' (A.Marked(marked_P)) = may_postponeL env A' (Mark.data marked_P)
-  (* illegal, catch later *)
-  | may_postponeL env A' P = true (* default is 'true' *)
-
-(* we insert PayR if may_postponeR is false *)
-fun may_postponeR env (A.Id) C' = false (* cannot postpone *)
-  | may_postponeR env (A.Cut(P, _, _, Q)) C' = true
-  | may_postponeR env (A.Spawn(P,Q)) C' = true
-  | may_postponeR env (A.ExpName(f,es)) C' =
-    matching_wprefix env (TC.synR env (f,es)) C'
-  (* right interactions *)
-  | may_postponeR env (A.LabR _) C' = false
-  | may_postponeR env (A.CaseR _) C' = false
-  | may_postponeR env (A.CloseR) C' = false
-  | may_postponeR env (A.AssertR _) C' = false
-  | may_postponeR env (A.AssumeR _) C' = false
-  (* left interactions *)
-  | may_postponeR env (A.LabL(_, P)) C' = true
-  | may_postponeR env (A.CaseL(branches)) C' = true
-  | may_postponeR env (A.WaitL(P)) C' = true
-  | may_postponeR env (A.AssertL _) C' = true
-  | may_postponeR env (A.AssumeL _) C' = true
-  (* neutral *)
-  | may_postponeR env (A.Imposs) C' = false (* TODO: check! *)
-  | may_postponeR env (A.Work(p,P)) C' = true
-  | may_postponeR env (A.Delay(t,P)) C' = true
-  | may_postponeR env (A.Marked(marked_P)) C' = may_postponeR env (Mark.data marked_P) C'
-  (* illegal, catch later *)
-  | may_postponeR env P C' = true (* default is 'true' *)
-
-*)
-
+(* insert pay/get *)
 fun addR_pay env P (z,A.PayPot(p,C)) = A.Pay(z,p,addR_pay env P (z,skip env C))
   | addR_pay env P (z,C) = P
 
@@ -185,51 +62,16 @@ fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
   | add_call env D (A.Spawn(A.Marked(marked_P),Q)) =
     add_call env D (A.Spawn(Mark.data marked_P,Q))
 
-(* recon env A P C ext = P'
+(* recon env D P C ext = P'
  * where P' contains pay/get potential and additional work * where needed
  * 'pot' tracks the available potential
- * Assumes A |- P : C, approximately
+ * Assumes D |- P : C, approximately
  *
  * P' is NOT guaranteed to be well-typed, because constraint solving
  * is left to type checking
  *)
 fun recon env D P zC ext =
-  recon''' env D P zC ext
-
-(*
-  let
-      val A' = skip env A  (* A' is structural or quantifier *)
-      val C' = skip env C  (* C' is structural or quantifier *)
-  in
-      recon' env A' P C' ext
-  end
-
-(* recon' env A P C ext = P'
- * receives potential as early as possible and pays
- * potential as late as possible
- * otherwise see recon'
- *)
-and recon' env (A as A.PayPot(pot',A')) P C ext =
-    if not (must_postponeL env A P)
-    then A.GetL(pot', recon env A' (R.plus(pot',pot)) P C ext)
-    else recon'' env A P C ext
-  | recon' env A P (C as A.GetPot(pot',C')) ext =
-    if not (must_postponeR env P C)
-    then A.GetR(pot', recon env A (R.plus(pot',pot)) P C' ext)
-    else recon'' env A P C ext
-  | recon' env (A as A.GetPot(pot',A')) P C ext =
-    if not (may_postponeL env A P)
-    then A.PayL(pot', recon env A' (R.minus(pot,pot')) P C ext)
-    else recon'' env A P C ext
-  | recon' env A P (C as A.PayPot(pot',C')) ext =
-    if not (may_postponeR env P C)
-    then A.PayR(pot', recon env A (R.minus(pot,pot')) P C' ext)
-    else recon'' env A P C ext
-  | recon' env A P C ext =
-    recon'' env A P C ext
-
-*)
-
+  recon' env D P zC ext
 
 and recon_getR env D P (z,C) ext =
     let val P' = recon env D P (z,C) ext
@@ -239,25 +81,26 @@ and recon_getL env D (x,A) P (z,C) ext =
     let val P' = recon env D P (z,C) ext
     in addL_get env (x,skip env A) P' end
 
-(* recon''' env A P C ext = P'
+(* recon' env A P C ext = P'
  * assumes A and C are structural or quantifiers and
  * it does not need to insert any terminal work into P
  *)
 (* judgmental constructs: id, cut, spawn, call *)
-and recon''' env D (P as A.Id(z',y)) (z,C) ext =
+and recon' env D (P as A.Id(z',y)) (z,C) ext =
     let val P' = addR_pay env P (z,skip env C)
         val P'' = addL_pay env (y,skip env (TC.lookup_context env y D ext)) P'
     in P'' end
-  | recon''' env D (A.Spawn(P,Q)) (z,C) ext =
+  | recon' env D (A.Spawn(P,Q)) (z,C) ext =
     let val D' = TC.syn_call env D P ext
         val Q' = recon env D' Q (z,C) ext
         val PQ' = add_call env D (A.Spawn(P,Q'))
     in PQ' end
-  | recon'''  env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+  | recon'  env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
     addR_pay env (addLs_pay env D xs P) (z,skip env C)
 
   (* begin cases for each action matching their type *)
-  | recon''' env D (A.Lab(x,k,P)) (z,C) ext =
+  (* follows the same strategy as proof constraints *)
+  | recon' env D (A.Lab(x,k,P)) (z,C) ext =
     if x = z
     then let val P' = recon_getR env D P (TC.syn_altR env (z,skipW env C) k) ext
              val P'' = addR_pay env (A.Lab(x, k, P')) (z,skip env C)
@@ -268,7 +111,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addL_pay env (x,skip env A) (A.Lab(x,k,P'))
          in P'' end
 
-  | recon''' env D (A.Case(x,branches)) (z,C) ext =
+  | recon' env D (A.Case(x,branches)) (z,C) ext =
     if x = z
     then let val branches' = recon_branchesR env D branches (TC.syn_branchesR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Case(x, branches')) (z, skip env C)
@@ -279,7 +122,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addL_pay env (x,skip env A) (A.Case(x,branches'))
          in P'' end
 
-  | recon''' env D (A.Send(x,y,P)) (z,C) ext =
+  | recon' env D (A.Send(x,y,P)) (z,C) ext =
     if x = z
     then let val B = TC.lookup_context env y D ext
              val P' = recon_getR env (TC.remove_chan y D ext) P (TC.syn_sendR env (z,skipW env C)) ext
@@ -294,7 +137,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P''' = addL_pay env (y,skip env B) P''
          in P''' end
 
-  | recon''' env D (A.Recv(x,y,P)) (z,C) ext =
+  | recon' env D (A.Recv(x,y,P)) (z,C) ext =
     if x = z
     then let val D' = TC.syn_recvR1 env D (z,skipW env C) y
              val P' = recon_getR env D' P (TC.syn_recvR2 env (z,skipW env C)) ext
@@ -308,9 +151,9 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P''' = addL_pay env (x,skip env A) (A.Recv(x,y,P''))
          in P''' end
 
-  | recon''' env D (P as A.Close(x)) (z,C) ext = (* x = z *)
+  | recon' env D (P as A.Close(x)) (z,C) ext = (* x = z *)
     addR_pay env P (z,skip env C)
-  | recon''' env D (A.Wait(x,P)) (z,C) ext = (* x <> z *)
+  | recon' env D (A.Wait(x,P)) (z,C) ext = (* x <> z *)
     let val A = TC.lookup_context env x D ext
         val D' = TC.syn_waitL env (TC.update_tp (x,skipW env A) D) x
         val P' = recon env D' P (z,C) ext
@@ -318,7 +161,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
     in P'' end
 
   (* quantifiers *)
-  | recon''' env D (A.Assert(x,phi,P)) (z,C) ext =
+  | recon' env D (A.Assert(x,phi,P)) (z,C) ext =
     if x = z
     then let val P' = recon_getR env D P (TC.syn_assertR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Assert(x, phi, P')) (z,skip env C)
@@ -328,7 +171,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Assert(x,phi,P'))
          in P'' end
-  | recon''' env D (A.Assume(x,phi, P)) (z,C) ext =
+  | recon' env D (A.Assume(x,phi, P)) (z,C) ext =
     if x = z
     then let val P' = recon_getR env D P (TC.syn_assumeR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Assume(x,phi,P')) (z,skip env C)
@@ -339,7 +182,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addL_pay env (x,skip env A) (A.Assume(x,phi,P'))
          in P'' end
 
-  | recon''' env D (A.SendNat(x,e,P)) (z,C) ext =
+  | recon' env D (A.SendNat(x,e,P)) (z,C) ext =
     if x = z
     then let val P' = recon_getR env D P (TC.syn_sendNatR env e (z, skipW env C)) ext
              val P'' = addR_pay env (A.SendNat(x,e,P')) (z,skip env C)
@@ -350,7 +193,7 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addL_pay env (x,skip env A) (A.SendNat(x,e,P'))
          in P'' end
 
-  | recon''' env D (A.RecvNat(x,v,P)) (z,C) ext =
+  | recon' env D (A.RecvNat(x,v,P)) (z,C) ext =
     if x = z
     then let val D' = D (* v goes into index variable context, which we don't track *)
              val P' = recon_getR env D' P (TC.syn_recvNatR env v (z, skipW env C)) ext
@@ -365,19 +208,19 @@ and recon''' env D (P as A.Id(z',y)) (z,C) ext =
   (* end structural cases *)
 
   (* impossibility *)
-  | recon''' env D (A.Imposs) (z,C) ext = A.Imposs
+  | recon' env D (A.Imposs) (z,C) ext = A.Imposs
 
   (* from the cost model *)
-  | recon''' env D (A.Work(p,P)) (z,C) ext =
+  | recon' env D (A.Work(p,P)) (z,C) ext =
     A.Work(p, recon env D P (z,C) ext) (* pot >= p, to be enforced later *)
 
   (* pass through temporal operator *)
-  | recon''' env A (A.Delay(t,P)) C ext =
+  | recon' env A (A.Delay(t,P)) C ext =
     A.Delay(t, recon env A P C ext)
 
   (* traverse but preserve marks *)
-  | recon''' env A (A.Marked(marked_P)) C ext =
-    A.Marked(Mark.mark'(recon''' env A (Mark.data marked_P) C (Mark.ext marked_P),
+  | recon' env A (A.Marked(marked_P)) C ext =
+    A.Marked(Mark.mark'(recon' env A (Mark.data marked_P) C (Mark.ext marked_P),
                         Mark.ext marked_P))
 
   (* all other cases are impossible, since we assume approximate typing *)
@@ -395,13 +238,7 @@ and recon_branchesR env D nil (z,nil) ext = nil
     ::(recon_branchesR env D branches (z,choices) ext)
 
 
-(* must_work env P = SOME(p) if must extent some work now, to be left with p
- *                 = NONE if we do not need to work now
- *)
-
-(* recon'' env A P C ext = P'
- * assumes A and C are structural or quantifiers
- * and NOT get/pay potential expressions
+(* insert_work env pot P = P'
  * checks if there is remaining potential that must be spent
  * and insert work{p} it if necessary.  Since we do not track
  * constraints we might insert work{0}.
