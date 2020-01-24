@@ -241,23 +241,6 @@ fun pp_tpj_compact env D pot zC =
 (* Process expressions *)
 (***********************)
 
-(* Cut is right associative, so we need paren around
- * the left-hand side of a cut if it is not atomic.
- * Atomic are Id, Case<dir>, CloseR, ExpName
- * Rather than propagating a binding strength downward,
- * we just peek ahead.
- *)
-fun atomic P = case P of
-    A.Id _ => true | A.Case _ => true
-  | A.Close _ => true | A.ExpName _ => true
-  | A.Marked(marked_exp) => atomic (Mark.data marked_exp)
-  | _ => false
-
-fun long P = case P of
-    A.Case _ => true
-  | A.Marked(marked_exp) => long (Mark.data marked_exp)
-  | _ => false
-
 fun pp_chanlist [] = ""
   | pp_chanlist [x] = x
   | pp_chanlist (x::l) = x ^ " " ^ pp_chanlist l

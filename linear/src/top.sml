@@ -121,6 +121,7 @@ fun reset () =
     ; ErrorMsg.reset ()
     )
 
+(* command line options applied before execution *)
 fun apply_options line =
     let val args = String.tokens Char.isSpace line
         val (options, filenames) = get_options args (* may exit_failure(msgs) *)
@@ -130,6 +131,7 @@ fun apply_options line =
                  ; raise ErrorMsg.Error )
     in () end
 
+(* pragmas indicated at the top of file applied before execution *)
 fun apply_pragmas (A.Pragma("#options",line,_)::decls) =
     let val () = if !Flags.verbosity >= 1
                  then TextIO.print ("#options" ^ line ^ "\n")
@@ -144,6 +146,7 @@ fun apply_pragmas (A.Pragma("#options",line,_)::decls) =
     ; raise ErrorMsg.Error )
   | apply_pragmas decls = decls
 
+(* load a set of files *)
 fun load env (file::filenames) =
     let val () = reset ()     (* internal lexer and parser state *)
         val decls = Parse.parse file (* may raise ErrorMsg.Error *)
@@ -191,12 +194,16 @@ fun run env (A.Exec(f,ext)::decls) =
 
 fun run env decls = ()
 
+(* main function to run file *)
 fun test args =
+    (* reset flags *)
     let val () = Flags.reset()
         val () = Constraints.approx := false
+        (* get and apply options *)
         val (options, filenames) = get_options args
         val () = List.app process_option options
-        val env = load nil filenames (* env after elaboration *)
+        (* parse and load file, i.e., generate an environment *)
+        val env = load nil filenames
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
         val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)

@@ -5,10 +5,14 @@ sig
 
   type normal = Arith.arith
 
+  (* normalizing an expression, combining the coefficients for each term in the multinomial *)
   val normalize : Arith.arith -> normal
   val check_normal : Arith.arith -> bool
+
+  (* compare two multinomials in normal form *)
   val compare : normal -> normal -> bool
 
+  (* simple checker for nonlinear constraints *)
   datatype outcome = Valid | NotValid | Unknown
   val decide : Arith.varname list -> Arith.prop -> Arith.prop -> outcome
 
@@ -169,6 +173,8 @@ struct
 
   datatype outcome = Valid | NotValid | Unknown
 
+  (* decide_norm (s = t) => compare each coefficient for equality *)
+  (* decide_norm (s >= t) => compare each coefficient for >= *)
   fun decide_norm ctx con (R.Eq(s,t)) =
       if compare s t then Valid else Unknown
     | decide_norm ctx con (R.Ge(s,R.Int(0))) =
