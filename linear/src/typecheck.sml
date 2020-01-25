@@ -28,7 +28,7 @@ sig
     val eq_tp : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.tp -> bool
 
     (* operations on approximately typed expressions (see arecon.sml) *)
-    (* val syn_cut : Ast.env -> Ast.exp * Ast.exp ->  Ast.ext -> Ast.exp *)
+    (* they synthesize the expected type *)
     val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context
     val syn_pot : Ast.env -> Ast.exp -> Ast.ext -> Ast.pot
     val synL : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.context
@@ -57,10 +57,7 @@ sig
     val syn_recvNatR : Ast.env -> Arith.varname -> Ast.chan_tp -> Ast.chan_tp
     val syn_recvNatL : Ast.env -> Ast.context -> Ast.chan -> Arith.varname -> Ast.context
 
-    (*
-    val synLR : Ast.env -> Ast.expname * Arith.arith list -> Ast.context * Ast.pot * Ast.chan_tp
-    *)
-
+    (* helpers needed for recon *)
     val remove_chans : Ast.chan list -> Ast.context -> Ast.ext -> Ast.context
     val remove_chan : Ast.chan -> Ast.context -> Ast.ext -> Ast.context
     val expand : Ast.env -> Ast.tp -> Ast.tp
@@ -305,6 +302,7 @@ fun contractive env (A as A.Next(_,A')) = contractive env A'
   | contractive env (A as A.TpName(a,l)) = false
   | contractive env A = true
 
+(* needed for BoxR and DiaL rules *)
 fun eventually_box env (A.Box(A)) = true
   | eventually_box env (A.Next(_,A)) = eventually_box env A
   | eventually_box env (A.TpName(a,es)) = eventually_box env (A.expd_tp env (a,es))
