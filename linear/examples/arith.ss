@@ -290,3 +290,73 @@ proc x <- bin2nat{n} <- b =
                  x <- succ_nat{2*n'} <- z'
          | e => wait b ;
                 x <- zero_nat <- )
+
+%%% Example computations
+
+decl b271 : . |- (x : bin{271})
+proc x <- b271 <- =
+  x.b1 ; send x {135} ;
+  x.b1 ; send x {67} ;
+  x.b1 ; send x {33} ;
+  x.b1 ; send x {16} ;
+  x.b0 ; send x {8} ;
+  x.b0 ; send x {4} ;
+  x.b0 ; send x {2} ;
+  x.b0 ; send x {1} ;
+  x.b1 ; send x {0} ;
+  x.e ; close x
+
+decl b119 : . |- (x : bin{119})
+proc x <- b119 <- =
+  x.b1 ; send x {59} ;
+  x.b1 ; send x {29} ;
+  x.b1 ; send x {14} ;
+  x.b0 ; send x {7} ;
+  x.b1 ; send x {3} ;
+  x.b1 ; send x {1} ;
+  x.b1 ; send x {0} ;
+  x.e ; close x
+
+decl b390 : . |- (x : bin{390})
+proc x <- b390 <- =
+  x1 <- b271 <- ;
+  x2 <- b119 <- ;
+  x <- plus{271}{119} <- x1 x2
+
+decl bb272 : . |- (xx : bin{272} * bin{272} * 1)
+proc xx <- bb272 <- =
+  x <- b271 <- ;
+  x' <- succ{271} <- x ;
+  xx <- dup{272} <- x'
+
+decl cmp_271_119 : . |- (o : ord{271}{119})
+proc o <- cmp_271_119 <- =
+  x1 <- b271 <- ;
+  x2 <- b119 <- ;
+  o <- compare{271}{119} <- x1 x2
+
+decl b32249 : . |- (x : bin{32249})
+proc x <- b32249 <- =
+  x1 <- b271 <- ;
+  x2 <- b119 <- ;
+  x <- times{271}{119} <- x1 x2
+
+decl n118 : . |- (x : nat{118})
+proc x <- n118 <- =
+  x1 <- b119 <- ;
+  x2 <- pred{119} <- x1 ;
+  x <- bin2nat{118} <- x2
+
+decl b118 : . |- (x : bin{118})
+proc x <- b118 <- =
+  x1 <- n118 <- ;
+  x <- nat2bin{118} <- x1
+
+exec b271
+exec b119
+exec b390
+exec bb272
+exec cmp_271_119
+exec b32249
+exec n118
+exec b118
