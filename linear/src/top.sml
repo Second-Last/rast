@@ -201,11 +201,7 @@ fun test args =
                  | e => exit_failure "% internal error (uncaught exception)"
         val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)
-            (* handle e => exit_failure "% internal dynamic error" *)
-            (*
-            handle Exec.SoftError => exit_failure "% execution failed (soft)"
-                 | Exec.HardError => exit_failure "% execution failed (hard)"
-            *)
+                 handle Eval.DynError => exit_failure "% execution failed"
     in
         exit_success (if !Constraints.approx then "% approx success" else "% success")
     end handle OS_SUCCESS => OS.Process.success

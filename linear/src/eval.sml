@@ -3,7 +3,8 @@
 signature EVAL =
 sig
     type value
-    val evaluate : Ast.env -> Ast.exp -> Ast.chan -> value
+    exception DynError
+    val evaluate : Ast.env -> Ast.exp -> Ast.chan -> value (* may raise DynError *)
 
     structure Print :
     sig
@@ -14,6 +15,7 @@ end
 structure Eval :> EVAL =
 struct
 
+structure R = Arith
 structure A = Ast
 structure PP = PPrint
 val ERROR = ErrorMsg.ERROR
@@ -22,10 +24,14 @@ datatype value =
          Lab of A.label * value (* + *)
        | Send of value * value  (* * *)
        | Close                  (* 1 *)
-       | CloRecv of (A.chan * value) list * (A.chan * A.exp) * A.chan (* -o *)
+       | SendNat of value       (* ?v *) 
        | CloCase of (A.chan * value) list * A.branches * A.chan (* & *)
+       | CloRecv of (A.chan * value) list * (A.chan * A.exp) * A.chan (* -o *)
+       | CloRecvNat of (A.chan * value) list * A.exp * A.chan (* !v *) 
 
 type environment = (A.chan * value) list
+
+exception DynError
 
 structure Print =
 struct
@@ -33,8 +39,11 @@ struct
 fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v  (* k(v) *)
   | pp_value (Send(w,v)) = "(" ^ pp_value w ^ ") ; " ^ pp_value v (* (w,v) *)
   | pp_value (Close) = "close"  (* () *)
+  | pp_value (SendNat(v)) = (if !Flags.verbosity >= 1 then "{-} ; " else "")
+                            ^ pp_value v
   | pp_value (CloRecv(eta,(x,P),z)) = "-"
   | pp_value (CloCase(eta,branches,z)) = "-"
+  | pp_value (CloRecvNat(eta,P,z)) = "-"
 
 fun pp_eta [] = "."
   | pp_eta ((x,v)::eta) = x ^ " = " ^ pp_value v ^ "\n" ^ pp_eta eta
@@ -100,6 +109,29 @@ and eval' env eta (A.Id(x,y)) z = (* x = z *)
   | eval' env eta (A.Wait(x,P)) z = (* x <> z *)
     let val Close = lookup eta x
      in eval env (remove eta x) P z end
+
+  | eval' env eta (A.Assert(x,phi,P)) z = eval' env eta P z
+  | eval' env eta (A.Assume(x,phi,P)) z = eval' env eta P z
+
+  | eval' env eta (A.SendNat(x,e,P)) z =
+    if x = z
+    then SendNat(eval env eta P z) (* ?R *)
+    else let val CloRecvNat(eta', Q, z') = lookup eta x (* !L *)
+             val v = eval env eta' Q z'
+         in eval env (update eta (x,v)) P z end
+  | eval' env eta (A.RecvNat(x,v,P)) z =
+    if x = z
+    then CloRecvNat(eta, P, z) (* !R *)
+    else let val SendNat(v) = lookup eta x (* ?L *)
+         in eval env (update eta (x,v)) P z end
+
+  | eval' env eta (A.Imposs) z = raise DynError
+  | eval' env eta (A.Work(q,P)) z = eval' env eta P z
+  | eval' env eta (A.Pay(x,q,P)) z = eval' env eta P z
+  | eval' env eta (A.Get(x,q,P)) z = eval' env eta P z
+  | eval' env eta (A.Delay(t,P)) z = eval' env eta P z
+  | eval' env eta (A.Now(x,P)) z = eval' env eta P z
+  | eval' env eta (A.When(x,P)) z = eval' env eta P z
     
   | eval' env eta (A.Marked(marked_P)) z =
     eval' env eta (Mark.data marked_P) z

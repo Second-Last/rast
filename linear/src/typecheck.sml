@@ -849,7 +849,7 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
       of (con',(D',pot',(z',B))) =>
          let val () = if List.length D' = List.length xs then ()
                       else ERROR ext ("incorrect number of arguments in call:\n"
-                                      ^ "expected " ^ Int.toString (List.length D')
+                                      ^ "expected " ^ Int.toString (List.length D') ^ "\n"
                                       ^ "found    " ^ Int.toString (List.length xs))
              val cutD = gen_context env xs D ext
              val () = match_contexts env ctx con cutD D' ext (* should this be after entails? *)
