@@ -181,3 +181,65 @@ proc t <- node{n0}{m}{n1} <- l c r =
                             t <- node{n0}{0}{n1} <- l c0 r
                           )
           )
+
+%%% Simple example, partly copied from arith.ss
+%%% Potential is 9 digits, 5 amortized, 1 to send bit, 2 at the end for e and close
+decl b271 : . |{9*(5+1)+2}- (x : bin{271}{5})
+proc x <- b271 <- =
+  x.b1 ; send x {135} ;
+  x.b1 ; send x {67} ;
+  x.b1 ; send x {33} ;
+  x.b1 ; send x {16} ;
+  x.b0 ; send x {8} ;
+  x.b0 ; send x {4} ;
+  x.b0 ; send x {2} ;
+  x.b0 ; send x {1} ;
+  x.b1 ; send x {0} ;
+  x.e ; close x
+
+decl b119 : . |{7*(5+1)+2}- (x : bin{119}{5})
+proc x <- b119 <- =
+  x.b1 ; send x {59} ;
+  x.b1 ; send x {29} ;
+  x.b1 ; send x {14} ;
+  x.b0 ; send x {7} ;
+  x.b1 ; send x {3} ;
+  x.b1 ; send x {1} ;
+  x.b1 ; send x {0} ;
+  x.e ; close x
+
+decl b0 : . |{2}- (x : bin{0}{5})
+proc x <- b0 <- =
+  x.e ; close x
+
+decl test_trie : . |{324}- (t : ?m. ?{m <= 7}. bin{m}{0} * trie{7-m})
+proc t <- test_trie <- =
+  x271 <- b271 <- ;    % 56 erg
+  x271' <- b271 <- ;   % 56 erg
+  x271'' <- b271 <- ;  % 56 erg
+  x0 <- b0 <- ;        % 2
+  x0' <- b0 <- ;       % 2
+  x0'' <- b0 <- ;      % 2
+  x119 <- b119 <- ;    % 44
+  trie <- leaf <- ;    % 0
+  trie.ins ; send trie {271} ; send trie x271 ;   % 6 = 2+4 erg
+  trie.ins ; send trie {0}   ; send trie x0 ;     % 6
+  trie.ins ; send trie {271} ; send trie x271' ;  % 6
+  trie.ins ; send trie {119} ; send trie x119 ;   % 6
+  trie.ins ; send trie {0}   ; send trie x0' ;    % 6
+  trie.ins ; send trie {0}   ; send trie x0'' ;   % 6
+  trie.ins ; send trie {271} ; send trie x271'' ; % 6
+  y271 <- b271 <- ;                               % 56
+  trie.del ; send trie {271} ; send trie y271 ;   % 6
+  {m} <- recv trie ;
+  z3 <- recv trie ;
+  send t {m} ;
+  send t z3 ;                                     % 1
+  t <- trie
+
+exec b271
+exec b119
+exec b0
+
+(* should return 3 = 11e, the multiplicity of 271 in the trie *)
+exec test_trie

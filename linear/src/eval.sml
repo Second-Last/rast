@@ -39,7 +39,7 @@ struct
 fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v  (* k(v) *)
   | pp_value (Send(w,v)) = "(" ^ pp_value w ^ ") ; " ^ pp_value v (* (w,v) *)
   | pp_value (Close) = "close"  (* () *)
-  | pp_value (SendNat(v)) = (if !Flags.verbosity >= 1 then "{-} ; " else "")
+  | pp_value (SendNat(v)) = (if !Flags.verbosity >= 1 then "{.} ; " else "")
                             ^ pp_value v
   | pp_value (CloRecv(eta,(x,P),z)) = "-"
   | pp_value (CloCase(eta,branches,z)) = "-"
