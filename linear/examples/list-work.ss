@@ -1,4 +1,4 @@
-#test success
+#test approx success
 #options --work=send --syntax=implicit
 
 %%% Lists, indexed by their size and potential carried by
@@ -13,8 +13,12 @@
 %%% stack as a list, stack as a chain
 %%% queue as two lists, queue as a bucket brigade
 
+%%% Run this with -v (--verbose) to see the values
+%%% in the lists resulting from evaluation
+
 %%% natural numbers as "generic" list elements
-type nat = +{zero : 1, succ : nat}
+% type nat = +{zero : 1, succ : nat}
+type nat = ?k. 1
 
 type list{n}{p} = +{ cons : ?{n > 0}. |{p}> nat * list{n-1}{p},
                      nil : ?{n = 0}. 1 }
@@ -98,6 +102,22 @@ proc l <- charge2{n}{p} <- k =
                    l <- charge2{n-1}{p} <- k
          | nil => wait k ; l.nil ; close l )
 
+%%% Next, the version with nonlinear constraints on potential
+%%% These are actually easily solved
+decl drain{n}{p}{q} : (k : list{n}{p+q+2}) |{2}- (l : list{n}{p})
+proc l <- drain{n}{p}{q} <- k =
+  case k ( cons => x <- recv k ;
+                   l.cons ; send l x ;
+                   l <- drain{n-1}{p}{q} <- k
+         | nil => wait k ; l.nil ; close l )
+
+decl charge{n}{p}{q} : (k : list{n}{p}) |{(q+2)*n+2}- (l : list{n}{p+q})
+proc l <- charge{n}{p}{q} <- k =
+  case k ( cons => x <- recv k ;
+                   l.cons ; send l x ;
+                   l <- charge{n-1}{p}{q} <- k
+         | nil => wait k ; l.nil ; close l )
+
 
 %%% Alternating elements of two lists 
 decl alternate{m}{n}{p} : (l1 : list{m}{p+2}) (l2 : list{n}{p+2}) |{2}- (l : list{m+n}{p})
@@ -110,18 +130,19 @@ proc l <- alternate{m}{n}{p} <- l1 l2 =
 
 %%% map
 %%% Due to linearity, this is implemented using a mapper
-%%% process of recursive type
-type mapper = &{ next : nat -o nat * mapper,
-                 done : 1 }
+%%% process of recursive type.  However, the type for map
+%%% requires some nonlinear constraints
+type mapper{q} = &{ next : <{q+1}| nat -o nat * mapper{q},
+                    done : <{1}| 1 }
 
-decl map{n}{p} : (k : list{n}{p+4}) (m : mapper) |{3}- (l : list{n}{p})
+decl map{n}{p}{q} : (k : list{n}{p+4}) (m : mapper{q}) |{3+(n*(q+1)+1)}- (l : list{n}{p})
 
-proc l <- map{n}{p} <- k m =
+proc l <- map{n}{p}{q} <- k m =
   case k ( cons => x <- recv k ;
                    m.next ; send m x ;
                    y <- recv m ;
                    l.cons ; send l y ;
-                   l <- map{n-1}{p} <- k m
+                   l <- map{n-1}{p}{q} <- k m
          | nil => wait k ;
                   m.done ; wait m ;
                   l.nil ; close l )
@@ -129,6 +150,7 @@ proc l <- map{n}{p} <- k m =
 %%% fold
 %%% Due to linearity, this is implemented using a folder
 %%% process of recursive type
+%%% For examples, a folder should be parameterized by potential (see mapper{q})
 type folder = &{ next : nat -o nat -o nat * folder,
                  done : 1 }
 
@@ -145,6 +167,7 @@ proc r <- fold{n}{p} <- f k y =
 %%% filter
 %%% Due to linearity, this is implemented using a selector process
 %%% of recursive type which returns the element it is given to test.
+%%% For examples, a selector should be parameterized by potential (see mapper{q})
 type selector = &{ next : nat -o +{ false : selector, true : nat * selector },
                    done : 1 }
 
@@ -286,3 +309,74 @@ proc q <- front{n} <- x r =
                   q <- front{n+1} <- x r
          | deq => q.some ; send q x ;
                   q <- r )
+
+%%% Examples
+
+decl the{k} : . |{1}- (n : nat)
+proc n <- the{k} <- = send n {k} ; close n
+
+decl list123{p} : . |{(p+2+1)*3+2}- (l : list{3}{p})
+proc l <- list123{p} <- =
+  k1 <- the{1} <- ;
+  k2 <- the{2} <- ;
+  k3 <- the{3} <- ;
+  l.cons ; send l k1 ; 
+  l.cons ; send l k2 ;
+  l.cons ; send l k3 ;
+  l.nil ; close l
+
+decl list45{p} : . |{(p+2+1)*2+2}- (l : list{2}{p})
+proc l <- list45{p} <- =
+  k4 <- the{4} <- ;
+  k5 <- the{5} <- ;
+  l.cons ; send l k4 ; l.cons ; send l k5 ;
+  l.nil ; close l
+
+decl list12345_2 : . |{23+12}- (l : list{5}{2})
+proc l <- list12345_2 <- =
+  l1 <- list123{4} <- ;
+  l2 <- list45{2} <- ;
+  l <- append{3}{2}{2} <- l1 l2
+
+decl list54321_0 : . |{23+12+2}- (l : list{5}{0})
+proc l <- list54321_0 <- =
+  l1 <- list12345_2 <- ;
+  l <- reverse{5}{0} <- l1
+
+decl split54321_0 : . |{(23+12+2)+37+7}- (ll : list{2}{0} * list{3}{0} * 1)
+proc ll <- split54321_0 <- =
+  l_0 <- list54321_0 <- ;
+  l_5 <- charge{5}{0}{5} <- l_0 ;
+  ll <- split'{2}{0} <- l_5
+
+decl alt45231_0 : . |{81+10+14+2}- (l : list{5}{0})
+proc l <- alt45231_0 <- =
+  ll <- split54321_0 <- ;
+  l1 <- recv ll ; l2 <- recv ll ; wait ll ;
+  l1' <- charge{2}{0}{2} <- l1 ;
+  l2' <- charge{3}{0}{2} <- l2 ;
+  l <- alternate{2}{3}{0} <- l1' l2'
+
+decl m_plus1 : . |- (m : mapper{1})
+proc m <- m_plus1 <- =
+  case m ( next => x <- recv m ;
+                   {k} <- recv x ; wait x ;
+                   y <- the{k+1} <- ;   % 1 erg
+                   send m y ;           % 1 erg (fixed overhead)
+                   m <- m_plus1 <-
+         | done => close m )
+
+decl map56342_0 : . |{107+32+14}- (l : list{5}{0})
+proc l <- map56342_0 <- =
+  l_0 <- alt45231_0 <- ;            % 107 erg
+  l_4 <- charge{5}{0}{4} <- l_0 ;   % 32 erg
+  m <- m_plus1 <- ;
+  l <- map{5}{0}{1} <- l_4 m        % 14 erg
+
+exec list12345_2
+exec list54321_0
+exec split54321_0
+exec alt45231_0
+exec map56342_0
+
+%%% Currently no examples for fold, filter, stacks, or queues

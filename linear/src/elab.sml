@@ -400,9 +400,10 @@ and elab_exps env nil = nil
  * Returns NONE if there is a static error
  *)
 fun elab_decls env decls =
-
     (* first pass: check validity of types and create internal names *)
-    let val env' = elab_tps env decls
+    let val () = recon_time := LargeInt.fromInt 0
+        val () = tc_time := LargeInt.fromInt 0
+        val env' = elab_tps env decls
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'

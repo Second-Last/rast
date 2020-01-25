@@ -8,7 +8,7 @@
 signature TOP =
 sig
     val load : Ast.env -> string list -> Ast.env (* Top.load env [<file>,...] = env' *)
-    val run : Ast.env -> Ast.decl list -> unit   (* Top.run env decls = () *)
+    val run : Ast.env -> Ast.decl list -> unit   (* Top.run env decls = (), may raise Eval.DynError *)
 
     val ss : string -> OS.Process.status         (* Top.ss "<command line arguments>" = status *)
     val main : string * string list -> OS.Process.status (* for stand-alone executable *)
@@ -174,18 +174,31 @@ fun init_pot env f =
 fun measure Flags.None = false
   | measure _ = true
 
-fun run env (A.Exec(f,ext)::decls) =
+val exec_time : LargeInt.int ref = ref (LargeInt.fromInt 0)
+
+fun run' env (A.Exec(f,ext)::decls) =
     let val () = if !Flags.verbosity >= 1
                  then TextIO.print (PP.pp_decl env (A.Exec(f,ext)) ^ "\n")
                  else ()
         val SOME([],([],P,x)) = A.lookup_expdef env f
+        val texec_before = Time.toMicroseconds (Time.now ())
         val v = Eval.evaluate env P x
+        val texec_after = Time.toMicroseconds (Time.now ())
+        val () = exec_time := !exec_time + (texec_after - texec_before)
         val () = if !Flags.verbosity >= 1
                  then TextIO.print (x ^ " = " ^ Eval.Print.pp_value v ^ "\n")
                  else ()
-    in run env decls end
-  | run env (_::decls) = run env decls
-  | run env nil = ()
+    in run' env decls end
+  | run' env (_::decls) = run' env decls
+  | run' env nil = ()
+
+fun run env decls =
+    let val () = exec_time := LargeInt.fromInt 0
+        val () = run' env env
+        val () = if !Flags.verbosity = ~1 orelse !Flags.verbosity >= 2
+                 then TextIO.print ("% exec time: " ^ LargeInt.toString (!exec_time) ^ " us\n")
+                 else ()
+    in () end
 
 (* main function to run file *)
 fun test args =
@@ -201,7 +214,7 @@ fun test args =
                  | e => exit_failure "% internal error (uncaught exception)"
         val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)
-                 handle Eval.DynError => exit_failure "% execution failed"
+            handle Eval.DynError => exit_failure "% execution failed"
     in
         exit_success (if !Constraints.approx then "% approx success" else "% success")
     end handle OS_SUCCESS => OS.Process.success

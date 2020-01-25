@@ -24,10 +24,10 @@ datatype value =
          Lab of A.label * value (* + *)
        | Send of value * value  (* * *)
        | Close                  (* 1 *)
-       | SendNat of value       (* ?v *) 
-       | CloCase of (A.chan * value) list * A.branches * A.chan (* & *)
+       | SendNat of int * value (* ?v *) 
+       | CloCase of (A.chan * value) list * A.branches * A.chan       (* & *)
        | CloRecv of (A.chan * value) list * (A.chan * A.exp) * A.chan (* -o *)
-       | CloRecvNat of (A.chan * value) list * A.exp * A.chan (* !v *) 
+       | CloRecvNat of (A.chan * value) list * (R.varname * A.exp) * A.chan (* !v *) 
 
 type environment = (A.chan * value) list
 
@@ -39,11 +39,12 @@ struct
 fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v  (* k(v) *)
   | pp_value (Send(w,v)) = "(" ^ pp_value w ^ ") ; " ^ pp_value v (* (w,v) *)
   | pp_value (Close) = "close"  (* () *)
-  | pp_value (SendNat(v)) = (if !Flags.verbosity >= 1 then "{.} ; " else "")
-                            ^ pp_value v
+  | pp_value (SendNat(n,v)) = if !Flags.verbosity >= 2
+                              then "{" ^ Int.toString n ^ "} ; " ^ pp_value v
+                              else pp_value v
   | pp_value (CloRecv(eta,(x,P),z)) = "-"
   | pp_value (CloCase(eta,branches,z)) = "-"
-  | pp_value (CloRecvNat(eta,P,z)) = "-"
+  | pp_value (CloRecvNat(eta,(k,P),z)) = "-"
 
 fun pp_eta [] = "."
   | pp_eta ((x,v)::eta) = x ^ " = " ^ pp_value v ^ "\n" ^ pp_eta eta
@@ -65,12 +66,14 @@ fun split nil nil eta1_rev eta = (List.rev eta1_rev, eta)
 fun select ((l, _, P)::branches) k =
     if l = k then P else select branches k
 
-fun body env f =
+fun body env f es =
     ( case A.lookup_expdef env f
-       of SOME(ctx, (ys', P, x')) => (ys', P, x') )
+       of SOME(ctx, (ys', P, x')) =>
+          let val sigma = R.zip ctx es
+              val P' = A.apply_exp sigma P
+          in (ys', P', x') end )
 
-fun eval env eta P z =
-    eval' env eta P z
+fun eval env eta P z = eval' env eta P z
 and eval' env eta (A.Id(x,y)) z = (* x = z *)
     lookup eta y
   | eval' env eta (A.Spawn(P, Q)) z =
@@ -115,15 +118,18 @@ and eval' env eta (A.Id(x,y)) z = (* x = z *)
 
   | eval' env eta (A.SendNat(x,e,P)) z =
     if x = z
-    then SendNat(eval env eta P z) (* ?R *)
-    else let val CloRecvNat(eta', Q, z') = lookup eta x (* !L *)
-             val v = eval env eta' Q z'
+    then SendNat(R.evaluate e, eval env eta P z) (* ?R *)
+    else let val CloRecvNat(eta', (k,Q), z') = lookup eta x (* !L *)
+             val n = R.evaluate e
+             val Q' = A.apply_exp [(k,R.Int(n))] Q
+             val v = eval env eta' Q' z'
          in eval env (update eta (x,v)) P z end
-  | eval' env eta (A.RecvNat(x,v,P)) z =
+  | eval' env eta (A.RecvNat(x,k,P)) z =
     if x = z
-    then CloRecvNat(eta, P, z) (* !R *)
-    else let val SendNat(v) = lookup eta x (* ?L *)
-         in eval env (update eta (x,v)) P z end
+    then CloRecvNat(eta, (k,P) , z) (* !R *)
+    else let val SendNat(n, v) = lookup eta x (* ?L *)
+             val P' = A.apply_exp [(k, R.Int(n))] P
+         in eval env (update eta (x,v)) P' z end
 
   | eval' env eta (A.Imposs) z = raise DynError
   | eval' env eta (A.Work(q,P)) z = eval' env eta P z
@@ -136,12 +142,10 @@ and eval' env eta (A.Id(x,y)) z = (* x = z *)
   | eval' env eta (A.Marked(marked_P)) z =
     eval' env eta (Mark.data marked_P) z
     
-
-and eval_call env eta P =
-    eval_call' env eta P
+and eval_call env eta P = eval_call' env eta P
 and eval_call' env eta (A.ExpName(x,f,es,ys)) =
     (* lookup f, evaluate body with x,ys substituted *)
-    let val (ys', P, x') = body env f
+    let val (ys', P, x') = body env f es
         val (eta1', eta2) = split ys ys' nil eta
         val v = eval env eta1' P x'
     in (x,v)::eta2 end

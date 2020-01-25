@@ -3,10 +3,15 @@
 
 %%% Linear lambda calculus using ideas from HOAS,
 %%% Expressions are indexed by their size
+%%% Run this verbose so we can see the size of the
+%%% evaluated lambda expression in the examples
 
 %%% This verifies that evaluation does not
 %%% increase the size of an expression.  Size here
 %%% counts applications and lambda-abstractions.
+
+%%% Run this with -v (--verbose) to see the size
+%%% of the results of evaluation
 
 (*
 eval (lam f) = lam f
@@ -73,3 +78,43 @@ proc e <- swap <- =
   e.lam ; {ky} <- recv e ; y <- recv e ;
   fy <- apply{kf}{ky} <- f y ;
   e <- apply{kf+ky+1}{kx} <- fy x
+
+(* test1 = swap id id ==> \y. (id y) id *)
+decl test1 : . |- (e : exp{9})
+proc e <- test1 <- =
+  s <- swap <- ;
+  i <- id <- ;
+  si <- apply{5}{1} <- s i ;
+  i <- id <- ;
+  sii <- apply{7}{1} <- si i ;
+  e <- sii
+
+decl val1 : . |- (v : ?k. ?{k <= 9}. val{k})
+proc v <- val1 <- =
+  e <- test1 <- ;
+  v <- eval{9} <- e
+
+% size of val1 should be {5}
+exec val1
+
+(* test = swap (swap id) id id ==> id *)
+decl test2 : . |- (e : exp{17})
+proc e <- test2 <- =
+  s <- swap <- ;
+  i <- id <- ;
+  si <- apply{5}{1} <- s i ;
+  s <- swap <- ;
+  ssi <- apply{5}{7} <- s si ;
+  i <- id <- ;
+  ssii <- apply{13}{1} <- ssi i ;
+  i <- id <- ;
+  ssiii <- apply{15}{1} <- ssii i ;
+  e <- ssiii
+
+decl val2 : . |- (v : ?k. ?{k <= 17}. val{k})
+proc v <- val2 <- =
+  e <- test2 <- ;
+  v <- eval{17} <- e
+
+% size of val2 should be {1}
+exec val2
