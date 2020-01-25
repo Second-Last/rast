@@ -330,17 +330,6 @@ fun decrementL env ctx con (A.Next(t,A)) t' ext =
     else ERROR ext ("cannot decide: " ^ C.pp_unrel con t t')
   | decrementL env ctx con (A.Box(A)) t' ext = A.Box(A)
   | decrementL env ctx con (A.TpName(a,es)) t' ext = decrementL env ctx con (A.expd_tp env (a,es)) t' ext
-  (* imaginary (and cost-free) constructs are transparent *)
-  (* unfortunately these violate progress because the endpoints of
-   * imaginary transaction may be at different points in time
-   *)
-  (*
-  | decrementL env ctx con (A.Exists(phi,A)) t' ext = A.Exists(phi, decrementL env ctx con A t' ext)
-  | decrementL env ctx con (A.Forall(phi,A)) t' ext = A.Forall(phi, decrementL env ctx con A t' ext)
-  | decrementL env ctx con (A.PayPot(p,A)) t' ext = A.PayPot(p, decrementL env ctx con A t' ext)
-  | decrementL env ctx con (A.GetPot(p,A)) t' ext = A.GetPot(p, decrementL env ctx con A t' ext)
-  *)
-  (*| decrementL env ctx con (A.Dot) t' ext = A.Dot  (* pseudo-type *) *)
   | decrementL env ctx con A t' ext =
     if C.entails ctx con (R.Eq(t',R.Int(0)))
     then A
@@ -357,16 +346,6 @@ fun decrementR env ctx con (A.Next(t,A)) t' ext =
     else ERROR ext ("cannot decide: " ^ C.pp_unrel con t' t)
   | decrementR env ctx con (A.Dia(A)) t' ext = A.Dia(A)
   | decrementR env ctx con (A.TpName(a,es)) t' ext = decrementR env ctx con (A.expd_tp env (a,es)) t' ext
-  (* imaginary (and cost-free) constructs are transparent *)
-  (* unfortunately these violate progress because the endpoints of
-   * imaginary transaction may be at different points in time
-   *)
-  (*
-  | decrementR env ctx con (A.Exists(phi,A)) t' ext = A.Exists(phi, decrementR env ctx con A t' ext)
-  | decrementR env ctx con (A.Forall(phi,A)) t' ext = A.Forall(phi, decrementR env ctx con A t' ext)
-  | decrementR env ctx con (A.PayPot(p,A)) t' ext = A.PayPot(p, decrementR env ctx con A t' ext)
-  | decrementR env ctx con (A.GetPot(p,A)) t' ext = A.GetPot(p, decrementR env ctx con A t' ext)
-  *)
   | decrementR env ctx con A t' ext =
     if C.entails ctx con (R.Eq(t',R.Int(0)))
     then A
@@ -388,7 +367,7 @@ fun eq_idx ctx con nil nil = true
 (* Type equality, equirecursively defined *)
 
 (* Structural equality *)
-
+(* mem_env env a a' => SOME(CTX,CON,TpName(a,es),TpName(a',es')) if exists in env *)
 fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,ES),A' as A.TpName(B',ES'),_)::env) a a' =
     if B = a andalso B' = a'
     then SOME(CTX,CON,(A,A'))
@@ -398,6 +377,7 @@ fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,ES),A' as A.TpName(B',ES'),_)::env) 
   | mem_env (_::env) a a' = mem_env env a a'
   | mem_env nil a a' = NONE
 
+(* mem_env env seen a a' => SOME(CTX,CON,TpName(a,es),TpName(a',es')) if exists in seen *)
 fun mem_seen env ((E as (CTX,CON,(A as A.TpName(B, ES), A' as A.TpName(B', ES'))))::seen) a a' =
     if B = a andalso B' = a'
     then SOME(CTX,CON,(A,A'))
@@ -420,6 +400,7 @@ fun gen_fresh nil = (nil, nil)
 fun gen_eq nil nil = R.True
   | gen_eq (E::ES) (e::es) = R.And(R.Eq(E,e), gen_eq ES es)
 
+(* gen_prop_eq FCTX FCON FES es FES' es' => FCTX |= FCON /\ FES = es /\ FES' = es' *)
 fun gen_prop_eq FCTX FCON FES es FES' es' =
     let val eqs = gen_eq FES es
         val eqs' = gen_eq FES' es'
@@ -431,7 +412,7 @@ fun gen_prop_eq FCTX FCON FES es FES' es' =
         exists_prop
     end
 
-(* strip_next0 ctx con A = A' preserves definitions for tracing
+(* stripnext0 ctx con A = A' preserves definitions for tracing
  * purposes but strips off all prefixes (t)A' if con |= t = 0.
  * For use in type equality, see aggregate_nexts
  *)
@@ -516,6 +497,7 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
 
   | eq_tp env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
     if a = a'
+    (* reflexivity *)
     then case !Flags.equality
           of Flags.SubsumeRefl => eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* both *)
            | Flags.Subsume => eq_name_name env ctx con seen A A' (* only coinductive equality *)
@@ -630,25 +612,8 @@ fun expd_expdec_check env (f,es) ext =
          in (R.apply_prop sg con, (A.apply_context sg D, R.apply sg pot, A.apply_chan_tp sg zC)) end
        | NONE => E.error_undeclared (f, ext))
 
-(* syn_cut env (f{es} || Q) ext = f{es} {[es/vs] |{p}-B } Q 
- * if vs ; con ; A |{p}- f : B
- * raises ErrorMsg.Error if P || Q where P is not a process name,
- * f is undeclared, or |es| <> |vs|
-
-fun syn_cut env (P as A.ExpName(f,es), Q) ext =
-    (case A.lookup_expdec env f
-      of SOME(vs,con,(D,pot,yB)) =>
-         let val sg = zip_check f vs es ext
-         in A.Cut(P, R.apply sg pot, A.apply_chan_tp sg yB, Q) end
-       | NONE => ERROR ext ("process " ^ f ^ " undeclared"))
-  | syn_cut env (A.Marked(marked_P), Q) ext = (* Q: preserve mark? *)
-    syn_cut env (Mark.data marked_P, Q) (Mark.ext marked_P)
-  | syn_cut env P ext = ERROR ext ("left-hand side of spawn '||' must be a process name")
-*)
-
-
-(* syn_call env f{es} ext = [vs/es](con, (A, p, C))
- * if vs ; con ; A |{p}- f : C
+(* syn_call env D (x <- f{es} <- xs) ext = (x : B) :: (D / [es/vs]D')
+ * if vs ; con ; D' |{p}- f : B
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
 fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
@@ -662,6 +627,10 @@ fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
     syn_call env D (Mark.data marked_P) (Mark.ext marked_P)
   | syn_call env D P ext = ERROR ext ("call must be a process name")
 
+(* syn_pot env D (x <- f{es} <- xs) ext = [es/vs]p
+ * if vs ; con ; D' |{p}- f : B
+ * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
+ *)
 fun syn_pot env (P as A.ExpName(x,f,es,xs)) ext =
     (case A.lookup_expdec env f
       of SOME(vs,con',(D',pot',(y,B'))) =>
@@ -673,7 +642,7 @@ fun syn_pot env (P as A.ExpName(x,f,es,xs)) ext =
     syn_pot env (Mark.data marked_P) (Mark.ext marked_P)
   | syn_pot env P ext = ERROR ext ("call must be a process name")
 
-(* synL env (f,es) = A where A |- f : _, approximately *)
+(* synL env (f,es) = A where D |- f : _, approximately *)
 fun synL env (y, f, es, xs) =
     (case A.expd_expdec env (f, es)
       of SOME(con, (D, pot, zC)) => ListPair.mapEq (fn (x,(x',A')) => (x,A')) (xs,D)
@@ -687,17 +656,18 @@ fun synR env (y, f, es, xs) =
          (* NONE impossible, since f{es} approximately typed *)
     )
 
-(* synLR env (f,es) = (A,pot,C) where A |{pot}- f : C, approximately *)
+(* synLR env (f,es) = (D,pot,C) where D |{pot}- f : C, approximately *)
 fun synLR env (f, es) =
     (case A.expd_expdec env (f,es)
       of SOME(con, (D, pot, zC)) => (D, pot, zC)
          (* NONE impossible, since f{es} approximately typed *)
     )
 
-(* syn_altR env (l => Al)_(l in L) k = Ak, assumes k in L *)
+(* syn_altR env z +(l : Al)_(l in L) k = (z,Ak), assumes k in L *)
 fun syn_altR' env z (A.Plus(choices)) k = (z, Option.valOf (A.lookup_choice choices k))
 fun syn_altR env (z,C) k = syn_altR' env z (expand env C) k
 
+(* syn_altL env x &(l : Al)_(l in L) k = (x,Ak), assumes k in L *)
 fun syn_altL' env x (A.With(choices)) k D = (x, Option.valOf (A.lookup_choice choices k))::D
 fun syn_altL env ((x',A)::D') x k =
     if x' = x
@@ -705,9 +675,11 @@ fun syn_altL env ((x',A)::D') x k =
     else (x',A)::syn_altL env D' x k
     (* nil impossile by approx typing *)
 
+(* syn_sendR env z (A * B) = (z,B) *)
 fun syn_sendR' env z (A.Tensor(A,B)) = (z,B)
 fun syn_sendR env (z,C) = syn_sendR' env z (expand env C)
 
+(* syn_sendL env x (A -o B) = (x,B) *)
 fun syn_sendL' env x (A.Lolli(A,B)) D = (x,B)::D
 fun syn_sendL env ((x',A)::D') x  =
     if x' = x then syn_sendL' env x' (expand env A) D'
@@ -774,28 +746,6 @@ fun syn_recvNatL env ((x',A)::D') x v' =
 (* Type checking process expressions *)
 (*************************************)
 
-(*
-fun interactsL P = case P of
-    A.CaseL _ => true | A.LabL _ => true | A.WaitL _ => true
-  | A.WhenL _ => true | A.NowL _ => true
-  | A.GetL _ => true | A.PayL _ => true
-  | A.AssumeL _ => true | A.AssertL _ => true
-  | A.Marked(marked_exp) => interactsL (Mark.data marked_exp)
-  | _ => false
-
-fun interactsR P = case P of
-    A.CaseR _ => true | A.LabR _ => true | A.CloseR => true
-  | A.WhenR _ => true | A.NowR _ => true
-  | A.GetR _ => true | A.PayR _ => true
-  | A.AssumeR _ => true | A.AssertR _ => true
-  | A.Marked(marked_exp) => interactsR (Mark.data marked_exp)
-  | _ => false
-
-fun is_tpname (A.TpName(a,l)) = true
-  | is_tpname _ = false
-*)
-
-
 (* check_explist_pos ctx con es ext = ()
  * if ctx ; con |= e >= 0 for all e in es
  * raises ErrorMsg.Error otherwise
@@ -806,9 +756,9 @@ fun check_explist_pos ctx con (nil) ext = ()
     then ERROR ext ("index cannot be shown to be positive: " ^ C.pp_jfail con (R.Ge(e, R.Int(0))))
     else check_explist_pos ctx con es ext
 
-(* check_exp trace env ctx con A pot P C = () if A |{pot}- P : C
+(* check_exp trace env ctx con D pot P C = () if ctx ; con ; D |{pot}- P : C
  * raises ErrorMsg.Error otherwise
- * assumes ctx ; con |= A valid
+ * assumes ctx ; con |= D valid
  *         ctx ; con |= C valid
  *         ctx ; con |= pot nat
  *
@@ -825,6 +775,8 @@ fun check_exp' trace env ctx con D pot P zC ext =
       then TextIO.print (PP.pp_exp_prefix env P ^ " : "
                          ^ PP.pp_tpj_compact env D pot zC ^ "\n")
       else ()
+
+      (* strip zero delays *)
     ; check_exp trace env ctx con (strip_next0_context env ctx con D) pot P (strip_next0 env ctx con zC) ext )
 
 and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
@@ -838,7 +790,7 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
                  then ERROR ext ("unconsumed potential: " ^ C.pp_jfail con (R.Eq(pot, R.Int(0))))
                  else ()
         val () = if List.length D <> 1
-                 then ERROR ext ("context not singleton for fwd")
+                 then ERROR ext ("context " ^ PP.pp_context_compact env D ^ " not singleton for fwd")
                  else ()
     in () end
 
@@ -887,8 +839,8 @@ and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
              val () = match_contexts env ctx con cutD D' ext
              val () = if eq_tp' env ctx con nil C' C then ()
                       else ERROR ext ("type mismatch in tail call:\n"
-                                      ^ "expected " ^ PP.pp_tp_compact env C' ^ "\n"
-                                      ^ "found    " ^ PP.pp_tp_compact env C)
+                                      ^ "expected " ^ z ^ " : " ^ PP.pp_tp_compact env C' ^ "\n"
+                                      ^ "found    " ^ z ^ " : " ^ PP.pp_tp_compact env C)
              val () = if not (C.entails ctx con (R.Eq(pot, pot')))
                       then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(pot, pot')))
                       else ()
@@ -991,7 +943,7 @@ and tensorL trace env ctx con D (A.Tensor(A,B)) pot (A.Recv(x,y,Q)) zC ext (* z 
 
 and oneR trace env ctx con D pot (A.Close(x)) (z,A.One) ext (* z = x *) =
     if List.length D > 0
-    then ERROR ext ("context not empty while closing")
+    then ERROR ext ("context " ^ PP.pp_context_compact env D ^ " not empty while closing")
     else if not (C.entails ctx con (R.Eq(pot, R.Int(0))))
     then ERROR ext ("unconsumed potential: " ^ C.pp_jfail con (R.Eq(pot, R.Int(0))))
     else ()
