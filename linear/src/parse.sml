@@ -87,31 +87,99 @@ type region = int * int
 (* operator precedence, for arithmetic *)
 type prec = int
 
+(* valid occurrences of infix operators are always preceded by
+ * an expression which must have already been reduced; valid
+ * occurrences of prefix operators never are.  This helps to
+ * disambiguate '-' (prefix or infix)
+ *)
+
+datatype assoc = Left | Right | Non
+
+datatype aexp = Prop of R.prop | Arith of R.arith
+
 (* stack items for shift/reduce parsing *)
 datatype stack_item =
-   Tok of T.terminal * region   (* lexer token *)
- | ArithInfix of prec * (R.arith * R.arith -> R.arith) * region (* arithmetic infix operator and constructor *)
- | Arith of R.arith * region                                    (* arithmetic expression *)
- | PropInfix of prec * (R.prop * R.prop -> R.prop) * region     (* proposition infix operators like /\, \/ *)
- | Prop of R.prop * region                                      (* proposition *)
+   Tok of T.terminal * region                                   (* lexer token *)
+
+ | Infix of prec * assoc * T.terminal * region * (aexp * aexp -> aexp) (* arithmetic infix operator *)
+ | Prefix of prec * T.terminal * region * (aexp -> aexp)        (* arithmetic prefix operator *)
+ | Nonfix of T.terminal * region
+ | AExp of aexp * region                                        (* arithmetic expression *)
+
  | Vars of (R.varname * R.prop) list * region                   (* list of variables with constraints *)
  | Indices of R.arith list * region                             (* list of index expressions *)
+
  | Tp of A.tp * region                                          (* types *)
  | TpInfix of prec * (A.tp * A.tp -> A.tp) * region             (* infix tensor and lolli type operators *)
+
  | Alts of A.choices                                            (* list of alternatives in types *)
  | Action of (A.exp -> A.exp) * region                          (* prefix process action *)
  | Args of (A.chan list) * region                               (* arguments for spawn *)
  | Exp of A.exp * region                                        (* process expression *)
  | Branches of A.branches                                       (* list of branches *)
+
  | Context of (A.chan * A.tp) list * region                     (* context *)
  | Decl of A.decl                                               (* top-level declaration *)
-
 
 datatype stack
   = Bot
   | $ of stack * stack_item
 
 infix 2 $
+
+fun arith2 r f (Arith(e1), Arith(e2)) = Arith(f(e1,e2))
+  | arith2 r f (Prop(phi1), _) = parse_error (r, "applying arithmetic operator to proposition")
+  | arith2 r f (_, Prop(phi2)) = parse_error (r, "applying arithmetic operator to proposition")
+
+fun arith1 r f (Arith(e)) = Arith(f(e))
+  | arith1 r f (Prop(phi)) = parse_error (r, "applying arithmetic operator to proposition")
+
+fun rel2 r f (Arith(e1), Arith(e2)) = Prop(f(e1,e2))
+  | rel2 r f (Prop(phi1), _) = parse_error (r, "applying relational operator to proposition")
+  | rel2 r f (_, Prop(phi2)) = parse_error (r, "applying relational operator to proposition")
+
+fun prop2 r f (Prop(phi1), Prop(phi2)) = Prop(f(phi1,phi2))
+  | prop2 r f (Arith(e1), _) = parse_error (r, "applying propositional operator to arithmetic expression")
+  | prop2 r f (_, Arith(e2)) = parse_error (r, "applying propositional operator to arithmetic expression")
+
+fun prop1 r f (Prop(phi)) = Prop(f(phi))
+  | prop1 r f (Arith(e)) = parse_error (r, "applying propositional operator to arithmetic expression")
+
+fun aexp2prop r (Prop(phi)) = phi
+  | aexp2prop r (Arith(e)) = parse_error (r, "expected proposition, found arithmetic expression")
+
+fun aexp2arith r (Arith(e)) = e
+  | aexp2arith r (Prop(phi)) = parse_error (r, "expected arithmetic expression, found proposition")
+
+fun precedes_infix (S $ AExp _) = true
+  | precedes_infix _ = false
+
+fun opr (S, t, r) = case t of
+    T.MINUS => if precedes_infix S
+               then Infix(7, Left, t, r, arith2 r R.Sub)
+               else Prefix(9, t, r, arith1 r (fn e => R.Sub(R.Int(0),e)))
+  | T.STAR => Infix(8, Left, t, r, arith2 r R.Mult)
+  | T.PLUS => Infix(7, Left, t, r, arith2 r R.Add)
+(*  T.MINUS => Infix(7 t, r, R.Sub) see above) *)
+  | T.EQ => Infix(6, Non, t, r, rel2 r R.Eq)
+  | T.LANGLE => Infix(6, Non, t, r, rel2 r R.Lt)
+  | T.RANGLE => Infix(6, Non, t, r, rel2 r R.Gt)
+  | T.LEQ => Infix(6, Non, t, r, rel2 r R.Le)
+  | T.GEQ => Infix(6, Non, t, r, rel2 r R.Ge)
+  | T.NEQ => Infix(6, Non, t, r, rel2 r (fn (e1,e2) => R.Not(R.Eq(e1,e2))))
+  | T.NOT => Prefix(5, t, r, prop1 r R.Not)
+  | T.AND => Infix(4, Right, t, r, prop2 r R.And)
+  | T.OR => Infix(3, Right, t, r, prop2 r R.Or)
+  | T.RARROW => Infix(2, Right, t, r, prop2 r R.Implies)
+(* not supported right now *)
+(*
+  | T.EXCLAMATION => Prefix(1, t, r, R.Forall)
+  | T.QUESTION => Prefix(1, t, r, R.Exists)
+ *)
+  | _ => Nonfix(t, r)
+
+fun left_assoc Left = true
+  | left_assoc _ = false
 
 (* This is a hand-written shift/reduce parser
  * I have tried to resist the temptation to optimize or transform,
@@ -169,9 +237,6 @@ fun join (left1, right1) (left2, right2) = (left1, right2)
 fun here (S, M.Cons((t, r), ts')) = r
 val nowhere = (0,0)
 
-fun ptensor (A,B) = A.Tensor(A,B)
-fun plolli (A,B) = A.Lolli(A,B)
-
 (***********)
 (* Parsing *)
 (***********)
@@ -206,12 +271,12 @@ and p_var_prop ST = ST |> p_id >> p_bar_prop_opt
 
 (* ['|' <prop>] *)
 and p_bar_prop_opt ST = case first ST of
-    T.BAR => ST |> drop >> p_prop
+    T.BAR => ST |> drop >> p_aexp (* !! *)
   | _ => ST
 
 (* accumulate (v,phi) for every variable v and constraint phi (defaults to 'true') *)
-and r_var_seq (S $ Vars(l,r1) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ Prop(phi,_) $ Tok(T.RBRACE,r2)) =
-    S $ Vars(l @ [(v,phi)], join r1 r2)
+and r_var_seq (S $ Vars(l,r1) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ AExp(e,r) $ Tok(T.RBRACE,r2)) =
+    S $ Vars(l @ [(v,aexp2prop r e)] , join r1 r2)
   | r_var_seq (S $ Vars(l,r1) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,r2)) =
     S $ Vars(l @ [(v,R.True)], join r1 r2)
 
@@ -225,7 +290,7 @@ and p_idx_seq ST = case first ST of
   | t => ST
 
 (* accumulate e into sequence of indices *)
-and r_idx_seq (S $ Indices(l,r1) $ Arith(e,r2)) = S $ Indices(l @ [e], join r1 r2)
+and r_idx_seq (S $ Indices(l,r1) $ AExp(e,r2)) = S $ Indices(l @ [aexp2arith r2 e], join r1 r2)
 
 (* '=' <type> *)
 and p_eq_type ST = case first ST of
@@ -285,9 +350,9 @@ and r_decl (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ 
     S $ Decl(A.ExpDec(id,vars l,phis l,(context,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
   | r_decl S = r_decl_2 S
 
-and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.BAR,_) $ Arith(pot,_) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
+and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.BAR,_) $ AExp(pot,r) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <context> '|{' <arith> '}-' <id> : <type> *)
-    S $ Decl(A.ExpDec(id,vars l,phis l,(context,pot,(c,tp)), PS.ext(join r1 r2)))
+    S $ Decl(A.ExpDec(id,vars l,phis l,(context,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
   | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r) $ Tok(T.LARROW,_) $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
     (* 'proc' <id> '<-' <id> <var_seq> '<-' <id_list> = <exp> *)
     (case (phis l)
@@ -303,42 +368,11 @@ and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,
 
 (* <idx> ::= '{' <arith> '}' *)
 and p_idx ST = case first ST of
-    T.LBRACE => ST |> shift >> p_arith >> p_terminal T.RBRACE >> reduce r_idx
+    T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_idx
   | t => error_expected (here ST, T.LBRACE, t)
 
-(* <arith> *)
-and p_arith ST = case first ST of
-    T.NAT(n) => ST |> shift >> reduce r_arith >> p_arith
-  | T.IDENT(v) => ST |> shift >> reduce r_arith >> p_arith
-  | T.LPAREN => ST |> shift >> p_arith >> p_terminal T.RPAREN >> reduce r_arith >> p_arith
-  | T.PLUS => ST |> drop >> push (ArithInfix(1, R.Add, here ST)) >> p_arith_prec
-  | T.MINUS => ST |> drop >> push (ArithInfix(1, R.Sub, here ST)) >> p_arith_prec
-  | T.STAR => ST |> drop >> push (ArithInfix(2, R.Mult, here ST)) >> p_arith_prec
-  | t => ST |> reduce r_arith
-
-(* <arith> *)
-(* shift/reduce decision based on operator precedence *)
-and p_arith_prec (ST as (S $ Arith(e1, r1) $ ArithInfix(prec1, con1, _) $ Arith(e2, r2) $ ArithInfix(prec, con, r), ft)) =
-    if prec1 >= prec (* all operators are left associative *)
-    then p_arith_prec (S $ Arith(con1(e1,e2), join r1 r2) $ ArithInfix(prec, con, r), ft) (* reduce *)
-    else p_arith ST          (* shift *)
-  | p_arith_prec (ST as (S $ Arith(e,r) $ ArithInfix(prec, con, _), ft)) = p_arith ST (* shift *)
-  | p_arith_prec (ST as (S $ ArithInfix(_,_,r1) $ ArithInfix(_,_,r2), ft)) = parse_error (join r1 r2, "consecutive infix operators")
-  | p_arith_prec (ST as (S $ ArithInfix(_,_,r), ft)) = parse_error (r, "leading infix operator")
-
-(* reduce <arith> *)
-and r_arith (S $ Tok(T.NAT(n),r)) = S $ Arith(R.Int(n), r)
-  | r_arith (S $ Tok(T.IDENT(v),r)) = S $ Arith(R.Var(v), r)
-  | r_arith (S $ Tok(T.LPAREN, r1) $ Arith(e, _) $ Tok(T.RPAREN, r2)) = S $ Arith(e, join r1 r2)
-  | r_arith (S $ Arith(e1, r1) $ ArithInfix(_, con, _) $ Arith(e2, r2)) = r_arith (S $ Arith(con(e1,e2), join r1 r2))
-  | r_arith (S $ Arith(e1, r1) $ Arith(e2, r2)) = parse_error (join r1 r2, "consecutive arithmetic expressions")
-  | r_arith (S $ ArithInfix(_, _, r)) = parse_error (r, "trailing infix operator")
-  | r_arith (S $ Arith(e,r)) = S $ Arith(e,r)
-  | r_arith (S $ Tok(_,r)) = parse_error (r, "empty arithmetic expression")
-  (* arithmetic expressions are always preceded by '{' or '(' *)
-
 (* reduce '{' <arith> '}' *)
-and r_idx (S $ Tok(T.LBRACE,r1) $ Arith(e, _) $ Tok(T.RBRACE,r2)) = S $ Arith (e, join r1 r2)
+and r_idx (S $ Tok(T.LBRACE,r1) $ AExp(e, _) $ Tok(T.RBRACE,r2)) = S $ AExp (e, join r1 r2)
 
 (* <tp> *)
 and p_type ST = case first ST of
@@ -351,8 +385,8 @@ and p_type ST = case first ST of
   | T.LBRACKET => ST |> shift >> p_terminal T.RBRACKET >> p_type >> reduce r_type >> p_type
   | T.LANGLE => ST |> shift >> p_tpopr_dia_ltri >> p_type >> reduce r_type >> p_type (* maybe not shift *)
   | T.BAR => ST |> shift >> p_tpopr_rtri >> p_type >> reduce r_type >> p_type        (* maybe not shift *)
-  | T.STAR => ST |> drop >> push (TpInfix(1, ptensor, here ST)) >> p_type_prec
-  | T.LOLLI => ST |> drop >> push (TpInfix(1, plolli, here ST)) >> p_type_prec
+  | T.STAR => ST |> drop >> push (TpInfix(1, A.Tensor, here ST)) >> p_type_prec
+  | T.LOLLI => ST |> drop >> push (TpInfix(1, A.Lolli, here ST)) >> p_type_prec
   | T.QUESTION => ST |> shift >> p_con_dot >> p_type >> reduce r_type >> p_type
   | T.EXCLAMATION => ST |> shift >> p_con_dot >> p_type >> reduce r_type >> p_type
   | T.IDENT(id) => ST |> p_id_idx_seq >> reduce r_type >> p_type
@@ -392,67 +426,78 @@ and p_tpopr_rtri ST = case first ST of
 
 (* <con> '.' *)
 and p_con_dot ST = case first ST of
-    T.LBRACE => ST |> shift >> p_prop >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.PERIOD
+    T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.PERIOD
   | T.IDENT(id) => ST |> shift >> p_terminal T.PERIOD
   | t => error_expected (here ST, T.LBRACE, t)
 
 (* reduce <con> ::= '{' <prop> '}' *)
-and r_con (S $ Tok(T.LBRACE,r1) $ Prop(phi,_) $ Tok(T.RBRACE,r2)) = S $ Prop(phi,join r1 r2)
+and r_con (S $ Tok(T.LBRACE,r1) $ AExp(e,_) $ Tok(T.RBRACE,r2)) = S $ AExp(e, join r1 r2)
 
-(* <prop> *)
+(* <arith> and <prop>, parsed as <aexp> *)
+(* this need to be a joint infix parser because we cannot
+ * reliably predict of the next items we parse denote an
+ * arithmetic expression or a proposition
+ *)
+and c_follows_nonaexp (ST as (S, ft)) = case (S, first ST) of
+    (S $ AExp(e,r), _) => parse_error (join r (here ST), "consecutive arithmetic expressions")
+  | (S, _) => ST                                                              
 
-and p_prop ST = case first ST of
-    T.AND => ST |> drop >> push (PropInfix(3, R.And, here ST)) >> p_prop_prec
-  | T.OR => ST |> drop >> push (PropInfix(2, R.Or, here ST)) >> p_prop_prec
-  | T.RARROW => ST |> drop >> push (PropInfix(1, R.Implies, here ST)) >> p_prop_prec
-  | T.LPAREN => ST |> shift >> p_prop >> p_terminal T.RPAREN >> reduce r_prop >> p_prop
-  | t => ST |> p_atomic_prop >> reduce r_prop
+(* arithmetic expressions *)
+and p_aexp (ST as (S,ft)) = case first ST of
+    T.LPAREN => ST |> c_follows_nonaexp >> shift >> p_aexp >> p_terminal T.RPAREN >> reduce r_aexp >> p_aexp
+  | T.NAT(n) => ST |> c_follows_nonaexp >> shift >> reduce r_aexp >> p_aexp
+  | T.IDENT(x) => ST |> c_follows_nonaexp >> shift >> reduce r_aexp >> p_aexp
+  | t => (case opr (S, t, here ST)
+           of Nonfix(t',r) => (* nonfix: do not consume token! *)
+              ST |> p_aexp_prec (Nonfix(t',r))
+            | subject => (* infix or prefix: subject included token; use operator precedence *)
+              ST |> drop >> p_aexp_prec subject)
 
-and p_prop_prec ST = case ST of
-    (S $ Prop(phi1,r1) $ PropInfix(prec1, con1, _) $ Prop(phi2, r2) $ PropInfix(prec, con, r), ft) =>
-      if prec1 > prec
-      then p_prop_prec (S $ Prop(con1(phi1,phi2), join r1 r2) $ PropInfix(prec, con, r), ft) (* reduce *)
-      else p_prop ST
-  | (S $ Prop(_,_) $ PropInfix(_,_,_), _) => p_prop ST (* shift *)
-  | (S $ PropInfix(_,_,r1) $ PropInfix(_,_,r2), _) => parse_error (join r1 r2, "consecutive infix type operators")
-  | (S $ PropInfix(_,_,r), _) => parse_error (r, "leading infix type operator")
+(* p_aexp_prec subject (S, ft) compares precedence of subject to S
+ * to decide if to shift, reduce, or raise an error.
+ * Continue if expression could be extended by further tokens. *)
+and p_aexp_prec subject (ST as (S,ft)) = case (S,subject) of
 
-and p_atomic_prop ST = case first ST of
-    T.NOT => ST |> shift >> p_atomic_prop >> reduce r_atomic_prop >> p_prop
-  | T.NAT(n) => ST |> p_arith >> p_rel >> p_arith >> reduce r_atomic_prop >> p_prop
-  | T.IDENT(x) => ST |> p_arith >> p_rel >> p_arith >> reduce r_atomic_prop >> p_prop
-  (* | T.LPAREN => ST |> p_arith >> p_rel >> p_arith >> reduce r_atomic_prop >> p_prop *)
-  | _ => ST (* |> reduce r_prop *)
+  (* looking at infix operator *)
+    (S $ AExp _ $ Infix(k1, a1, t1, _, _) $ AExp _, Infix(k2, a2, t2, _, _)) =>
+    if k1 > k2 orelse (k1 = k2 andalso left_assoc a1) (* left associative, a1 = a2 required *)
+                               (* non-associative operators will be caught in function rel2 *)
+    then ST |> reduce r_aexp >> p_aexp_prec subject (* reduce *)
+    else ST |> push subject >> p_aexp               (* shift *)
+  | (S $ Prefix(k1, _, _, _) $ AExp _, Infix(k2, _, _, _, _)) =>
+    if k1 > k2              (* k1 <> k2 (prefix should never have same prec as infix) *)
+    then ST |> reduce r_aexp >> p_aexp_prec subject (* reduce *)
+    else ST |> push subject >> p_aexp               (* shift *)
+  | (S $ AExp _, Infix _) => (* preceding two cases don't match: first infix *)
+    ST |> push subject >> p_aexp                    (* shift *)
+  (* error conditions for infix operator *)
+  | (S $ Infix(_, _, t1, r1, _), Infix(_, _, t2, r2, _)) => parse_error (join r1 r2, "consecutive infix operators " ^ pp_tok t1 ^ " " ^ pp_tok t2)
+  | (S $ Prefix(_, t1, r1, _), Infix(_, _, t2, r2, _)) => parse_error (join r1 r2, "prefix operator " ^ pp_tok t2 ^ " followed by infox operator " ^ pp_tok t2)
+  | (S, Infix(_, _, t, r, _)) => parse_error (r, "leading infix operator " ^ pp_tok t)
 
-(* <rel> *)
-and p_rel ST = case first ST of
-    T.RANGLE => ST |> shift
-  | T.EQ => ST |> shift
-  | T.GEQ => ST |> shift
-  | T.LEQ => ST |> shift
-  | T.LANGLE => ST |> shift
-  | t => error_expected_list (here ST, [T.RANGLE, T.EQ, T.GEQ, T.LEQ, T.LANGLE], t)
+  (* looking at prefix operator *)
+  | (S $ AExp _, Prefix(_, t, r, _)) => parse_error (r, "prefix operator " ^ pp_tok t ^ " immediately following expression")
+  | (S, Prefix(_, t, r, _)) => (* prefix operator: cannot reduce; always shift *)
+    ST |> push subject >> p_aexp
 
-(* reduce <prop> *)
-and r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.EQ,_) $ Arith(e2,r2)) = S $ Prop(R.Eq(e1,e2),join r1 r2)
-  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.RANGLE,_) $ Arith(e2,r2)) = S $ Prop(R.Gt(e1,e2),join r1 r2)
-  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.LANGLE,_) $ Arith(e2,r2)) = S $ Prop(R.Lt(e1,e2),join r1 r2)
-  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.GEQ,_) $ Arith(e2,r2)) = S $ Prop(R.Ge(e1,e2),join r1 r2)
-  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(T.LEQ,_) $ Arith(e2,r2)) = S $ Prop(R.Le(e1,e2),join r1 r2)
-  | r_atomic_prop (S $ Tok(T.NOT,r1) $ Prop(phi,r2)) = S $ Prop(R.Not(phi),join r1 r2)
-  | r_atomic_prop (S $ Arith(e1,r1) $ Tok(t,r) $ Arith(e2,r2)) = parse_error(r, "unrecognized operator, only '>' or '=' allowed ")
-  | r_atomic_prop (S $ Arith(e1,r1) $ Arith(e2,r2)) = parse_error (join r1 r2, "consecutive arithmetic expressions")
-  | r_atomic_prop (S $ Arith(e,r1) $ Tok(t,r2)) = parse_error (join r1 r2, "no trailing arithmetic expression")
-  | r_atomic_prop (S $ Tok(t,r1) $ Arith(e,r2)) = parse_error (join r1 r2, "no leading arithmetic expression")
-  | r_atomic_prop (S $ Arith(e,r)) = parse_error (r, "only one arithmetic expression")
-  | r_atomic_prop (S $ Tok(_,r)) = parse_error (r, "no arithmetic expression")
+  (* looking at nonfix operator (end of aexp) *)
+  (* keep reducing *)
+  | (S $ AExp _ $ Infix _  $ AExp _, Nonfix _) => ST |> reduce r_aexp >> p_aexp_prec subject
+  | (S $          Prefix _ $ AExp _, Nonfix _) => ST |> reduce r_aexp >> p_aexp_prec subject
 
-and r_prop (S $ Tok(T.LPAREN, r1) $ Prop(phi,_) $ Tok(T.RPAREN, r2)) = S $ Prop(phi, join r1 r2)
-  | r_prop (S $ Prop(phi1, r1) $ PropInfix(_, con, _) $ Prop(phi2, r2)) = r_prop (S $ Prop(con(phi1,phi2), join r1 r2))
-  | r_prop (S $ Prop(_,r1) $ Prop(_,r2)) = parse_error (join r1 r2, "consecutive propositions")
-  | r_prop (S $ PropInfix(_,_,r)) = parse_error (r, "trailing infix prop operator")
-  | r_prop (S $ Prop(phi,r)) = S $ Prop(phi,r)
-  | r_prop (S $ Tok(_,r)) = parse_error (r, "unknown or empty proposition")
+  (* remaining error conditions *)
+  | (S $ Infix(_, _, t, r, _), Nonfix _) => parse_error (r, "trailing infix operator " ^ pp_tok t)
+  | (S $ Prefix(_, t, r, _),   Nonfix _) => parse_error (r, "trailing prefix operator " ^ pp_tok t)
+  | (S $ AExp _,               Nonfix _) => ST   (* already reduced *)
+  | (S, Nonfix (t, r))                   => parse_error (r, "empty arithmetic expression before " ^ pp_tok t)
+
+and r_aexp (S $ Tok(T.NAT(n), r)) = S $ AExp(Arith(R.Int(n)), r)
+  | r_aexp (S $ Tok(T.IDENT(x), r)) = S $ AExp(Arith(R.Var(x)), r)
+  | r_aexp (S $ Tok(T.LPAREN, r1) $ AExp(e,_) $ Tok(T.RPAREN, r2)) = S $ AExp(e, join r1 r2)
+  | r_aexp (S $ AExp(e1, r1) $ Infix(_, _, _, _, constr) $ AExp(e2, r2)) = S $ AExp(constr(e1,e2), join r1 r2)
+  | r_aexp (S $ Prefix(_, _, r1, constr) $ AExp(e, r2)) = S $ AExp(constr(e), join r1 r2)
+  | r_aexp (S $ AExp(e,r)) = S $ AExp(e,r)  (* default case; must be last *)
+  (* no other cases should be possible *)                            
 
 (* <type_opt> *)
 and p_type_opt ST = case first ST of
@@ -460,31 +505,34 @@ and p_type_opt ST = case first ST of
   | _ => p_type ST                              
 
 (* reduce <type> *)
-and r_type (S $ Tok(T.NAT(1),r)) = S $ Tp(A.One, r)
-  | r_type (S $ Tok(T.PLUS,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) =
+(* broken up into separate function to avoid mlton performance bug *)
+and r_type S = r_type_1 S
+and r_type_1 (S $ Tok(T.NAT(1),r)) = S $ Tp(A.One, r)
+  | r_type_1 (S $ Tok(T.PLUS,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) =
     S $ Tp(A.Plus(alts), join r1 r2)
-  | r_type (S $ Tok(T.AMPERSAND,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) =
+  | r_type_1 (S $ Tok(T.AMPERSAND,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) =
     S $ Tp(A.With(alts), join r1 r2)
-  | r_type (S $ Tok(T.BACKQUOTE,r1) $ Tp(tp,r2)) = S $ Tp(A.Next(R.Int(1),tp), join r1 r2)
-  | r_type (S $ Tok(T.LPAREN,r1) $ Tok(T.RPAREN,_) $ Tp(tp,r2)) = S $ Tp(A.Next(R.Int(1),tp), join r1 r2)
-  | r_type (S $ Tok(T.LPAREN,r1) $ Arith(t,_) $ Tok(T.RPAREN,_) $ Tp(tp,r2)) = S $ Tp(A.Next(t,tp), join r1 r2)
-  | r_type (S $ Tok(T.LBRACKET,r1) $ Tok(T.RBRACKET,_) $ Tp(tp,r2)) = S $ Tp(A.Box(tp), join r1 r2)
-  | r_type (S $ Tok(T.LANGLE,r1) $ Tok(T.RANGLE,_) $ Tp(tp,r2)) = S $ Tp(A.Dia(tp), join r1 r2)
-  | r_type (S $ Tok(T.LANGLE,r1) $ Tok(T.BAR,_) $ Tp(tp, r2)) = S $ Tp(A.GetPot(R.Int(1),tp), join r1 r2)
-  | r_type (S $ Tok(T.LANGLE,r1) $ Arith(p,_) $ Tok(T.BAR,_) $ Tp(tp, r2)) = S $ Tp(A.GetPot(p,tp), join r1 r2)
-  | r_type (S $ Tok(T.BAR,r1) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(R.Int(1),tp), join r1 r2)
-  | r_type (S $ Tok(T.BAR,r1) $ Arith(p,_) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(p,tp), join r1 r2)
-  | r_type (S $ Tok(T.QUESTION,r1) $ Prop(phi,_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Exists(phi,tp), join r1 r2)
-  | r_type (S $ Tok(T.EXCLAMATION,r1) $ Prop(phi,_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(phi,tp), join r1 r2)
-  | r_type (S $ Tok(T.QUESTION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsNat(id,tp), join r1 r2)
-  | r_type (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
-  | r_type (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
-  | r_type (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
-  | r_type (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
-  | r_type (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
-  | r_type (S $ TpInfix(_,_,r)) = parse_error (r, "trailing infix type operator")
-  | r_type (S $ Tp(tp,r)) = S $ Tp(tp,r)
-  | r_type (S $ Tok(_,r)) = parse_error (r, "unknown or empty type expression")
+  | r_type_1 (S $ Tok(T.BACKQUOTE,r1) $ Tp(tp,r2)) = S $ Tp(A.Next(R.Int(1),tp), join r1 r2)
+  | r_type_1 (S $ Tok(T.LPAREN,r1) $ Tok(T.RPAREN,_) $ Tp(tp,r2)) = S $ Tp(A.Next(R.Int(1),tp), join r1 r2)
+  | r_type_1 (S $ Tok(T.LPAREN,r1) $ AExp(t,r) $ Tok(T.RPAREN,_) $ Tp(tp,r2)) = S $ Tp(A.Next(aexp2arith r t,tp), join r1 r2)
+  | r_type_1 (S $ Tok(T.LBRACKET,r1) $ Tok(T.RBRACKET,_) $ Tp(tp,r2)) = S $ Tp(A.Box(tp), join r1 r2)
+  | r_type_1 (S $ Tok(T.LANGLE,r1) $ Tok(T.RANGLE,_) $ Tp(tp,r2)) = S $ Tp(A.Dia(tp), join r1 r2)
+  | r_type_1 (S $ Tok(T.LANGLE,r1) $ Tok(T.BAR,_) $ Tp(tp, r2)) = S $ Tp(A.GetPot(R.Int(1),tp), join r1 r2)
+  | r_type_1 (S $ Tok(T.LANGLE,r1) $ AExp(p,r) $ Tok(T.BAR,_) $ Tp(tp, r2)) = S $ Tp(A.GetPot(aexp2arith r p,tp), join r1 r2)
+  | r_type_1 S = r_type_2 S
+and r_type_2 (S $ Tok(T.BAR,r1) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(R.Int(1),tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.BAR,r1) $ AExp(p,r) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(aexp2arith r p,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.QUESTION,r1) $ AExp(e,r) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Exists(aexp2prop r e,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ AExp(e,r) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(aexp2prop r e,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.QUESTION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsNat(id,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
+  | r_type_2 (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
+  | r_type_2 (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
+  | r_type_2 (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
+  | r_type_2 (S $ TpInfix(_,_,r)) = parse_error (r, "trailing infix type operator")
+  | r_type_2 (S $ Tp(tp,r)) = S $ Tp(tp,r)
+  | r_type_2 (S $ Tok(_,r)) = parse_error (r, "unknown or empty type expression")
   (* should be the only possibilities *)
 
 (* <choices> *)
@@ -531,7 +579,7 @@ and p_exp ST = case first ST of
 
 and p_id_exp ST = case first ST of
     T.IDENT(x) => ST |> shift
-  | T.LBRACE => ST |> shift >> p_arith >> p_terminal T.RBRACE >> reduce r_idx                                
+  | T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_idx (* !! *)
 
 and p_id_exps ST = case first ST of
     T.PERIOD => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
@@ -559,18 +607,18 @@ and p_id_list_opt_exp ST = case first ST of
 
 (* [<idx>] postfix of action, default is 1 *)
 and p_idx_opt ST = case first ST of
-    T.SEMICOLON => ST |> push (Arith(R.Int(1), here ST)) >> shift >> reduce r_action
+    T.SEMICOLON => ST |> push (AExp(Arith(R.Int(1)), here ST)) >> shift >> reduce r_action
   | T.LBRACE => ST |> p_idx >> p_terminal T.SEMICOLON >> reduce r_action
   | t => error_expected_list (here ST, [T.SEMICOLON, T.LBRACE], t)
 
-(* <con> ';' as postfix of 'assert'<dir> and 'assume'<dir> *)
+(* <con> ';' as postfix of 'assert' and 'assume' *)
 and p_con_semi ST = case first ST of
-    T.LBRACE => ST |> shift >> p_prop >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.SEMICOLON >> reduce r_action
+    T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.SEMICOLON >> reduce r_action
   | t => error_expected (here ST, T.LBRACE, t)
 
 (* <con> ::= '{' <prop> '}' as postfix of 'impossible'<dir> *)
 and p_con ST = case first ST of
-    T.LBRACE => ST |> shift >> p_prop >> p_terminal T.RBRACE >> reduce r_con >> reduce r_exp_atomic
+    T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_con >> reduce r_exp_atomic
 
 (* reduce <exp>, where <exp> has no continuation (atomic expressions) *)
 and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.Close(id),join r1 r2),join r1 r2)
@@ -580,8 +628,8 @@ and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.C
     S $ Exp(m_exp(A.Case(id,branches),join r1 r2),join r1 r2)
   | r_exp_atomic S = r_exp_atomic_2 S
 
-and r_exp_atomic_2 (S $ Tok(T.IMPOSSIBLE,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2)) =
-    S $ Exp(m_exp(A.Assume(id,phi,A.Imposs),join r1 r2),join r1 r2)
+and r_exp_atomic_2 (S $ Tok(T.IMPOSSIBLE,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2)) =
+    S $ Exp(m_exp(A.Assume(id, aexp2prop r2 e, A.Imposs),join r1 r2),join r1 r2)
   | r_exp_atomic_2 (S $ Tok(T.IDENT(id1),r1) $ Tok(T.LARROW,r) $ Tok(T.IDENT(id2),r2) ) = S $ Exp(m_exp(A.Id(id1,id2),join r1 r2), join r1 r2)
   (* should be the only atomic expressions *)
 
@@ -603,12 +651,12 @@ and r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ T
     S $ Action((fn K => m_exp(A.RecvNat(x,v,K),join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Tok(T.IDENT(w),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.Send(x,w,K), join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Arith(e, r2) $ Tok(T.SEMICOLON, r3)) =
-    S $ Action((fn K => m_exp(A.SendNat(x,e,K), join r1 r2)), join r1 r3)
+  | r_action (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ AExp(e, r2) $ Tok(T.SEMICOLON, r3)) =
+    S $ Action((fn K => m_exp(A.SendNat(x,aexp2arith r2 e,K), join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.WAIT,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Wait(id,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.DELAY,r1) $ Arith(t,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Delay(t,K),r1)), join r1 r2)
+  | r_action (S $ Tok(T.DELAY,r1) $ AExp(t,r) $ Tok(T.SEMICOLON,r2)) =
+    S $ Action((fn K => m_exp(A.Delay(aexp2arith r t,K),r1)), join r1 r2)
   | r_action (S $ Tok(T.TICK,r1) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(R.Int(1),K),r1)), join r1 r2)
   | r_action (S $ Tok(T.WHEN,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
@@ -617,16 +665,16 @@ and r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ T
     S $ Action((fn K => m_exp(A.Now(id,K),join r1 r2)), join r1 r3)
   | r_action S = r_action_2 S
 
-and r_action_2 (S $ Tok(T.WORK,r1) $ Arith(pot,_) $ Tok(T.SEMICOLON,r2)) =
-    S $ Action((fn K => m_exp(A.Work(pot,K),r1)), join r1 r2)
-  | r_action_2 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.Pay(id,pot,K),join r1 r2)), join r1 r3)
-  | r_action_2 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ Arith(pot,r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.Get(id,pot,K), join r1 r2)), join r1 r3)
-  | r_action_2 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.Assert(id,phi,K), join r1 r2)), join r1 r2)
-  | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ Prop(phi,r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.Assume(id,phi,K),join r1 r2)), join r1 r2)
+and r_action_2 (S $ Tok(T.WORK,r1) $ AExp(pot,r) $ Tok(T.SEMICOLON,r2)) =
+    S $ Action((fn K => m_exp(A.Work(aexp2arith r pot,K),r1)), join r1 r2)
+  | r_action_2 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ AExp(pot,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Pay(id,aexp2arith r2 pot,K),join r1 r2)), join r1 r3)
+  | r_action_2 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ AExp(pot,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Get(id,aexp2arith r2 pot,K), join r1 r2)), join r1 r3)
+  | r_action_2 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Assert(id,aexp2prop r2 e,K), join r1 r2)), join r1 r2)
+  | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Assume(id,aexp2prop r2 e,K),join r1 r2)), join r1 r2)
   | r_action_2 (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Tok(T.LARROW,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
 

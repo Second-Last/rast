@@ -313,7 +313,7 @@ fun minus (e1, e2) =
 structure Print =
 struct
 
-    fun pp_arith (Int(n)) = if n >= 0 then Int.toString n else "0-" ^ Int.toString (0-n)
+    fun pp_arith (Int(n)) = if n >= 0 then Int.toString n else "-" ^ Int.toString (0-n)
       | pp_arith (Add(s,t)) = "(" ^ pp_arith s ^ "+" ^ pp_arith t ^ ")"
       | pp_arith (Sub(s,t)) = "(" ^ pp_arith s ^ "-" ^ pp_arith t ^ ")"
       | pp_arith (Mult(s,t)) = "(" ^ pp_arith s ^ "*" ^ pp_arith t ^ ")"

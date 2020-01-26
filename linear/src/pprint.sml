@@ -60,8 +60,7 @@ fun parens prec_left prec s =
  * All arithmetic operators are left associative
  *)
 fun pp_arith_prec prec_left (R.Int(n)) =
-    if n >= 0 then Int.toString n
-    else pp_arith_prec prec_left (R.Sub(R.Int(0),R.Int(0-n))) (* might overflow *)
+    if n >= 0 then Int.toString n else "-" ^ Int.toString(~n)
   | pp_arith_prec prec_left (R.Add(s,t)) =
     parens prec_left 1 (pp_arith_prec 0 s ^ "+" ^ pp_arith_prec 1 t)
   | pp_arith_prec prec_left (R.Sub(s,t)) =

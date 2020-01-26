@@ -211,7 +211,7 @@ fun test args =
         (* parse and load file, i.e., generate an environment *)
         val env = load nil filenames
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
-                 | e => exit_failure "% internal error (uncaught exception)"
+                 (* | e => exit_failure "% internal error (uncaught exception)" *)
         val () = Constraints.solve_global ()
         val () = run env env  (* run all 'exec' decls in env *)
             handle Eval.DynError => exit_failure "% execution failed"
