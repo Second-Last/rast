@@ -243,15 +243,16 @@ struct
   fun decide_norm ctx con (R.Eq(s,R.Int(0))) =
       (* if compare s t then Valid else Unknown *)
       if is_zero s then Valid else Unknown
-    | decide_norm ctx con (R.Ge(s,R.Int(0))) =
+    | decide_norm ctx con (phi as R.Ge(s,R.Int(0))) =
       if all_pos s then Valid else Unknown
     | decide_norm ctx con phi = Unknown
 
   fun decide ctx con phi =
-      let val (con', phi') = R.subst_eq con R.True phi (* substitute out equalities *)
-          val phi'' = normalize_prop phi'
+      let val (con1, phi1) = R.elim_eq con phi (* substitute out equalities x = e *)
+          val (con2, phi2) = R.elim_ge con1 phi1 (* substitute out inequality x > n *)
+          val phi2' = normalize_prop phi2
       in
-          decide_norm ctx con phi''
+          decide_norm ctx con2 phi2'
       end
 
 end  (* structure Normalize *)

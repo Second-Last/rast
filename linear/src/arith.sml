@@ -60,10 +60,9 @@ sig
     val plus : arith * arith -> arith                  (* preserve integer values *)
     val minus : arith * arith -> arith                 (* preserve integer values *)
 
-    val subst_eq : prop -> prop -> prop -> prop * prop (* subst_eq con1 con2 phi = (con1' /\ con2', phi')
-                                                        * where con1 /\ con2 |= phi iff con1' /\ con2 |= phi'
-                                                        * and equality x = t or t = x are substituted out
-                                                        *)
+    (* Next two eliminate some antecedents x = e and x > n *)
+    val elim_eq : prop -> prop -> prop * prop          (* elim_eq con phi = (con', phi') where con |= phi iff con' |= phi' *)
+    val elim_ge : prop -> prop -> prop * prop          (* elim_ge con phi = (con', phi') where con |= phi iff con' |= phi' *)
 
     (* Presburger arithmetic *)
     exception NonLinear
@@ -627,19 +626,55 @@ fun simplify (Lt(Int(k),Int(k'))) = if k < k' then True else False
   | simplify (And(F,G)) = and_ (simplify F) (simplify G)
   | simplify (Not(F)) = not_ (simplify F)
                         
+(* Eliminating antecedents in con before checking con |= phi *)
+(* At the moment, we optimize only for
+     con ::= True | con /\ psi
+ * where psi is an atomic assumption
+ * We reason with sb : subst -> prop where
+ * sb [] = True
+ * sb ([x,e] :: sigma) = (x = e /\ sb sigma)
+ *)
 fun rev (And(con,psi)) con' = rev con (And(con',psi))
   | rev (True) con' = con'
 
-fun subst_eq (True) con' phi = (rev con' True, phi)
-  | subst_eq (And(con,Eq(Var(x),e))) con' phi =
-    subst_eq (apply_prop [(x,e)] con) (apply_prop [(x,e)] con') (apply_prop [(x,e)] phi)
-  | subst_eq (And(con,Eq(e,Var(x)))) con' phi =
-    subst_eq (apply_prop [(x,e)] con) (apply_prop [(x,e)] con') (apply_prop [(x,e)] phi)
-  | subst_eq (And(con,psi)) con' phi = subst_eq con (And(con',psi)) phi
-  | subst_eq psi con' phi = ( rev con' psi, phi)
+(* eq_subst phi = (phi', sigma) where phi = phi' /\ sb(sigma) *)
+fun eq_subst (phi as Eq(Var(x),e)) =
+    if free_in x e then (phi, []) else (True, [(x,e)])
+  | eq_subst (Eq(e, Var(x))) = eq_subst (Eq(Var(x), e))
+  | eq_subst phi = (phi, [])
 
-fun preprocess xs con phi =
-    subst_eq con True phi
+fun elim_eq_var (And(con,psi)) con' phi =
+    ( case eq_subst psi
+       of (psi', []) => elim_eq_var con (And(con',psi')) phi
+        | (psi', sigma) => elim_eq_var (apply_prop sigma con) (And(apply_prop sigma con', psi')) (apply_prop sigma phi)
+        (* could optimize away psi' = True *)
+    )
+  | elim_eq_var psi con' phi = (rev con' psi, phi)
+
+(* ge_subst phi = (phi', sigma) where phi = phi' /\ sb(sigma) *)
+(* we do not create fresh names, however *)
+(* this could be applied more generally for x >= e where x not in e *)
+fun ge_subst (Gt(Var(x),Int(n))) = ge_subst (Ge(Var(x),Int(n+1)))
+  | ge_subst (Ge(Var(x),Int(n))) = if n > 0 then (True, [(x,Add(Var(x),Int(n)))]) else (True, [])
+  | ge_subst (Le(Int(n),Var(x))) = ge_subst (Ge(Var(x),Int(n)))
+  | ge_subst (Lt(Int(n),Var(x))) = ge_subst (Ge(Var(x),Int(n+1)))
+  | ge_subst phi = (phi, [])
+
+fun elim_ge_var_const (And(con,psi)) con' phi =
+    ( case ge_subst psi
+       of (psi', []) => elim_ge_var_const con (And(con',psi')) phi
+        | (psi', sigma) => elim_ge_var_const (apply_prop sigma con) (And(apply_prop sigma con', psi')) (apply_prop sigma phi)
+        (* could optimize the case where psi' = True *)
+    )
+  | elim_ge_var_const psi con' phi = (rev con' psi, phi)
+
+fun elim_ge con phi = elim_ge_var_const con True phi
+fun elim_eq con phi = elim_eq_var con True phi
+
+(* preprocess is an important optimization for efficiency
+ * in the case of linear constraints
+ *)
+fun preprocess xs con phi = elim_eq con phi
 
 (* elim x F = G, where (exists x. F) <=> G and x does not occur in G
  * assume F is in strict nnf; ensure G is in strict nnf
