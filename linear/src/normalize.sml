@@ -160,6 +160,7 @@ struct
     | normalize (R.Mult(e1,e2)) = sreduce (smultiply (normalize e1) (normalize e2))
     | normalize (R.Var(v)) = R.Mult(R.Int(1), R.Var(v))
 
+  (* next three functions are obsolete; should use 'decide' instead *)
   fun member p1 (R.Add(p2,s2)) = (p1 = p2) orelse member p1 s2
     | member p1 p2 = (p1 = p2)
 
@@ -168,26 +169,43 @@ struct
 
   fun compare s1 s2 = subset s1 s2 andalso subset s2 s1
 
+  (* Decision heuristics for nonlinear constraints *)
+  datatype outcome = Valid | NotValid | Unknown
+
+  (* is_zero s ~> true if s == 0, assumes s is strict normal form *)
   fun is_zero (R.Int(0)) = true
     | is_zero s = false
 
-  datatype outcome = Valid | NotValid | Unknown
-
+  (* and_ (nphi1, nphi2) ~> nphi1 /\ nphi2 (normal) *)
   fun and_ (R.True, phi2) = phi2
     | and_ (phi1, R.True) = phi1
     | and_ (R.False, phi2) = R.False
     | and_ (phi1, R.False) = R.False
     | and_ (phi1, phi2) = R.And(phi1, phi2)
 
+  (* or_ (nphi1, nphi2) ~> nphi1 \/ nphi2 (normal) *)
   fun or_ (R.True, phi2) = R.True
     | or_ (phi1, R.True) = R.True
     | or_ (R.False, phi2) = phi2
     | or_ (phi1, R.False) = phi1
     | or_ (phi1, phi2) = R.Or(phi1, phi2)
 
+(* 
+ * normal propositions, s strictly normal in all cases
+ * normal           nphi ::= nsphi | true | false
+ *
+ * strictly normal  snphi ::= s = 0
+ *                         | s >= 0
+ *                         | ~ s = 0
+ *                         | n divides s
+ *                         | ~ n divides s
+ *                         | snphi1 \/ snphi2
+ *                         | snphi1 /\ snphi2
+ *) 
+
   fun normalize_prop (R.Eq(e1,e2)) = R.Eq (normalize (R.Sub(e1,e2)), R.Int(0))
     | normalize_prop (R.Lt(e1,e2)) = normalize_prop (R.Gt(e2,e1))
-    | normalize_prop (R.Gt(e1,e2)) = R.Gt (normalize (R.Sub(e1,e2)), R.Int(0))
+    | normalize_prop (R.Gt(e1,e2)) = R.Ge (normalize (R.Sub(R.Sub(e1,e2),R.Int(~1))), R.Int(0))
     | normalize_prop (R.Le(e1,e2)) = normalize_prop (R.Ge(e2,e1))
     | normalize_prop (R.Ge(e1,e2)) = R.Ge (normalize (R.Sub(e1,e2)), R.Int(0))
     | normalize_prop (R.Divides(n,e)) = R.Divides(n, normalize e)
@@ -220,15 +238,15 @@ struct
 
   datatype outcome = Valid | NotValid | Unknown
 
-  (* decide_norm (s = t) => compare each coefficient for equality *)
-  (* decide_norm (s >= t) => compare each coefficient for >= *)
+  (* decide_norm (s = 0) ==> Valid if s = 0, s strictly normal  *)
+  (* decide_norm (s >= 0) ==> Valid if each coefficient and constant is positive *)
   fun decide_norm ctx con (R.Eq(s,R.Int(0))) =
       (* if compare s t then Valid else Unknown *)
       if is_zero s then Valid else Unknown
     | decide_norm ctx con (R.Ge(s,R.Int(0))) =
       if all_pos s then Valid else Unknown
     | decide_norm ctx con phi = Unknown
-                                
+
   fun decide ctx con phi =
       let val (con', phi') = R.subst_eq con R.True phi (* substitute out equalities *)
           val phi'' = normalize_prop phi'
