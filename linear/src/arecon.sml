@@ -20,7 +20,7 @@ structure TC = TypeCheck
 val ERROR = ErrorMsg.ERROR
 
 (* skipping over non-structural types, stopping at structural types *)
-fun skip env (A.TpName(a,es)) = skip env (A.expd_tp env (a,es))
+fun skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
   | skip env (A.Exists(_,A')) = skip env A'
   | skip env (A.Forall(_,A')) = skip env A'
   | skip env (A.PayPot(_,A')) = skip env A'
@@ -265,8 +265,11 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
     A.Marked(Mark.mark'(recon env D (Mark.data marked_P) zC (Mark.ext marked_P),
                         Mark.ext marked_P))
 
+fun recon_top env ctx con D pot P zC ext =
+    recon env D P zC ext
+
 (* external interface: ignore potential *)
-val recon = fn env => fn ctx => fn con => fn D => fn pot => fn P => fn C => fn ext =>
-            recon env D P C ext
+fun recon env ctx con D pot P zC ext =
+    recon_top env ctx con D pot P zC ext
 
 end (* structure ARecon *)

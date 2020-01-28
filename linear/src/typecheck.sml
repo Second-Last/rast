@@ -19,6 +19,8 @@ sig
     val eventually_dia : Ast.env -> Ast.tp -> bool
 
     (* operations on types *)
+    val expd : Ast.env -> Ast.tp -> Ast.tp  (* expand type definition, but also register abbreviation *)
+
     val decrementL : Ast.env -> Arith.ctx -> Arith.prop
                      -> Ast.tp -> Arith.arith -> Ast.ext -> Ast.tp (* may raise ErrorMsg.Error *)
     val decrementR : Ast.env -> Arith.ctx -> Arith.prop
@@ -82,7 +84,6 @@ struct
 structure R = Arith
 structure A = Ast
 structure PP = PPrint
-(* structure N = Normalize *)
 structure E = TpError
 structure C = Constraints
 val ERROR = ErrorMsg.ERROR
@@ -291,6 +292,19 @@ fun valid env ctx con A ext =
                                                        ; TextIO.print "% Treating error as warning\n" ; () ) )
         | _ => () )
 
+(*******************)
+(* Expanding types *)
+(*******************)
+
+(* expd env a{es} = [es/vs]A for a type a{vs} = A *)
+fun expd env (short as A.TpName(a,es)) =
+    let val long = A.expd_tp env (a,es)
+        val () = PP.Abbrev.register short long
+    in long end
+
+fun expand env (A as A.TpName(a,es)) = expand env (expd env A)
+  | expand env A = A
+
 (***********************)
 (* Properties of types *)
 (***********************)
@@ -305,7 +319,7 @@ fun contractive env (A as A.Next(_,A')) = contractive env A'
 (* needed for BoxR and DiaL rules *)
 fun eventually_box env (A.Box(A)) = true
   | eventually_box env (A.Next(_,A)) = eventually_box env A
-  | eventually_box env (A.TpName(a,es)) = eventually_box env (A.expd_tp env (a,es))
+  | eventually_box env (A as A.TpName(a,es)) = eventually_box env (expd env A)
   | eventually_box _ _ = false
 
 fun eventually_box_ctx env [] ext = ()
@@ -315,7 +329,7 @@ fun eventually_box_ctx env [] ext = ()
 
 fun eventually_dia env (A.Dia(A)) = true
   | eventually_dia env (A.Next(_,A)) = eventually_dia env A
-  | eventually_dia env (A.TpName(a,es)) = eventually_dia env (A.expd_tp env (a,es))
+  | eventually_dia env (A as A.TpName(a,es)) = eventually_dia env (expd env A)
   | eventually_dia _ _ = false
 
 (***********************)
@@ -329,7 +343,7 @@ fun decrementL env ctx con (A.Next(t,A)) t' ext =
     then decrementL env ctx con A (R.minus (t',t)) ext
     else ERROR ext ("cannot decide: " ^ C.pp_unrel con t t')
   | decrementL env ctx con (A.Box(A)) t' ext = A.Box(A)
-  | decrementL env ctx con (A.TpName(a,es)) t' ext = decrementL env ctx con (A.expd_tp env (a,es)) t' ext
+  | decrementL env ctx con (A as A.TpName(a,es)) t' ext = decrementL env ctx con (expd env A) t' ext
   | decrementL env ctx con A t' ext =
     if C.entails ctx con (R.Eq(t',R.Int(0)))
     then A
@@ -345,7 +359,7 @@ fun decrementR env ctx con (A.Next(t,A)) t' ext =
     then decrementR env ctx con A (R.minus (t',t)) ext
     else ERROR ext ("cannot decide: " ^ C.pp_unrel con t' t)
   | decrementR env ctx con (A.Dia(A)) t' ext = A.Dia(A)
-  | decrementR env ctx con (A.TpName(a,es)) t' ext = decrementR env ctx con (A.expd_tp env (a,es)) t' ext
+  | decrementR env ctx con (A as A.TpName(a,es)) t' ext = decrementR env ctx con (expd env A) t' ext
   | decrementR env ctx con A t' ext =
     if C.entails ctx con (R.Eq(t',R.Int(0)))
     then A
@@ -431,8 +445,8 @@ fun strip_next0_context env ctx con D = List.map (fn xA => strip_next0 env ctx c
  *)
 fun aggregate_nexts' env ctx con s (A.Next(t,A')) =
     aggregate_nexts' env ctx con (R.plus(s,t)) A'
-  | aggregate_nexts' env ctx con s (A.TpName(a,es)) =
-    aggregate_nexts' env ctx con s (A.expd_tp env (a,es))
+  | aggregate_nexts' env ctx con s (A as A.TpName(a,es)) =
+    aggregate_nexts' env ctx con s (expd env A)
   | aggregate_nexts' env ctx con s A = (* A <> Next _ *)
     if C.entails ctx con (R.Eq(s,R.Int(0)))
     then A
@@ -504,9 +518,9 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
            | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
   | eq_tp env ctx con seen (A as A.TpName(a,es)) A' =
-    eq_tp' env ctx con seen (A.expd_tp env (a,es)) A'
+    eq_tp' env ctx con seen (expd env A) A'
   | eq_tp env ctx con seen A (A' as A.TpName(a',es')) =
-    eq_tp' env ctx con seen A (A.expd_tp env (a',es'))
+    eq_tp' env ctx con seen A (expd env A')
 
   | eq_tp env ctx con seen A A' = false
 
@@ -527,7 +541,7 @@ and eq_choice env ctx con seen nil nil = true
 and eq_name_name env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
     case mem_seen env seen a a'
      of NONE => eq_tp' env ctx con ((ctx,con,(A,A'))::seen)
-                       (A.expd_tp env (a,es)) (A.expd_tp env (a',es'))
+                       (expd env A) (expd env A')
       | SOME(CTX,CON, (A.TpName(_,ES), A.TpName(_,ES'))) =>
         let val (FCTX,sigma) = gen_fresh CTX
             val FCON = R.apply_prop sigma CON
@@ -545,11 +559,6 @@ and eq_name_name env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es'))
 (*****************************)
 (* Operations on expressions *)
 (*****************************)
-
-(* expd env a{es} = A for a type a{vs} = A *)
-fun expd env (A.TpName(a,es)) = A.expd_tp env (a,es)
-fun expand env (A.TpName(a,es)) = expand env (A.expd_tp env (a,es))
-  | expand env A = A
 
 (* match_contexts env ctx con D D' ext = ()
  * D is typing of channels passed to a process f in call
@@ -1169,14 +1178,17 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     then boxR trace env ctx con D pot (A.When(x,P)) (z,expand env C) ext
     else diaL trace env ctx con D (lookup_context env x D ext) pot (A.When(x,P)) (z,C) ext
 
-
   (* marked expressions *)
   | check_exp trace env ctx con D pot (A.Marked(marked_P)) zC ext =
     check_exp trace env ctx con D pot (Mark.data marked_P) zC (Mark.ext marked_P)
 
+fun check_exp_top trace env ctx con D pot P zC ext =
+    check_exp' trace env ctx con D pot P zC ext
+
 (* external interface *)
-val check_exp = check_exp'      (* entry point for tracing *)
-val eq_tp = fn env => fn ctx => fn con => fn A => fn B =>
-            eq_tp' env ctx con nil A B
+fun check_exp trace env ctx con D pot P zC ext =
+    check_exp_top trace env ctx con D pot P zC ext
+
+fun eq_tp env ctx con A B = eq_tp' env ctx con nil A B
 
 end (* structure TypeCheck *)

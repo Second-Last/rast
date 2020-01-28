@@ -26,7 +26,7 @@ fun skip env (A.PayPot(_,A')) = skip env A'
   | skip env (A.Next(_,A')) = skip env A'
   | skip env (A.Dia(A')) = skip env A'
   | skip env (A.Box(A')) = skip env A'
-  | skip env (A.TpName(a,es)) = skip env (A.expd_tp env (a,es))
+  | skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
   | skip env A = A
 
 fun skipQ env A = case skip env A
@@ -41,7 +41,7 @@ fun skipQ env A = case skip env A
 (* impossL_assumes env x A = assume x {phi1} ; assume x {phi2} ; ... impossible *)
 (* depending on whether A contains Exists(phi, A') *)
 fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env x A)
-  | impossL_assumes env x (A.TpName(a,es)) = impossL_assumes env x (A.expd_tp env (a,es))
+  | impossL_assumes env x (A as A.TpName(a,es)) = impossL_assumes env x (TC.expd env A)
   | impossL_assumes env x A = A.Imposs
 
 (* impossL_branch env (l,A) l_opt = impossL_assumes env x A
@@ -51,15 +51,15 @@ fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env
  *)
 fun impossL_branch env (x,(l,A.Exists(phi,A'))) l_opt ext' =
     (l, NONE, impossL_assumes env x (A.Exists(phi,A')))
-  | impossL_branch env (x,(l,A.TpName(a,es))) l_opt ext' =
-    impossL_branch env (x,(l,A.expd_tp env (a,es))) l_opt ext'
+  | impossL_branch env (x,(l,A as A.TpName(a,es))) l_opt ext' =
+    impossL_branch env (x,(l,TC.expd env A)) l_opt ext'
   | impossL_branch env (x,(l,A)) NONE ext' = E.error_label_missing_branch (l,ext')
   | impossL_branch env (x,(l,A)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
 
 (* impossR_assumes env x A = assume x {phi1} ; assume x {phi2} ; ... impossible *)
 (* depending on whether A contains Forall(phi, A') *)
 fun impossR_assumes env x (A.Forall(phi,C)) = A.Assume(x,phi,impossR_assumes env x C)
-  | impossR_assumes env x (A.TpName(a,es)) = impossR_assumes env x (A.expd_tp env (a,es))
+  | impossR_assumes env x (A as A.TpName(a,es)) = impossR_assumes env x (TC.expd env A)
   | impossR_assumes env x C = A.Imposs
 
 (* impossR_branch env (l,A) = ImpossR(phi)
@@ -74,8 +74,8 @@ fun impossR_branch env (z,(l,A.Forall(phi,C'))) l' ext' =
       then error_label_sat_con phi (l, ext')
       else (l, NONE, A.AssumeR(phi,Imposs))
      *)
-  | impossR_branch env (z,(l,A.TpName(a,es))) l' ext' =
-    impossR_branch env (z,(l,A.expd_tp env (a,es))) l' ext'
+  | impossR_branch env (z,(l,A as A.TpName(a,es))) l' ext' =
+    impossR_branch env (z,(l,TC.expd env A)) l' ext'
   | impossR_branch env (z,(l,C)) NONE ext' = E.error_label_missing_branch (l,ext')
   | impossR_branch env (z,(l,C)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
 

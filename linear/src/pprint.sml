@@ -34,6 +34,13 @@ sig
     (* declarations *)
     val pp_decl : Ast.env -> Ast.decl -> string
 
+    (* abbreviations, for compact printing *)
+    structure Abbrev : sig
+        val reset : unit -> unit
+        val register : Ast.tp -> Ast.tp -> unit (* register short long = (), registers abbreviation *)
+        val abbrev : Ast.tp -> Ast.tp           (* abbrev long = short, where short = long if unregistered *)
+    end 
+
 end
 
 structure PPrint :> PPRINT =
@@ -43,6 +50,70 @@ structure R = Arith
 structure RP = R.Print
 structure A = Ast
 structure P = A.Print
+
+(***********************)
+(* Externalizing types *)
+(***********************)
+
+fun is_internal a = String.sub (a,0) = #"%"
+
+(* In order to have a reasonable type equality algorithm, types
+ * only have one layer of constructors followed by a type name
+ * internal type names (starting with '%') are expanded and
+ * external type names (all others) are kept
+ *)
+(* ext_tp env A = A_ext, in external form *)
+fun ext_tp env (A.One) = A.One
+  | ext_tp env (A.Plus(choices)) = A.Plus(ext_choices env choices)
+  | ext_tp env (A.With(choices)) = A.With(ext_choices env choices)
+  | ext_tp env (A.Tensor(A,B)) = A.Tensor(ext_tp env A, ext_tp env B)
+  | ext_tp env (A.Lolli(A,B)) = A.Lolli(ext_tp env A, ext_tp env B)
+  | ext_tp env (A.Next(t,A)) = A.Next(t,ext_tp env A)
+  | ext_tp env (A.Box(A)) = A.Box(ext_tp env A)
+  | ext_tp env (A.Dia(A)) = A.Dia(ext_tp env A)
+  | ext_tp env (A.GetPot(p,A)) = A.GetPot(p,ext_tp env A)
+  | ext_tp env (A.PayPot(p,A)) = A.PayPot(p,ext_tp env A)
+  | ext_tp env (A.Exists(phi,A)) = A.Exists(phi,ext_tp env A)
+  | ext_tp env (A.Forall(phi,A)) = A.Forall(phi,ext_tp env A)
+  | ext_tp env (A.ExistsNat(v,A)) = A.ExistsNat(v,ext_tp env A)
+  | ext_tp env (A.ForallNat(v,A)) = A.ForallNat(v,ext_tp env A)
+  | ext_tp env (A as A.TpName(a,es)) =
+    if is_internal a
+    then ext_tp env (A.expd_tp env (a,es))   (* must be defined to be mentioned *)
+    else A
+
+and ext_choices env nil = nil
+  | ext_choices env ((l,A)::choices) =
+    (l, ext_tp env A)::(ext_choices env choices)
+
+(*****************)
+(* Abbreviations *)
+(*****************)
+
+(* abbreviations are used for improved error messages *)
+structure Abbrev =
+struct
+  (* abbrev_table is a pair (short, long) of types, intended
+   * for looking up long forms (using built-in polymorphic equality)
+   * in order to print the short form of a type *)
+  val abbrev_table : ((A.tp * A.tp) list) ref = ref nil
+
+  fun reset () = abbrev_table := nil
+  fun register (short as A.TpName(a,es)) long =
+      if is_internal a then ()  (* this type would be externalized anyway; don't register *)
+      else ( abbrev_table := (short,long)::(!abbrev_table) )
+    | register short long = (* this clause may not have a use case *)
+      ( abbrev_table := (short,long)::(!abbrev_table) )
+
+  fun abbrev long =
+      ( case List.find (fn (s,l) => l = long) (!abbrev_table)
+         of NONE => long        (* not registered, return original type *)
+          | SOME(s,l) => s      (* l = long *)
+      )
+
+  (* to see unabbreviated error messsages, comment in the next definition *)
+  (* fun abbrev long = long *)
+end (* struct abbrev *)
 
 (**************************)
 (* Arithmetic expressions *)
@@ -133,40 +204,6 @@ fun pp_potany e = "{" ^ pp_arith e ^ "}"
 fun pp_time (R.Int(1)) = ""
   | pp_time e = "{" ^ pp_arith e ^ "}"
 
-(***********************)
-(* Externalizing types *)
-(***********************)
-fun is_internal a = String.sub (a,0) = #"%"
-
-(* In order to have a reasonable type equality algorithm, types
- * only have one layer of constructors followed by a type name
- * internal type names (starting with '%') are expanded and
- * external type names (all others) are kept
- *)
-(* ext_tp env A = A_ext, in external form *)
-fun ext_tp env (A.One) = A.One
-  | ext_tp env (A.Plus(choices)) = A.Plus(ext_choices env choices)
-  | ext_tp env (A.With(choices)) = A.With(ext_choices env choices)
-  | ext_tp env (A.Tensor(A,B)) = A.Tensor(ext_tp env A, ext_tp env B)
-  | ext_tp env (A.Lolli(A,B)) = A.Lolli(ext_tp env A, ext_tp env B)
-  | ext_tp env (A.Next(t,A)) = A.Next(t,ext_tp env A)
-  | ext_tp env (A.Box(A)) = A.Box(ext_tp env A)
-  | ext_tp env (A.Dia(A)) = A.Dia(ext_tp env A)
-  | ext_tp env (A.GetPot(p,A)) = A.GetPot(p,ext_tp env A)
-  | ext_tp env (A.PayPot(p,A)) = A.PayPot(p,ext_tp env A)
-  | ext_tp env (A.Exists(phi,A)) = A.Exists(phi,ext_tp env A)
-  | ext_tp env (A.Forall(phi,A)) = A.Forall(phi,ext_tp env A)
-  | ext_tp env (A.ExistsNat(v,A)) = A.ExistsNat(v,ext_tp env A)
-  | ext_tp env (A.ForallNat(v,A)) = A.ForallNat(v,ext_tp env A)
-  | ext_tp env (A as A.TpName(a,es)) =
-    if is_internal a
-    then ext_tp env (A.expd_tp env (a,es))   (* must be defined to be mentioned *)
-    else A
-
-and ext_choices env nil = nil
-  | ext_choices env ((l,A)::choices) =
-    (l, ext_tp env A)::(ext_choices env choices)
-
 (*******************************)
 (* Multiline Printing of Types *)
 (*******************************)
@@ -219,9 +256,13 @@ and pp_choice_indent i choices = spaces i ^ pp_choice i choices
 val pp_tp = fn env => fn A => pp_tp 0 (ext_tp env A)
 
 (* pp_tp_compact env A = "A", without newlines
- * this first externalizes A, then prints on one line
+ * this first checks if A can be abbreviated, then
+ * externalizes the result and prints on one line
  *)
-fun pp_tp_compact env A = P.pp_tp (ext_tp env A)
+fun pp_tp_compact env A =
+    let val A' = Abbrev.abbrev A
+        val A'' = ext_tp env A'
+    in P.pp_tp A'' end
 
 fun pp_chan_tp_compact env (x,A) = "(" ^ x ^ " : " ^ pp_tp_compact env A ^ ")"
 fun pp_context_compact env nil = "."

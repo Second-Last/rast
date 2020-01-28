@@ -31,7 +31,7 @@ val ERROR = ErrorMsg.ERROR
 fun skip env (A.Next(_,A')) = skip env A'
   | skip env (A.Dia(A')) = skip env A'
   | skip env (A.Box(A')) = skip env A'
-  | skip env (A.TpName(a,es)) = skip env (A.expd_tp env (a,es))
+  | skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
   | skip env A = A
 
 fun skipW env A =

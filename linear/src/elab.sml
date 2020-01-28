@@ -404,6 +404,7 @@ fun elab_decls env decls =
     let val () = recon_time := LargeInt.fromInt 0
         val () = tc_time := LargeInt.fromInt 0
         val env' = elab_tps env decls
+        val () = PP.Abbrev.reset ()
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'
