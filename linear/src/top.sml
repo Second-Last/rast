@@ -30,7 +30,6 @@ datatype option =
          Time of string
        | Work of string
        | Syntax of string
-       | Terminate of string
        | Equality of string
        | Verbose of int
        | Help of bool
