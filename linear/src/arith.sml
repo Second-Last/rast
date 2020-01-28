@@ -33,17 +33,12 @@ sig
     exception NotClosed
 
     (* contexts and variables *)
-    val anon : string -> bool                          (* check if variable is for inference *)
-    val drop_anon : arith -> arith                     (* delete the _ from anon variables *)
-    val drop_anon_prop : prop -> prop                  (* delete the _ from propositions *)
-
     val closed : ctx -> arith -> bool                  (* check if arith is closed under ctx *)
     val closed_prop : ctx -> prop -> bool              (* check if prop is closed under ctx *)
 
     val free_vars : arith -> ctx -> ctx                (* free variables of arith *)
     val free_varlist : arith list -> ctx -> ctx        (* free variables of a list of arith *)
     val free_prop : prop -> ctx -> ctx                 (* free variables of a prop *)
-    val free_anon_prop : prop -> ctx -> ctx            (* free anon variables of a prop *)
 
     val zip : ctx -> arith list -> subst               (* x1,...,xn\e1,...,en *)
                                                        (* may raise ListPair.UnequalLengths *)
@@ -66,11 +61,9 @@ sig
 
     (* Presburger arithmetic *)
     exception NonLinear
-    (* Anonymous variables *)
-    exception Anonymous
 
     type nnf = prop                   (* propositions in negation normal form *)
-    val nnf : prop -> nnf             (* may raise NonLinear or Anonymous *)
+    val nnf : prop -> nnf             (* may raise NonLinear *)
     val elim : varname -> prop -> nnf (* elim x F = G where (exists x. F) <=> G *)
     val elim_nnf : varname -> nnf -> nnf
     val elim_vars : varname list -> nnf -> nnf
@@ -122,35 +115,12 @@ type ctx = varname list
 type subst = (varname * arith) list
 exception NotClosed
 
-(* dropping the _ from anon variables, to be used by inference *)
-fun anon v = String.sub (v,0) = #"_"
-
-fun drop_anon (Int(n)) = Int(n)
-  | drop_anon (Add(e1,e2)) = Add(drop_anon e1, drop_anon e2)
-  | drop_anon (Sub(e1,e2)) = Sub(drop_anon e1, drop_anon e2)
-  | drop_anon (Mult(e1,e2)) = Mult(drop_anon e1, drop_anon e2)
-  | drop_anon (Var(v)) = if anon v then Var(String.extract (v,1,NONE)) else Var(v)
-
-fun drop_anon_prop (Eq(e1,e2)) = Eq(drop_anon e1, drop_anon e2)
-  | drop_anon_prop (Lt(e1,e2)) = Lt(drop_anon e1, drop_anon e2)
-  | drop_anon_prop (Gt(e1,e2)) = Gt(drop_anon e1, drop_anon e2)
-  | drop_anon_prop (Le(e1,e2)) = Le(drop_anon e1, drop_anon e2)
-  | drop_anon_prop (Ge(e1,e2)) = Ge(drop_anon e1, drop_anon e2)
-  | drop_anon_prop (Divides(n,e)) = Divides(n, drop_anon e)
-  | drop_anon_prop (True) = True
-  | drop_anon_prop (False) = False
-  | drop_anon_prop (Or(F,G)) = Or(drop_anon_prop F, drop_anon_prop G)
-  | drop_anon_prop (And(F,G)) = And(drop_anon_prop F, drop_anon_prop G)
-  | drop_anon_prop (Implies(F,G)) = Implies(drop_anon_prop F, drop_anon_prop G)
-  | drop_anon_prop (Not(F)) = Not(drop_anon_prop F)
-
-
 (* check if an arithmetic expression or proposition is closed under ctx *)
 fun closed ctx (Int(n)) = true
   | closed ctx (Add(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed ctx (Sub(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed ctx (Mult(e1,e2)) = closed ctx e1 andalso closed ctx e2
-  | closed ctx (Var(v)) = anon v orelse List.exists (fn v' => v = v') ctx
+  | closed ctx (Var(v)) = List.exists (fn v' => v = v') ctx
 
 fun closed_list ctx nil = true
   | closed_list ctx (e::es) = closed ctx e andalso closed_list ctx es
@@ -203,30 +173,6 @@ fun free_in v (Int(n)) = false
 
 fun free_in_subst v nil = false
   | free_in_subst v ((v',e)::sigma) = free_in v e orelse free_in_subst v sigma
-
-fun free_anon_vars (Int(n)) ctx = ctx
-  | free_anon_vars (Add(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
-  | free_anon_vars (Sub(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
-  | free_anon_vars (Mult(s,t)) ctx = free_anon_vars t (free_anon_vars s ctx)
-  | free_anon_vars (Var(v)) ctx =
-    if List.exists (fn v' => v = v') ctx
-    then ctx
-    else if anon v
-    then v::ctx
-    else ctx
-
-fun free_anon_prop (Eq(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
-  | free_anon_prop (Lt(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
-  | free_anon_prop (Gt(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
-  | free_anon_prop (Le(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
-  | free_anon_prop (Ge(e1,e2)) ctx = free_anon_vars e2 (free_anon_vars e1 ctx)
-  | free_anon_prop (Divides(_,e)) ctx = free_anon_vars e ctx
-  | free_anon_prop (True) ctx = ctx
-  | free_anon_prop (False) ctx = ctx
-  | free_anon_prop (Or(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
-  | free_anon_prop (And(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
-  | free_anon_prop (Implies(phi1,phi2)) ctx = free_anon_prop phi2 (free_anon_prop phi1 ctx)
-  | free_anon_prop (Not(phi)) ctx = free_anon_prop phi ctx
 
 (* creates a substitution *)
 (* requires: length ctx = length es; raises ListPair.UnequalLengths otherwise *)
@@ -346,7 +292,6 @@ end (* structure Print *)
 
 type nnf = prop
 exception NonLinear
-exception Anonymous
 
 (* is_prod (k*x) where integer k may be 0 *)
 (* write p for products *)
@@ -413,8 +358,7 @@ fun linearize (s as Int(k)) = s
   | linearize (Add(s,t)) = add (linearize s) (linearize t)
   | linearize (Sub(s,t)) = sub (linearize s) (linearize t)
   | linearize (Mult(s,t)) = mult (linearize s) (linearize t)
-  | linearize (Var(x)) = if anon x then raise Anonymous
-                         else Add(Mult(Int(1),Var(x)), Int(0))
+  | linearize (Var(x)) = Add(Mult(Int(1),Var(x)), Int(0))
 
 (* isolating a variable x in a term *)
 

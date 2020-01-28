@@ -413,11 +413,6 @@ fun elab_decls env decls =
                  then ( TextIO.print ("% recon time: " ^ LargeInt.toString (!recon_time) ^ " us\n")
                       ; TextIO.print ("% check time: " ^ LargeInt.toString (!tc_time) ^ " us\n") )
                  else ()
-        (*
-        val () = case !Flags.terminate
-                  of NONE => ()
-                   | SOME(recursion) => Termination.terminates env'' env'' (* check termination on elaborated form *)
-        *)
     in
         SOME(env'')
     end

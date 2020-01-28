@@ -66,9 +66,6 @@ val options : option G.opt_descr list =
      {short = "s", long = ["syntax"],
       desc = G.ReqArg ((fn s => Syntax(s)), "<syntax>"),
       help = "Syntax, one of 'implicit' (default) or 'explicit'"},
-     {short = "e", long = ["terminate"],
-      desc = G.ReqArg ((fn r => Terminate(r)), "<recursion>"),
-      help = "Perform termination checking, on 'equi' or 'iso' recursive syntax"},
      {short = "u", long = ["equality"],
       desc = G.ReqArg ((fn r => Equality(r)), "<type equality algorithm>"),
       help = "Type equality algorithm, one of 'subsumerefl' (default), 'subsume', or 'refl'"}
@@ -98,10 +95,6 @@ fun process_option (Time(s)) =
     (case Flags.parseSyntax s
       of NONE => exit_failure ("syntax " ^ s ^ " not recognized")
        | SOME(syn) => Flags.syntax := syn)
-  | process_option (Terminate(r)) =
-    (case Flags.parseRecursion r
-      of NONE => exit_failure ("recursion style " ^ r ^ " not recognized")
-       | SOME(recursion) => Flags.terminate := SOME(recursion))
   | process_option (Equality(r)) =
     (case Flags.parseEquality r
       of NONE => exit_failure ("type equality algorithm " ^ r ^ " not recognized")
@@ -211,8 +204,7 @@ fun test args =
         (* parse and load file, i.e., generate an environment *)
         val env = load nil filenames
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
-                 (* | e => exit_failure "% internal error (uncaught exception)" *)
-        val () = Constraints.solve_global ()
+                 | e => exit_failure "% internal error (uncaught exception)"
         val () = run env env  (* run all 'exec' decls in env *)
             handle Eval.DynError => exit_failure "% execution failed"
     in

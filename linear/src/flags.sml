@@ -15,11 +15,6 @@ sig
     val parseSyntax : string -> syntax option
     val pp_syntax : syntax -> string
 
-    (* recursion *)
-    datatype recursion = Equi | Iso
-    val parseRecursion : string -> recursion option
-    val pp_recursion : recursion option -> string
-
     (* type equality algorithm *)
     datatype equality = SubsumeRefl | Subsume | Refl
     val parseEquality : string -> equality option
@@ -29,7 +24,6 @@ sig
     val time : cost ref
     val work : cost ref
     val syntax : syntax ref
-    val terminate : recursion option ref
     val equality : equality ref
     val verbosity : int ref
     val help : bool ref
@@ -75,19 +69,6 @@ fun parseSyntax "implicit" = SOME(Implicit)
 fun pp_syntax (Implicit) = "implicit"
   | pp_syntax (Explicit) = "explicit"
 
-(* Recursion *)
-datatype recursion = Equi | Iso
-
-fun parseRecursion "equi" = SOME(Equi)
-  | parseRecursion "iso" = SOME(Iso)
-  | parseRecursion "none" = NONE
-  | parseRecursion _ = NONE
-
-fun pp_recursion (SOME(Equi)) = "equi"
-  | pp_recursion (SOME(Iso)) = "iso"
-  | pp_recursion NONE = "none"
-
-                        
 (* type equality algorithm *)
 datatype equality = SubsumeRefl | Subsume | Refl
 fun parseEquality "subsumerefl" = SOME(SubsumeRefl)
@@ -103,7 +84,6 @@ fun pp_equality SubsumeRefl = "subsumerefl"
 val time = ref None
 val work = ref None
 val syntax = ref Implicit
-val terminate = ref (NONE:recursion option)
 val equality = ref SubsumeRefl
 val verbosity = ref 1           (* ~1 = print nothing, 0 = quiet, 1 = normal, 2 = verbose, 3 = debug *)
 val help = ref false
@@ -112,7 +92,6 @@ fun reset () =
     ( time := None
     ; work := None
     ; syntax := Implicit
-    ; terminate := NONE
     ; equality := SubsumeRefl
     ; verbosity := 1
     ; help := false )

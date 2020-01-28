@@ -24,9 +24,6 @@ sig
 
     (* if true, judgment could not be established or refuted *)
     val approx : bool ref
-
-    val global_prop : Arith.prop ref
-    val solve_global : unit -> unit
 end
 
 structure Constraints :> CONSTRAINTS =
@@ -60,90 +57,6 @@ fun qcheck (v::vs) sigma con rhs_pred phi =
 fun quick_check_valid ctx con phi = qcheck ctx nil con (fn b => b) phi (* phi true *)
 fun quick_check_unsat ctx con phi = qcheck ctx nil con (fn b => not b) phi (* phi false *)
 
-(* Used to infer annotations using brute force *)
-fun drop_anon_ctx ctx = List.map (fn v => if R.anon v then String.extract (v,1,NONE) else v) ctx
-
-val global_prop = ref R.True
-
-val threshold = 3
-
-fun attach v n [] = [[(v,R.Int(n))]]
-  | attach v n [x] = [(v,R.Int(n))::x]
-  | attach v n (x::xs) = ((v,R.Int(n))::x)::(attach v n xs)
-
-(* Create all possibilities *)
-fun all_one v n l =
-  if n > threshold
-  then []
-  else (attach v n l) @ (all_one v (n+1) l)
-
-fun all [] = []
-  | all (v::vs) = all_one v 0 (all vs) 
-
-exception Unsat
-
-
-(* Try each possibility if it satisifies all constraints *)
-fun try_sols (subst::substs) =
-  let val phi = R.apply_prop subst (!global_prop)
-      val ctx = R.free_prop phi nil
-  in
-  if R.valid ctx (R.True) phi
-  then subst
-  else try_sols substs
-  end
-  | try_sols [] = raise Unsat
-
-(* Solve global constraints for inference *)
-fun solve_global () =
-  let val ctx = R.free_anon_prop (!global_prop) nil
-  in
-  if List.length ctx > 0
-  then
-    let val substs = all ctx
-        val subst = try_sols substs
-        val () = TextIO.print ("Solution: " ^ (List.foldr (fn ((v,n),s) => s ^ " " ^ v ^ " => " ^ (PP.pp_arith n)) "" subst) ^ "\n")
-    in
-    ()
-    end
-    handle Unsat => TextIO.print ("Unsatisfiable\n")
-  else ()
-  end
-
-fun anoncheck con phi =
-  let val ctx = R.free_prop phi []
-      val ctx = R.free_prop con ctx
-      val ctx = drop_anon_ctx ctx
-      val tcon = R.drop_anon_prop con
-      val tphi = R.drop_anon_prop phi
-  in
-  (if R.valid ctx tcon tphi then true
-  else
-    let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
-    in
-      false
-    end)
-    handle R.NonLinear =>
-      case tphi of
-          R.Eq(e1,e2) =>
-            let val e1n = N.normalize e1
-                val e2n = N.normalize e2
-            in
-              if N.compare e1n e2n
-              then true
-              else let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
-              in
-              false
-              end
-            end
-        | R.Ge(e1,e2) =>
-            let val () = global_prop := R.And(!global_prop, R.Implies(con,phi))
-            in
-            false
-            end
-        | _ => false
-  end
-
 (* constraint entailment, called in type-checking *)
 
 (* entails ctx con phi = true if ctx ; con |= phi *)
@@ -165,14 +78,6 @@ fun entails ctx con phi =
                                   ; true )
              else (* no: definitely not valid *)
                  false
-            | R.Anonymous =>
-              if anoncheck con phi
-              then
-                ( true )
-              else
-                ( TextIO.print ("Constraint?: " ^ pp_jhold con phi ^ "\n")
-                ; approx := true
-                ; true )
     )
 
 (* hardentails ctx con phi = true if ctx ; con |= phi *)
@@ -184,7 +89,6 @@ fun hardentails ctx con phi =
     ( if !Flags.verbosity >= 3 then TextIO.print ("Testing: " ^ pp_jhold con phi ^ "\n") else ()
     ; R.valid ctx con phi
       handle R.NonLinear => false
-           | R.Anonymous => anoncheck con phi        
     )
 
 (* constraint equivalence, called in type equality *)
@@ -213,15 +117,6 @@ fun contradictory ctx con phi =
                                   ; true )
              else (* no: definitely not contradictory *)
                  false
-           | R.Anonymous =>
-              if anoncheck (R.And(con,phi)) R.False
-              then
-                ( TextIO.print ("Constraint!: " ^ pp_jhold con phi ^ "\n")
-                ; true )
-              else
-                ( TextIO.print ("Constraint?: " ^ pp_jhold con phi ^ "\n")
-                ; approx := true
-                ; true )
     )
 
 end (* structure Constraints *)
