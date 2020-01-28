@@ -36,22 +36,10 @@ local
     arecon.sml
     qrecon.sml
     wrecon.sml
-    (*
-    trecon-util.sml
-    trecon.sml
-    trecon-bt.sml
-    tqrecon.sml
-
-    termination.sml
-    *)
 
     elab.sml
     eval.sml
 
-    (*
-    exec.sml
-    *)
-    
     top.sml
     test.sml
   end
