@@ -1,0 +1,43 @@
+Group is
+      $/basis.cm
+      $/smlnj-lib.cm
+
+      safe-io.sml
+      mark.sml
+
+      flags.sml
+      errormsg.sml
+
+      arith.sml
+      ast.sml
+      pprint.sml
+      
+      stream.sml
+      parsestate.sml
+      terminal.sml
+      lex.sml
+      parse.sml
+      cost.sml
+      normalize.sml
+      constraints.sml
+      
+      tperror.sml
+      typecheck.sml
+
+      recon-sig.sml
+      arecon.sml
+      brecon.sml
+      qrecon.sml
+      wrecon.sml
+      trecon-util.sml
+      trecon.sml
+      trecon-bt.sml
+      tqrecon.sml
+
+      termination.sml
+      elab.sml
+
+      exec.sml
+
+      top.sml
+      test.sml

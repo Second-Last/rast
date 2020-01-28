@@ -1,0 +1,66 @@
+
+arecon.sml,0
+
+arith.sml,0
+
+ast.sml,0
+
+brecon.sml,0
+
+constraints.sml,0
+
+cost.sml,0
+
+elab.sml,0
+
+errormsg.sml,0
+
+exec.sml,0
+
+flags.sml,0
+
+go-test.sml,0
+
+go.sml,0
+
+lex.sml,0
+
+mark.sml,0
+
+normalize.sml,0
+
+parse.sml,0
+
+parsestate.sml,0
+
+pprint.sml,0
+
+qrecon.sml,0
+
+recon-sig.sml,0
+
+safe-io.sml,0
+
+stream.sml,0
+
+terminal.sml,0
+
+termination.sml,0
+
+test.sml,0
+
+top.sml,0
+
+tperror.sml,0
+
+tqrecon.sml,0
+
+trecon-bt.sml,0
+
+trecon-util.sml,0
+
+trecon.sml,0
+
+typecheck.sml,0
+
+wrecon.sml,0

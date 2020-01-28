@@ -1,0 +1,40 @@
+Constraints during type-checking of ternary-te-bdd.ss
+
++ Trusting: w > 0 |= (r+3)*w+2 >= 1
++ Trusting: w > 0 |= (r+3)*w+2-1 >= r
++ Trusting: w > 0 |= (r+3)*(w-1)+2 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2 = (r+3)*(w-1)+2
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2 = (r+3)*(w-1)+2
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 = (r+3)*(w-1)+2+1
++ Trusting: w > 0 |= (r+3)*(w-1)+2 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 = (r+3)*(w-1)+3
++ Trusting: w > 0 |= (r+3)*(w-1)+3+1 = (r+3)*w+2-1-r
++ Trusting: w > 0 |= (r+3)*(w-1)+3 >= 0
++ Trusting: w > 0 |= (r+3)*w+2 >= 1
++ Trusting: w > 0 |= (r+3)*w+2-1 >= r
++ Trusting: w > 0 |= (r+3)*(w-1)+2 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2 = (r+3)*(w-1)+2
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2 = (r+3)*(w-1)+2
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 = (r+3)*(w-1)+2+1
++ Trusting: w > 0 |= (r+3)*(w-1)+2 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 = (r+3)*(w-1)+3
++ Trusting: w > 0 |= (r+3)*(w-1)+3+1 = (r+3)*w+2-1-r
++ Trusting: w > 0 |= (r+3)*(w-1)+3 >= 0
++ Trusting: w > 0 |= (r+3)*w+2 >= 1
++ Trusting: w > 0 |= (r+3)*w+2-1 >= r
++ Trusting: w > 0 |= (r+3)*(w-1)+2 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2 = (r+3)*(w-1)+2
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2 = (r+3)*(w-1)+2
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 = (r+3)*(w-1)+2+1
++ Trusting: w > 0 |= (r+3)*(w-1)+2 >= 0
++ Trusting: w > 0 |= (r+3)*(w-1)+2+1 = (r+3)*(w-1)+3
++ Trusting: w > 0 |= (r+3)*(w-1)+3+1 = (r+3)*w+2-1-r
++ Trusting: w > 0 |= (r+3)*(w-1)+3 >= 0
++ Trusting: true |= (r+3)*w+2 >= 1
++ Trusting: true |= (r+3)*w+2-1 >= 1
++ Trusting: true |= (r+3)*w >= 0
++ Trusting: true |= (r+3)*w+2-1-1 >= (r+3)*w
++ Trusting: true |= (r+3)*w+2-1-1-(r+3)*w = 0

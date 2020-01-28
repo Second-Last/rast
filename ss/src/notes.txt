@@ -1,0 +1,120 @@
+
+======================================================================
+DONE fp Sun Feb 10 08:36:34 2019
+- typecheck.sml ()({r}) == ({r+1}) in type equality now
+- avoid spurious eta-expansion in time reconstruction
+
+DONE fp Tue Feb  5 08:51:09 2019
+- pprint.sml and clients
+  eliminated abbreviation code and pp_tp_short.  Use pp_tp_compact
+
+DONE fp Mon Feb  4 21:44:54 2019
+- trecon-bt.sml, trecon-util.sml, elab.sml
+  added backtracking time reconstruction, which is run as a separate
+  (redundant) pass after synthesizing reconstruction.  -v will print success
+  message.  Printing statistics for backtracking reconstruction with -v.
+
+DONE fp Wed Jan 30 21:32:46 2019
+- trecon.sml - improved statistics, avoided building redundant reconstructions,
+               picking smallest possible reconstruction
+
+DONE fp Tue Jan 29 11:03:58 2019
+- elab.sml - changed some occs of 'vs' to 'ctx' 
+- parser.sml - synchronized name of nonterminals in readme.txt with parsing function names
+- typecheck.sml - edited decrement{L,R} and eventually{box,dia} to make quantifiers and work structural 
+- typecheck.sml - edited function 'contractive' to allow box and dia (but not Next)
+
+DONE ad Tue Jan 29
+- *recon.sml - 'prime' the reconstruction functions in the order they are called 
+- *recon.sml - add 'ctx' and 'con' to all reconstructions functions
+- *recon.sml - change 'wrecon' to 'recon'
+- {w,t}recon.sml - should we avoid inserting work{0}, for example?
+
+DONE fp Tue Jan 29 18:08:11 2019
+- pprint.sml - fixed pp_exp and pp_exp_prefix to take environment so it
+               can print embedded types
+- elab.sml - allow both work and time reconstruction on the same source
+             and added some regressions (tests/transducers*.ss)
+DONE fp Sun Jan 27 09:43:10 2019
+Complete pass
+- added comments
+- re-ordered data types and unified order of branches
+- orders of functions in files
+- improved (some) error messages
+- improved pretty printing (to some extent...)
+- eliminated all direct calls to Ast.Print.*
+- reviewed changes to *recon
+
+======================================================================
+TODO (including exchanges, in reverse chronological order)
+
+FRANK
+
+POSTPONE: GENERAL - allow constraints in type equality assertions?
+Q: typecheck.sml - catch temporal types that are illegal for reconstruction early,  
+    during the validity check  NO, leave as is  
+Q: {q,w}recon.sml - how to unify the various must/may look-aheads in quantifier 
+   and work reconstruction? 
+--------------------------------------------------
+TODO: ALL - audit nonexhaustive match warnings
+--------------------------------------------------
+TODO: type equality should return YES/NO/MAYBE; insert safety monitors?
+TODO: constraint solver should return YES/NO/MAYBE; insert safety monitors?  ANKUSH
+TODO: review/improve nonlinear constraints and normalization  FRANK
+TODO: pull together the inference rules for reference  ANKUSH
+TODO: adding more examples  FRANK
+  . queues and stacks, implemented different ways
+  . binary numbers and counters, implemented different ways
+  . some basic finite automata, stack automata, turing machines
+  . some basic stream transducers
+TODO: could generalize exec syntax to allow exec f{es} instad of exec f
+
+======================================================================
+- Tue Apr 10 13:49:23 2018 -fp
+Refactor to introduce action prefix in the
+abstract syntax?
+
+======================================================================
+
+- Refactor typecheck.sml into elab.sml, typecheck.sml,
+  and recon.sml, with two versions of recon (until
+  it is fixed).  Already have a simplified version of
+  reconstruction in recon.sml.  Also, maybe new file
+  with type primitives used by checking and reconstruction
+DONE Sun Apr 15 09:04:50 2018
+
+- Fri Mar 30 21:41:27 2018
+Check that all process are defined before execution?
+(see tests/undef.ss)
+Do this in typecheck.sml, maybe also recon.sml
+DONE Sat Apr 14 21:36:12 2018
+
+- Tue Apr 10 13:49:57 2018 -fp
+Amend execution to handle work.
+DONE Fri Apr 13 10:33:02 2018
+
+- Fri Mar 30 07:40:55 2018
+Type expansion in error messages during type checking
+DONE Fri Mar 30 16:42:17 2018
+
+- Fri Mar 30 07:41:44 2018
+Prohibit redefinition/redeclaration
+DONE Fri Mar 30 17:19:25 2018
+
+- Fri Mar 30 17:19:05 2018
+Fix missing remaining regions for error messages
+DONE Fri Mar 30 21:03:13 2018
+
+- Fri Mar 30 13:24:48 2018 
+Prettier printing, including possibly types 
+DONE Sat Mar 31 17:00:47 2018
+
+- Sat Mar 31 09:11:47 2018
+Nonexhaustive matches in parse.sml
+DONE checked...
+
+
+-----
+Gay and Hole - subtyping in session types [2005]
+Dezani - type equality in asynchronous communication is undecidable
+Jancar 99, Jancar 11 - labels sent, equivalence of types
