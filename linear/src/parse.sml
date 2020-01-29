@@ -560,7 +560,6 @@ and p_exp ST = case first ST of
   | T.SEND => ST |> shift >> p_id >> p_id_exp >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
   | T.CLOSE => ST |> shift >> p_id >> reduce r_exp_atomic >> p_exp
   | T.WAIT => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  (* | T.LPAREN => ST |> shift >> p_exp >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp *) (* obsolete?? *)
   | T.DELAY => ST |> shift >> p_idx_opt >> p_exp
   (* rest needed for explicit syntax *)
   | T.TICK =>  ST |> shift >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
@@ -586,7 +585,7 @@ and p_id_exp ST = case first ST of
 and p_id_exps ST = case first ST of
     T.PERIOD => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
   | T.LARROW => ST |> shift >> p_spawn_or_recv
-  | T.LRARROW => ST |> shift >> p_id >> reduce r_exp_atomic >> reduce r_exp (* before: p_exp; why?? *)
+  | T.LRARROW => ST |> shift >> p_id >> reduce r_exp_atomic >> reduce r_exp
   | t => error_expected_list (here ST, [T.PERIOD, T.LARROW, T.LRARROW], t)
 
 and p_spawn_or_recv ST = case first ST of
@@ -602,7 +601,7 @@ and p_recv_nat ST = case first ST of
 and p_id_seq ST = case first ST of
     T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_seq
   | T.SEMICOLON => ST |> shift >> reduce r_action >> p_exp
-  | _ => ST |> reduce r_exp_atomic >> reduce r_exp (* before: p_exp; why?? *)
+  | _ => ST |> reduce r_exp_atomic >> reduce r_exp
 
 (* [<idx>] postfix of action, default is 1 *)
 and p_idx_opt ST = case first ST of
@@ -625,7 +624,6 @@ and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.C
     S $ Exp(m_exp(A.ExpName(x,f,es,xs),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IDENT(x),r1) $ Tok(T.LRARROW,_) $ Tok(T.IDENT(y),r2)) =
     S $ Exp(m_exp(A.Id(x,y), join r1 r2), join r1 r2)
-  (* | r_exp_atomic (S $ Tok(T.LPAREN,r1) $ Exp(exp,r) $ Tok(T.RPAREN,r2)) = S $ Exp(exp,join r1 r2) *) (* obsolete ?? *)
   | r_exp_atomic (S $ Tok(T.CASE,r1) $ Tok(T.IDENT(id),_) $ Tok(T.LPAREN,_) $ Branches(branches) $ Tok(T.RPAREN,r2)) =
     S $ Exp(m_exp(A.Case(id,branches),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IMPOSSIBLE,r)) =
