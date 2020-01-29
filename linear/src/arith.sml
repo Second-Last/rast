@@ -259,10 +259,13 @@ structure Print =
 struct
 
     fun pp_arith (Int(n)) = if n >= 0 then Int.toString n else "-" ^ Int.toString (0-n)
-      | pp_arith (Add(s,t)) = "(" ^ pp_arith s ^ "+" ^ pp_arith t ^ ")"
-      | pp_arith (Sub(s,t)) = "(" ^ pp_arith s ^ "-" ^ pp_arith t ^ ")"
-      | pp_arith (Mult(s,t)) = "(" ^ pp_arith s ^ "*" ^ pp_arith t ^ ")"
+      | pp_arith (Add(s,t)) = pp_arith_paren s ^ "+" ^ pp_arith_paren t
+      | pp_arith (Sub(s,t)) = pp_arith_paren s ^ "-" ^ pp_arith_paren t
+      | pp_arith (Mult(s,t)) = pp_arith_paren s ^ "*" ^ pp_arith_paren t
       | pp_arith (Var(x)) = x
+    and pp_arith_paren (s as Int(n)) = pp_arith s
+      | pp_arith_paren (s as Var(x)) = pp_arith s
+      | pp_arith_paren s = "(" ^ pp_arith s ^ ")"
 
     fun pp_prop (Eq(s,t)) = pp_arith s ^ " = " ^ pp_arith t
       | pp_prop (Lt(s,t)) = pp_arith s ^ " < " ^ pp_arith t

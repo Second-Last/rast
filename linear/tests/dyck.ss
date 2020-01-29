@@ -20,11 +20,11 @@ type stack{n} = &{ push : stack{n+1},
 decl parse : (w : dyck0{0}) |- (r : 1)
 decl pda{n} : (w : dyck0{n}) (s : stack{n}) |- (r : 1)
 
-proc r <- pda{n} <- w s =
+proc r <- pda{n} w s =
   case w ( lparen => s.push ;
-                     r <- pda{n+1} <- w s
+                     r <- pda{n+1} w s
          | rparen => s.pop ;  % must succeed!
-                     case s ( some => r <- pda{n-1} <- w s )
+                     case s ( some => r <- pda{n-1} w s )
          | end => wait w ;
                   s.pop ; case s ( none => wait s ;
                                            close r ) )

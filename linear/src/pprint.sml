@@ -120,7 +120,7 @@ end (* struct abbrev *)
 (**************************)
               
 (* Uses precedence
- * prec('+','-') = 1; prec('*') = 2
+ * prec('+','-') = 7 prec('*') = 8, prec('-') = 9 (for unary minus)
  *)
 fun parens prec_left prec s =
     if prec_left >= prec then "(" ^ s ^ ")" else s
@@ -133,15 +133,17 @@ fun parens prec_left prec s =
 fun pp_arith_prec prec_left (R.Int(n)) =
     if n >= 0 then Int.toString n else "-" ^ Int.toString(~n)
   | pp_arith_prec prec_left (R.Add(s,t)) =
-    parens prec_left 1 (pp_arith_prec 0 s ^ "+" ^ pp_arith_prec 1 t)
+    parens prec_left 7 (pp_arith_prec 6 s ^ "+" ^ pp_arith_prec 7 t)
+  | pp_arith_prec prec_left (R.Sub(R.Int(0),t)) =
+    parens prec_left 9 ("-" ^ pp_arith_prec 9 t)
   | pp_arith_prec prec_left (R.Sub(s,t)) =
-    parens prec_left 1 (pp_arith_prec 0 s ^ "-" ^ pp_arith_prec 1 t)
+    parens prec_left 7 (pp_arith_prec 6 s ^ "-" ^ pp_arith_prec 7 t)
   | pp_arith_prec prec_left (R.Mult(s,t)) =
-    parens prec_left 2 (pp_arith_prec 1 s ^ "*" ^ pp_arith_prec 2 t)
+    parens prec_left 8 (pp_arith_prec 7 s ^ "*" ^ pp_arith_prec 8 t)
   | pp_arith_prec prec_left (R.Var(x)) = x
 
 (* pp_arith e = "e" *)
-fun pp_arith e = pp_arith_prec 0 e
+fun pp_arith e = pp_arith_prec 6 e
 
 (****************)
 (* Propositions *)
@@ -162,7 +164,7 @@ fun pp_prop_prec opr_above (R.Eq(s,t)) = pp_arith s ^ " = " ^ pp_arith t
   | pp_prop_prec opr_above (R.Le(s,t)) = pp_arith s ^ " <= " ^ pp_arith t
   | pp_prop_prec opr_above (R.Ge(s,t)) = pp_arith s ^ " >= " ^ pp_arith t
   | pp_prop_prec opr_above (R.Divides(n,t)) =
-    Int.toString n ^ "|" ^ pp_arith_prec 3 t (* parens for clarity *)
+    Int.toString n ^ "|" ^ pp_arith_prec 10 t (* parens for clarity *)
   | pp_prop_prec opr_above (R.True) = "true"
   | pp_prop_prec opr_above (R.False) = "false"
   | pp_prop_prec opr_above (R.Or(F,G)) =
@@ -287,7 +289,7 @@ fun pp_chanlist [] = ""
 
 fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
     pp_exp env i P ^ " ;\n" ^ pp_exp_indent env i Q
-  | pp_exp env i (A.Id(x,y)) = x ^ " <- " ^ y
+  | pp_exp env i (A.Id(x,y)) = x ^ " <-> " ^ y
   | pp_exp env i (A.Lab(x,k,P)) = x ^ "." ^ k ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Case(x,branches)) = "case " ^ x ^ " ( " ^ pp_branches env (i+8+len(x)) branches ^ " )"
   | pp_exp env i (A.Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ;\n" ^ pp_exp_indent env i P
@@ -305,7 +307,7 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
   | pp_exp env i (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Imposs) = "impossible"
-  | pp_exp env i (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
+  | pp_exp env i (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp env i (A.Marked(marked_exp)) = pp_exp env i (Mark.data marked_exp)
 and pp_exp_indent env i P = spaces i ^ pp_exp env i P
 and pp_exp_after env i s P = s ^ pp_exp env (i+len(s)) P
@@ -325,7 +327,7 @@ and pp_branches_indent env i branches = spaces (i-2) ^ "| " ^ pp_branches env i 
  * tracing purposes
  *)
 fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
-  | pp_exp_prefix env (A.Id(x,y)) = x ^ " <- " ^ y
+  | pp_exp_prefix env (A.Id(x,y)) = x ^ " <-> " ^ y
   | pp_exp_prefix env (A.Lab(x,k,P)) = x ^ "." ^ k ^ " ; ..."
   | pp_exp_prefix env (A.Case(x,branches)) = "case " ^ x ^ "(...)"
   | pp_exp_prefix env (A.Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ; ..."
@@ -343,7 +345,7 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
   | pp_exp_prefix env (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ; ..."
   | pp_exp_prefix env (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Imposs) = "impossible"
-  | pp_exp_prefix env (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
+  | pp_exp_prefix env (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp_prefix env (A.Marked(marked_exp)) = pp_exp_prefix env (Mark.data marked_exp)
 
 (****************)
@@ -360,9 +362,9 @@ fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
     "decl " ^ f ^ P.pp_vars vs ^ P.pp_con con ^ " : "
     ^ pp_context_compact env D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp_compact env zC
   | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) =
-    "proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = \n"
+    "proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " " ^ pp_chanlist xs ^ " = \n"
     ^ pp_exp_after env 0 ("  ") P
-    (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " <- " ^ pp_chanlist xs ^ " = ") P *)
+    (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " " ^ pp_chanlist xs ^ " = ") P *)
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line
 
