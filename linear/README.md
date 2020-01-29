@@ -1,18 +1,18 @@
-# SubSingleton
+# Linear
 
-Simple experimental implementation of subsingleton logic, extended
+Simple experimental implementation of purely linear logic, extended
 with temporal and ergometric types as well as constraints over natural
-numbers in Presburger arithmetic and termination checking.
+numbers in Presburger arithmetic.
 
-This is the subsingleton version of recent ICFP and LICS papers, see
+This is a version of recent ICFP, LICS, and arXiv papers, see
 
 - [Parallel Complexity Analysis with Temporal Session Types](http://www.cs.cmu.edu/~fp/papers/icfp18.pdf)
 - [Work Analysis with Resource-Aware Session Types](http://www.cs.cmu.edu/~fp/papers/lics18.pdf)
+- [Session Types with Arithmetic Refinements and Their Application to Work Analysis](https://arxiv.org/abs/2001.04439) 
 
 Authors:
 
 - Ankush Das
-- Farzaneh Derakhshan
 - Frank Pfenning
 
 ## Building ss
@@ -23,9 +23,9 @@ For building a binary (with mlton):
 
 ```
 % cd src
-% make ss
-% ./ss ../examples/icfp18/sec7i.ss
-% ./ss -h
+% make lin
+% ./lin ../examples/trie-work.ss
+% ./lin -h
 ```
 
 or for interactive top level (with SML/NJ):
@@ -33,7 +33,7 @@ or for interactive top level (with SML/NJ):
 ```
 % sml
 - CM.make "sources.cm";
-- Top.ss "../examples/icfp18/sec7i.ss";
+- Top.lin "../examples/trie-work.ss";
 
 % make clean
 ```
@@ -41,26 +41,26 @@ or for interactive top level (with SML/NJ):
 For regression testing:
 
 ```
-% make ss-test
-% ./ss-test ../tests/*/*.ss ../examples/*/*.ss
-% ./ss-test -h
+% make lin-test
+% ./lin-test ../*/*.ss
+% ./lin-test -h
 ```
 
 ## Examples
 
-- `icfp18/*.ss`    - mostly temporal, see http://www.cs.cmu.edu/~fp/papers/icfp18.pdf
-- `lics18/*.ss`    - mostly ergometric, see http://www.cs.cmu.edu/~fp/papers/lics18.pdf
-- `binarith/*.ss`  - binary arithmetic
-- `modarith/*.ss`  - modular binary arithmetic
-- `turing/*.ss`    - some primitive recursive functions as Turing machines
+A postfix `-work` indicates use of ergometric types to capture work
 
-## Tests
+- `arith*.ss`      - some binary and unary arithmetic on natural numbers
+- `intctr.ss`      - integer counter
+- `linlam*.ss`     - various versions of linear lambda-calculus
+- `list-work.ss`   - processes on lists, characterizing work
+- `primes.ss`      - prime sieve
+- `seg-work.ss`    - list segments, characterizing work
+- `ternary.ss`     - balanced ternary numbers
+- `theorems.ss`    - simple arithmetic metatheorems and proofs
+- `trie-work.ss`   - multisets of binary numbers, as a trie
 
-- `types/*.ss`       - testing the type checker
-- `termination/*.ss` - testing the termination checker
-- `ztests/*/*.ss`  - tests that fail due to various restriction and sources of incompleteness
-
-## Options to ./ss
+## Options to ./lin
 
 ```
 -q quiet   (verbosity = 0) 
@@ -83,45 +83,31 @@ For regression testing:
 --syntax=implicit  will perform time or work reconstruction (default)
 --syntax=explicit  will not perform time or work reconstruction
 
---terminate=none   perform no termination checking (default)
---terminate=equi   will perform termination checking on equirecursive code
---terminate=iso    will perform termination checking on isorecursive code
+--equality=subsumerefl  type equality uses subsumption and reflexivity (default)
+--equality=subsume      use only subsumption
+--equality=refl         use only reflexivity
 ```
 
-Currently, the implementation cannot perform both time
-and work reconstruction on the same source: with `--syntax=implicit`
-either time or work must be `none`
+Currently, the implementation cannot perform both time reconstruction
+so with `--syntax=implicit` we must have `--time=none`
 
 ## Grammar 
 
-typed cut `[<type>]` or untyped cut `||`
-are right associative and bind more
-tightly than `;`
+In arithmetic expressions, operator precedence is as follows, where
+unary minus `-` has highest precedent
 
 ```text
-   L.a ; L.b ; f || R.c ; g
-=> L.a ; (L.b ; (f || (R.c ; g)))
-
-   L.a ; L.b ; <-> [A] R.c ; g
-=> L.a ; (L.b ; (<-> [A] (R.c ; g)))
+'*' > '+' '-' > '=' '<' '<=' '=' '<>' '>=' '>' > '~' > '/\' > '\/' > '=>'
 ```
 
-In arithmetic expressions, operator precedence is as follows.
+Left associative are `*` `+` `-`
 
-```text
-* > + = -
-```
+Right associative are `/\` `\/` `=>`
 
-All operators are left associative.
+Not associative are `<` `<=` `=` `>=` `>`
 
-Note: right now, the order of branches must match
-the order of the alternatives in the external or
-internal choice type
-
-A typed cut may be annotated with the
-potential of the process on the left.  For example
-`f [|{3}- bits] g`
-indicates `3` units of potential should be passed to f.
+Note: the order of branches must match the order of the alternatives
+in the external or internal choice type
 
 ### Comment syntax
 
@@ -136,10 +122,12 @@ indicates `3` units of potential should be passed to f.
 <id_start> = [a-zA-Z_$?!']
 <id> = <id_start> (<id_start> | [0-9])*
 <nat> = ([0-9])*
-<binop> = + | - | *
-<arith> = <nat> | <id> | <arith> <binop> <arith> | (<arith>)
-<rel> = > | >= | = | <= | <
+<unop> = -
+<binop> = * | + | -
+<arith> = <nat> | <id> | <unop> <arith> | <arith> <binop> <arith> | (<arith>)
+<rel> = > | >= | = | <> | <= | <
 <prop> = <arith> <rel> <arith>
+       | ~ <prop> | <prop> /\ <prop> | <prop> \/ <prop> | <prop> => <prop>
 
 <idx> ::= { <arith> }
 
@@ -159,6 +147,9 @@ indicates `3` units of potential should be passed to f.
          | <id> <idx_seq>       % Type name
          | ? <con>. <type>      % Provider send 'proof' of <prop>
          | ! <con>. <type>      % Provider receives 'proof' of <prop>
+         | ? <id>. <type>       % Existential type
+         | ! <id>. <type>       % Universal type
+         | ( <type> )           % Parentheses
 
 <idx_seq> ::=  | <idx> <idx_seq>
 <id_seq> ::=  | <id> <id_seq>
@@ -167,33 +158,34 @@ indicates `3` units of potential should be passed to f.
             | <label> : <type>, <choices>
 
 <turnstile> ::= |-              % zero potential
-              | | <idx> -       % with potential <arith>
+              | | <idx> -       % with potential <idx>
 
-<exp> ::= % <id> : <type> <- <exp> ; <exp>    % typed cut
-        | <id> <- <id> <idx_seq> <- <id_seq> ; <exp>      % spawn, left exp must be <id>
-        | <id> <- <id> <idx_seq> <- <id_seq>
-        | <id> <- <id>                                    % forward
-        | <id>.<label> ; <exp>                            % send label 
-        | case <id> ( <branches> )                        % case
-        | close <id>
-        | wait <id> ; <exp>
-        | send <id> <id> ; <exp>
-        | <id> <- recv <id> ; <exp>
+<exp> ::= <id> <- <id> <idx_seq> <id_seq> ; <exp>     % spawn
+        | <id> <- <id> <idx_seq> <id_seq>             % tail call
+        | <id> <-> <id>                               % forward
+        | <id>.<label> ; <exp>                        % send label 
+        | case <id> ( <branches> )                    % branch on label received
+        | close <id>                                  % close channel
+        | wait <id> ; <exp>                           % wait for channel to be closed
+        | send <id> <id> ; <exp>                      % send channel
+        | <id> <- recv <id> ; <exp>                   % receive channel
+        | send <id> { <arith> } ; <exp>               % send natural number
+        | { <id> } <- recv <id> ; <exp>               % receive natural number
         
-        | assert <id> <con> ; <exp> 
-        | assume <id> <con> ; <exp>
-        | impossible
+        | assert <id> <con> ; <exp>                   % assert constraints
+        | assume <id> <con> ; <exp>                   % assume constraint
+        | impossible                                  % constraints are contradictory
 
         | ( <exp> )
 
-        | delay [<idx>] ; <exp> % delay by one clock tick
-        | tick ; <exp>          % one clock tick in cost model
-        | when <id> ; <exp>     % wait for 'now' message
-        | now <id> ; <exp>      % send 'now' message
+        | delay [<idx>] ; <exp>                       % delay by <idx> clock ticks
+        | tick ; <exp>                                % one clock tick in cost model
+        | when <id> ; <exp>                           % wait for 'now' message
+        | now <id> ; <exp>                            % send 'now' message
 
-        | work [<idx>] ; <exp>          % spend one token
-        | get <id> [<idx>] ; <exp>      % receive one token
-        | pay <id> [<idx>] ; <exp>      % send one token
+        | work [<idx>] ; <exp>                        % perform <idx> units of work
+        | get <id> [<idx>] ; <exp>                    % receive <idx> potential
+        | pay <id> [<idx>] ; <exp>                    % send <idx> potential
 
 <branches> ::= <label> => <exp>
              | <label> => <exp> | <branches>
@@ -204,12 +196,12 @@ indicates `3` units of potential should be passed to f.
            | { <var> } <var_seq>
            | { <var> | <prop> } <var_seq>
 
-<context> ::= | ( <id> : <type> ) <context>
+<ctx> ::= . | ( <id> : <type> ) <ctx>
 
 <decl> ::= type <id> <var_seq> = <type>
          | eqtype <id> <idx_seq> = <id> <idx_seq>
-         | proc <id> <var_seq> : <context> <turnstile> ( <id> : <type> )
-         | proc <id> <- <id><var_seq> <- <id_seq> = <exp>
+         | decl <id> <var_seq> : <ctx> <turnstile> ( <id> : <type> )
+         | proc <id> <- <id> <var_seq> <id_seq> = <exp>
          | exec <id>
 
 <outcome> ::= error
@@ -217,7 +209,7 @@ indicates `3` units of potential should be passed to f.
             | approx success
             | approx error
 
-<pragma> ::= #options <command line option>\n
+<pragma> ::= #options <command line options>\n
            | #test <outcome>\n
 
 <prog> ::= <pragma>* <decl>*
