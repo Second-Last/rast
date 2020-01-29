@@ -29,39 +29,39 @@ type exp = +{ lam : |{2}> exp -o exp,
 type val = +{ lam : |> exp -o exp }
 
 decl apply : (e1 : exp) (e2 : exp) |{2}- (e : exp)
-proc e <- apply <- e1 e2 =
-  e.app ; send e e1 ; e <- e2
+proc e <- apply e1 e2 =
+  e.app ; send e e1 ; e <-> e2
 
 decl lambda : (f : exp -o exp) |{2}- (v : val)
-proc v <- lambda <- f =
-  v.lam ; v <- f
+proc v <- lambda f =
+  v.lam ; v <-> f
 
 decl eval : (e : exp) |- (v : val)
-proc v <- eval <- e =
-  case e ( lam => v <- lambda <- e
+proc v <- eval e =
+  case e ( lam => v <- lambda e
          | app => e1 <- recv e ; % e = e2
-                  v1 <- eval <- e1 ;
+                  v1 <- eval e1 ;
                   case v1 ( lam => send v1 e ;
-                                   v <- eval <- v1 ) )
+                                   v <- eval v1 ) )
 
 (* id = \x. x *)
 decl id : . |{3}- (e : exp)
-proc e <- id <- =
+proc e <- id =
   e.lam ; x <- recv e ;  % 1+2 = 3 ergs
-  e <- x
+  e <-> x
 
 (* id id *)
 decl idid : . |{8}- (e : exp)
-proc e <- idid <- =
-  i1 <- id <- ;  % 3 ergs
-  i2 <- id <- ;  % 3 ergs
-  e <- apply <- i1 i2 % 2 ergs
+proc e <- idid =
+  i1 <- id ;  % 3 ergs
+  i2 <- id ;  % 3 ergs
+  e <- apply i1 i2 % 2 ergs
 
 (* swap = \f. \x. \y. (f y) x *)
 decl swap : . |{13}- (e : exp)
-proc e <- swap <- =
+proc e <- swap =
   e.lam ; f <- recv e ;  % 1+2 = 3 ergs
   e.lam ; x <- recv e ;  % 3 ergs
   e.lam ; y <- recv e ;  % 3 ergs
-  fy <- apply <- f y ;   % 2 ergs
-  e <- apply <- fy x     % 2 ergs
+  fy <- apply f y ;   % 2 ergs
+  e <- apply fy x     % 2 ergs

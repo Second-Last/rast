@@ -12,24 +12,24 @@ type bin{n} = +{ b0 : ?k. ?{n = 2*k}. bin{k},
 decl zero : . |- (x : bin{0})
 decl succ{n} : (y : bin{n}) |- (x : bin{n+1})
 
-proc x <- zero <- =
+proc x <- zero =
   x.e ;
   assert x {0 = 0} ;
   close x
 
-proc x <- succ{n} <- y =
+proc x <- succ{n} y =
   case y ( b0 => {k} <- recv y ;
                  assume y {n = 2*k} ;
                  x.b1 ;
                  send x {k} ;
                  assert x {n+1 = 2*k+1} ;
-                 x <- y
+                 x <-> y
          | b1 => {k} <- recv y ;
                  assume y {n = 2*k+1} ;
                  x.b0 ;
                  send x {k+1} ;
                  assert x {n+1 = 2*(k+1)} ;
-                 x <- succ{k} <- y
+                 x <- succ{k} y
          | e =>  assume y {n = 0} ;
                  x.b1 ;
                  send x {0} ;
@@ -41,13 +41,13 @@ proc x <- succ{n} <- y =
          )
 
 decl dealloc{n} : (y : bin{n}) |- (u : 1)
-proc u <- dealloc{n} <- y =
+proc u <- dealloc{n} y =
   case y ( b0 => {k} <- recv y ;
                  assume y {n = 2*k} ; 
-                 u <- dealloc{k} <- y
+                 u <- dealloc{k} y
          | b1 => {k} <- recv y ;
                  assume y {n = 2*k+1} ;
-                 u <- dealloc{k} <- y
+                 u <- dealloc{k} y
          | e => assume y {n = 0} ;
                 wait y ;
                 close u )
@@ -63,48 +63,48 @@ type trie{n} = &{ ins : !i. bin{i} -o trie{n+1},
 decl leaf : . |- (t : trie{0})
 decl node{n1}{m}{n2} : (l : trie{n1}) (c : bin{m}) (r : trie{n2}) |- (t : trie{n1+m+n2})
 
-proc t <- leaf <- =
+proc t <- leaf =
   case t ( ins => {i} <- recv t ;
                   x <- recv t ;
                   case x ( b0 =>
                            {i'} <- recv x ;
                            assume x {i = 2*i'} ;
-                           l <- leaf <- ;
-                           z <- zero <- ;
-                           r <- leaf <- ;
+                           l <- leaf ;
+                           z <- zero ;
+                           r <- leaf ;
                            l.ins ;
                            send l {i'} ;
                            send l x ;
-                           t <- node{1}{0}{0} <- l z r
+                           t <- node{1}{0}{0} l z r
                          | b1 =>
                            {i'} <- recv x ;
                            assume x {i = 2*i'+1} ;
-                           l <- leaf <- ;
-                           z <- zero <- ;
-                           r <- leaf <- ;
+                           l <- leaf ;
+                           z <- zero ;
+                           r <- leaf ;
                            r.ins ;
                            send r {i'} ;
                            send r x ;
-                           t <- node{0}{0}{1} <- l z r
+                           t <- node{0}{0}{1} l z r
                          | e =>
                            assume x {i = 0} ;
                            wait x ;
-                           l <- leaf <- ;
-                           z <- zero <- ;
-                           o <- succ{0} <- z ;
-                           r <- leaf <- ;
-                           t <- node{0}{1}{0} <- l o r )
+                           l <- leaf ;
+                           z <- zero ;
+                           o <- succ{0} z ;
+                           r <- leaf ;
+                           t <- node{0}{1}{0} l o r )
          | del => {i} <- recv t ;
                   x <- recv t ;
-                  u <- dealloc{i} <- x ; wait u ;
+                  u <- dealloc{i} x ; wait u ;
                   send t {0} ;
                   assert t {0 <= 0} ;
-                  z <- zero <- ;
+                  z <- zero ;
                   send t z ;
-                  t <- leaf <-
+                  t <- leaf
          )
 
-proc t <- node{n1}{m}{n2} <- l c r =
+proc t <- node{n1}{m}{n2} l c r =
   case t ( ins => {i} <- recv t ;
                   x <- recv t ;
                   case x ( b0 =>
@@ -112,18 +112,18 @@ proc t <- node{n1}{m}{n2} <- l c r =
                            assume x {i = 2*i'} ;
                            l.ins ; send l {i'} ;
                            send l x ;
-                           t <- node{n1+1}{m}{n2} <- l c r
+                           t <- node{n1+1}{m}{n2} l c r
                          | b1 =>
                            {i'} <- recv x ;
                            assume x {i = 2*i'+1} ;
                            r.ins ; send r {i'} ;
                            send r x ;
-                           t <- node{n1}{m}{n2+1} <- l c r
+                           t <- node{n1}{m}{n2+1} l c r
                          | e =>
                            assume x {i = 0} ;
                            wait x ;
-                           c' <- succ{m} <- c ;
-                           t <- node{n1}{m+1}{n2} <- l c' r )
+                           c' <- succ{m} c ;
+                           t <- node{n1}{m+1}{n2} l c' r )
           | del => {i} <- recv t ;
                    x <- recv t ;
                    case x ( b0 =>
@@ -138,7 +138,7 @@ proc t <- node{n1}{m}{n2} <- l c r =
                             send t {m1} ;
                             assert t {m1 <= n1+m+n2} ;
                             send t a ;
-                            t <- node{n1-m1}{m}{n2} <- l c r
+                            t <- node{n1-m1}{m}{n2} l c r
                           | b1 =>
                             {i'} <- recv x ;
                             assume x {i = 2*i'+1} ;
@@ -151,14 +151,14 @@ proc t <- node{n1}{m}{n2} <- l c r =
                             send t {m2} ;
                             assert t {m2 <= n1+m+n2} ;
                             send t a ;
-                            t <- node{n1}{m}{n2-m2} <- l c r
+                            t <- node{n1}{m}{n2-m2} l c r
                           | e =>
                             assume x {i = 0} ;
                             wait x ;
                             send t {m} ;
                             assert t {m <= n1+m+n2} ;
                             send t c ;
-                            z <- zero <- ;
-                            t <- node{n1}{0}{n2} <- l z r
+                            z <- zero ;
+                            t <- node{n1}{0}{n2} l z r
                           )
           )

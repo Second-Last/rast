@@ -37,9 +37,9 @@ type context = chan_tp list
 (* Process Expressions *)
 datatype exp =
        (* judgmental constructs *)
-         Id of chan * chan                                             (* x <- y *)
+         Id of chan * chan                                             (* x <-> y *)
        | Spawn of exp * exp                                            (* P || Q *)
-       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
+       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f{es} xs *)
 
        (* internal/external choice +{...} *)
        | Lab of chan * label * exp                   (* x.k ; P *)
@@ -91,7 +91,7 @@ datatype decl =
        | ExpDec of expname * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
                                                              (* decl f{..} : Delta |{pot}- C *)
        | ExpDef of expname * Arith.ctx * (chan list * exp * chan) * ext
-                                                             (* proc x <- f{..} <- xs = P *)
+                                                             (* proc x <- f{es} xs = P *)
        | Exec of expname * ext                               (* exec f *)
 
 type env = decl list
@@ -176,9 +176,9 @@ type context = chan_tp list
 
 datatype exp =
        (* judgmental constructs *)
-         Id of chan * chan                                             (* x <- y *)
+         Id of chan * chan                                             (* x <-> y *)
        | Spawn of exp * exp                                            (* P || Q *)
-       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f, f{...} <- xs *)
+       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f{es} xs *)
 
        (* internal/external choice +{...} *)
        | Lab of chan * label * exp                   (* x.k ; P *)
@@ -424,7 +424,7 @@ fun pp_chanlist [] = ""
   | pp_chanlist (x::l) = x ^ " " ^ pp_chanlist l
 
 fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
-  | pp_exp (Id(x,y)) = x ^ " <- " ^ y
+  | pp_exp (Id(x,y)) = x ^ " <-> " ^ y
   | pp_exp (Lab(x,k,P)) = x ^ "." ^ k ^ " ; " ^ pp_exp P
   | pp_exp (Case(x,branches)) = "case " ^ x ^ " (" ^ pp_branches branches ^ ")"
   | pp_exp (Send(x,w,P)) = "send " ^ x ^ " " ^ w ^ " ; " ^ pp_exp P
@@ -442,7 +442,7 @@ fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
   | pp_exp (SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_arith e ^ " ; " ^ pp_exp P
   | pp_exp (RecvNat(x,v,P)) = pp_arith (R.Var(v)) ^ " <- recv " ^ x ^ " ; " ^ pp_exp P
   | pp_exp (Imposs) = "impossible"
-  | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " <- " ^ pp_chanlist xs
+  | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp (Marked(marked_exp)) = pp_exp (Mark.data marked_exp)
 and pp_branches (nil) = ""
   | pp_branches ((l,_,P)::nil) = l ^ " => " ^ pp_exp P
@@ -462,7 +462,7 @@ fun pp_decl (TpDef(a,vs,R.True,A,_)) = "type " ^ a ^ pp_vars vs ^ " = " ^ pp_tp 
   | pp_decl (TpDef(a,vs,con,A,_)) = "type " ^ a ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
   | pp_decl (TpEq(ctx,con,TpName(a,l),TpName(a',l'),_)) = "eqtype " ^ a ^ pp_idx l ^ " = " ^ a' ^ pp_idx l'
   | pp_decl (ExpDec(f,vs,con,(D,pot,zC),_)) = "proc " ^ f ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
-  | pp_decl (ExpDef(f,vs,(xs,P,x),_)) = "proc " ^ f ^ pp_vars vs ^ " : " ^ x ^ " <- " ^ pp_chanlist xs ^ " = " ^ pp_exp P
+  | pp_decl (ExpDef(f,vs,(xs,P,x),_)) = "proc " ^ f ^ pp_vars vs ^ " : " ^ x ^ " " ^ pp_chanlist xs ^ " = " ^ pp_exp P
   | pp_decl (Exec(f,_)) = "exec " ^ f
   | pp_decl (Pragma(p,line,_)) = p ^ line
 
