@@ -329,7 +329,8 @@ and p_turnstile_id_tp ST = case first ST of
 
 and p_id_tp ST = ST |> p_terminal T.LPAREN >> p_id >> p_terminal T.COLON >> p_type >> p_terminal T.RPAREN
 
-and p_exp_def ST = ST |> p_id >> p_terminal T.LARROW >> p_id_var_seq >> p_terminal T.LARROW >> push (Args ([], here ST)) >> p_id_list_opt_decl
+and p_exp_def ST = ST |> p_id >> p_terminal T.LARROW >> p_id_var_seq
+                      >> push (Args ([], here ST)) >> p_id_list_opt_decl
 
 and p_id_list_opt_decl ST = case first ST of
     T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_list_opt_decl
@@ -353,7 +354,8 @@ and r_decl (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ 
 and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.BAR,_) $ AExp(pot,r) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <context> '|{' <arith> '}-' <id> : <type> *)
     S $ Decl(A.ExpDec(id,vars l,phis l,(context,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
-  | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r) $ Tok(T.LARROW,_) $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
+  | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r)
+                $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
     (* 'proc' <id> '<-' <id> <var_seq> '<-' <id_list> = <exp> *)
     (case (phis l)
      of R.True => S $ Decl(A.ExpDef(id,vars l,(xs, exp, x),PS.ext(join r1 r2)))
@@ -557,8 +559,8 @@ and p_exp ST = case first ST of
   | T.CASE => ST |> shift >> p_id >> p_terminal T.LPAREN >> push (Branches []) >> p_branches >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp
   | T.SEND => ST |> shift >> p_id >> p_id_exp >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
   | T.CLOSE => ST |> shift >> p_id >> reduce r_exp_atomic >> p_exp
-  | T.WAIT => ST |> shift >>p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.LPAREN => ST |> shift >> p_exp >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp
+  | T.WAIT => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
+  (* | T.LPAREN => ST |> shift >> p_exp >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp *) (* obsolete?? *)
   | T.DELAY => ST |> shift >> p_idx_opt >> p_exp
   (* rest needed for explicit syntax *)
   | T.TICK =>  ST |> shift >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
@@ -579,31 +581,28 @@ and p_exp ST = case first ST of
 
 and p_id_exp ST = case first ST of
     T.IDENT(x) => ST |> shift
-  | T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_idx (* !! *)
+  | T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_idx
 
 and p_id_exps ST = case first ST of
     T.PERIOD => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.LARROW => ST |> shift >> p_fwd_or_spawn_id_or_recv
-  | t => error_expected_list (here ST, [T.PERIOD, T.LARROW], t)
+  | T.LARROW => ST |> shift >> p_spawn_or_recv
+  | T.LRARROW => ST |> shift >> p_id >> reduce r_exp_atomic >> reduce r_exp (* before: p_exp; why?? *)
+  | t => error_expected_list (here ST, [T.PERIOD, T.LARROW, T.LRARROW], t)
 
-and p_fwd_or_spawn_id_or_recv ST = case first ST of
+and p_spawn_or_recv ST = case first ST of
     T.RECV => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.IDENT(id) => ST |> p_id >> p_fwd_or_spawn
+  | T.IDENT(id) => ST |> p_id >> push (Indices(nil, here ST)) >> p_idx_seq
+                      >> push (Args([], here ST)) >> p_id_seq
   | t => parse_error (here ST, "expected 'recv', or identifier, found " ^ pp_tok t)
-
-and p_fwd_or_spawn ST = case first ST of
-    T.LARROW => ST |> push (Indices(nil, here ST)) >> shift >> push (Args ([], here ST)) >> p_id_list_opt_exp
-  | T.LBRACE => ST |> push (Indices(nil, here ST)) >> p_idx_seq >> p_terminal T.LARROW >> push (Args ([], here ST)) >> p_id_list_opt_exp
-  | _ => ST |> reduce r_exp_atomic >> p_exp
 
 and p_recv_nat ST = case first ST of
     T.LARROW => ST |> shift >> p_terminal T.RECV >> p_id >> p_terminal T.SEMICOLON >> reduce r_action
   | t => error_expected (here ST, T.LARROW, t)
 
-and p_id_list_opt_exp ST = case first ST of
-    T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_list_opt_exp
+and p_id_seq ST = case first ST of
+    T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_seq
   | T.SEMICOLON => ST |> shift >> reduce r_action >> p_exp
-  | _ => ST |> reduce r_exp_atomic >> p_exp
+  | _ => ST |> reduce r_exp_atomic >> reduce r_exp (* before: p_exp; why?? *)
 
 (* [<idx>] postfix of action, default is 1 *)
 and p_idx_opt ST = case first ST of
@@ -622,15 +621,15 @@ and p_con ST = case first ST of
 
 (* reduce <exp>, where <exp> has no continuation (atomic expressions) *)
 and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.Close(id),join r1 r2),join r1 r2)
-  | r_exp_atomic (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Indices(l,_) $ Tok(T.LARROW,_) $ Args(xs,r2)) = S $ Exp(m_exp(A.ExpName(x,id,l,xs),join r1 r2),join r1 r2)
-  | r_exp_atomic (S $ Tok(T.LPAREN,r1) $ Exp(exp,r) $ Tok(T.RPAREN,r2)) = S $ Exp(exp,join r1 r2)
+  | r_exp_atomic (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Args(xs,r2)) =
+    S $ Exp(m_exp(A.ExpName(x,f,es,xs),join r1 r2),join r1 r2)
+  | r_exp_atomic (S $ Tok(T.IDENT(x),r1) $ Tok(T.LRARROW,_) $ Tok(T.IDENT(y),r2)) =
+    S $ Exp(m_exp(A.Id(x,y), join r1 r2), join r1 r2)
+  (* | r_exp_atomic (S $ Tok(T.LPAREN,r1) $ Exp(exp,r) $ Tok(T.RPAREN,r2)) = S $ Exp(exp,join r1 r2) *) (* obsolete ?? *)
   | r_exp_atomic (S $ Tok(T.CASE,r1) $ Tok(T.IDENT(id),_) $ Tok(T.LPAREN,_) $ Branches(branches) $ Tok(T.RPAREN,r2)) =
     S $ Exp(m_exp(A.Case(id,branches),join r1 r2),join r1 r2)
-  | r_exp_atomic S = r_exp_atomic_2 S
-
-and r_exp_atomic_2 (S $ Tok(T.IMPOSSIBLE,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2)) =
-    S $ Exp(m_exp(A.Assume(id, aexp2prop r2 e, A.Imposs),join r1 r2),join r1 r2)
-  | r_exp_atomic_2 (S $ Tok(T.IDENT(id1),r1) $ Tok(T.LARROW,r) $ Tok(T.IDENT(id2),r2) ) = S $ Exp(m_exp(A.Id(id1,id2),join r1 r2), join r1 r2)
+  | r_exp_atomic (S $ Tok(T.IMPOSSIBLE,r)) =
+    S $ Exp(m_exp(A.Imposs,r),r)
   (* should be the only atomic expressions *)
 
 (* reduce <exp>, possibly multiple actions, cuts, or expressions *)
@@ -646,6 +645,8 @@ and r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ T
     S $ Action((fn K => m_exp(A.Lab(x,id,K),join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.IDENT(y),r1) $ Tok(T.LARROW,_) $ Tok(T.RECV,_) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Recv(x,y,K),join r1 r2)), join r1 r3)
+  | r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
+    S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
   | r_action (S $ Tok(T.LBRACE,r1) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,_) $ Tok(T.LARROW,_)
                 $ Tok(T.RECV, _) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.RecvNat(x,v,K),join r1 r2)), join r1 r3)
@@ -675,9 +676,6 @@ and r_action_2 (S $ Tok(T.WORK,r1) $ AExp(pot,r) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Assert(id,aexp2prop r2 e,K), join r1 r2)), join r1 r2)
   | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Assume(id,aexp2prop r2 e,K),join r1 r2)), join r1 r2)
-  | r_action_2 (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Tok(T.LARROW,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
-
 
 (* <branches> *)
 and p_branches ST = case first ST of
