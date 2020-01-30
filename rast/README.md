@@ -15,7 +15,7 @@ Authors:
 - Ankush Das
 - Frank Pfenning
 
-## Building ss
+## Building rast
 
 Requires Standard ML, mlton to build binaries
 
@@ -24,7 +24,7 @@ For building a binary (with mlton):
 ```
 % cd src
 % make rast
-% ./rast ../examples/trie-work.ss
+% ./rast ../examples/trie-work.rast
 % ./rast -h
 ```
 
@@ -33,7 +33,7 @@ or for interactive top level (with SML/NJ):
 ```
 % sml
 - CM.make "sources.cm";
-- Top.rast "../examples/trie-work.ss";
+- Top.rast "../examples/trie-work.rast";
 
 % make clean
 ```
@@ -42,7 +42,7 @@ For regression testing:
 
 ```
 % make rast-test
-% ./rast-test ../*/*.ss
+% ./rast-test ../*/*.rast
 % ./rast-test -h
 ```
 
@@ -50,15 +50,15 @@ For regression testing:
 
 A postfix `-work` indicates use of ergometric types to capture work
 
-- `arith*.ss`      - some binary and unary arithmetic on natural numbers
-- `intctr.ss`      - integer counter
-- `linlam*.ss`     - various versions of linear lambda-calculus
-- `list-work.ss`   - processes on lists, characterizing work
-- `primes.ss`      - prime sieve
-- `seg-work.ss`    - list segments, characterizing work
-- `ternary.ss`     - balanced ternary numbers
-- `theorems.ss`    - simple arithmetic metatheorems and proofs
-- `trie-work.ss`   - multisets of binary numbers, as a trie
+- `arith*.rast`      - some binary and unary arithmetic on natural numbers
+- `intctr.rast`      - integer counter
+- `linlam*.rast`     - various versions of linear lambda-calculus
+- `list-work.rast`   - processes on lists, characterizing work
+- `primes.rast`      - prime sieve
+- `seg-work.rast`    - list segments, characterizing work
+- `ternary.rast`     - balanced ternary numbers
+- `theorems.rast`    - simple arithmetic metatheorems and proofs
+- `trie-work.rast`   - multisets of binary numbers, as a trie
 
 ## Options to ./rast
 
