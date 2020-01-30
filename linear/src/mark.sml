@@ -1,6 +1,6 @@
-(* C0 Compiler
- * Positional Markers
- * Frank Pfenning
+(*
+ * Positional Markers for Parsing
+ * Author: Frank Pfenning <fp@cs.cmu.edu>
  *)
 
 signature MARK =
@@ -8,22 +8,22 @@ sig
   (* ((line1, col1), (line2, col2), filename) : ext *)
   type ext = (int * int) * (int * int) * string
 
-  val show : ext -> string     (* print ext as filename:line1.col1-line2.col2 *)
-  val show' : ext option -> string (* like show, but given <unknown location> if NONE *)
-  val show_source : ext -> string (* print first line of ext in source file *)
+  val show : ext -> string         (* print ext as filename:line1.col1-line2.col2 *)
+  val show' : ext option -> string (* like show, but give <unknown location> if NONE *)
+  val show_source : ext -> string  (* print first line of ext in source file *)
 
-  type 'a marked	       (* value of type 'a marked with extent *)
+  type 'a marked	           (* value of type 'a marked with extent *)
 
   val mark : 'a * ext -> 'a marked (* mark a value with extent *)
   val mark' : 'a * ext option -> 'a marked (* mark a value with optional extent *)
 
-  val data : 'a marked -> 'a	(* obtain marked value *)
+  val data : 'a marked -> 'a	   (* obtain marked value *)
   val ext : 'a marked -> ext option (* obtain extent, if present *)
 
   (* currently unused utilities *)
-  val wrap : ext option list -> ext option (* union of extents, if in same file *)
-  val map : ('a -> 'b) -> 'a marked -> 'b marked (* retain extents *)
-  val map' : ('a marked -> 'b) -> 'a marked -> 'b marked (* retain extents *)
+  val wrap : ext option list -> ext option  (* union of extents, if in same file *)
+  val map : ('a -> 'b) -> 'a marked -> 'b marked  (* retain extents *)
+  val map' : ('a marked -> 'b) -> 'a marked -> 'b marked  (* retain extents *)
 end
   
 structure Mark :> MARK =
@@ -122,4 +122,4 @@ struct
 
   fun map f (x, ext_opt) = (f x, ext_opt)
   fun map' f (m as (x, ext_opt)) = (f m, ext_opt)
-end
+end  (* structure Mark *)

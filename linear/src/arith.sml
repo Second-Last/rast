@@ -1,5 +1,14 @@
-(* Presburger arithmetic over natural numbers,
- * restricted to (implicit) prefix quantification
+(* Presburger arithmetic over natural numbers *)
+(* 
+ * Authors: Frank Pfenning <fp@cs.cmu.edu>
+ *          Ankush Das <ankushd@cs.cmu.edu>
+ *)
+
+(* 
+ * This implements Cooper's algorithm for quantifier
+ * elimination.  Quantification is not explicit in the
+ * syntax at the moment.  Instead, there are functions
+ * to construct equivalent quantifier-free propositions.
  *)
 
 signature ARITH =
@@ -29,7 +38,8 @@ sig
            | Not of prop            (* ~ phi *)
 
     type ctx = varname list             (* ctx = x1,...,xn *)
-    type subst = (varname * arith) list (* sigma = e1/x1,...,en/xn *)
+    type subst = (varname * arith) list (* sigma = (e1/x1,...,en/xn) *)
+
     exception NotClosed
 
     (* contexts and variables *)
@@ -64,17 +74,17 @@ sig
 
     type nnf = prop                   (* propositions in negation normal form *)
     val nnf : prop -> nnf             (* may raise NonLinear *)
-    val elim : varname -> prop -> nnf (* elim x F = G where (exists x. F) <=> G *)
+    val elim : varname -> prop -> nnf (* elim x phi = psi where (exists x. phi) <=> psi *)
     val elim_nnf : varname -> nnf -> nnf
     val elim_vars : varname list -> nnf -> nnf
-                                      (* elim xs F = G where (exists xs. F) <=> G *)
+                                      (* elim xs phi = psi where (exists xs. phi) <=> psi *)
 
     val valid : varname list -> prop -> prop -> bool (* may raise NonLinear *)
-                                      (* valid xs F G iff forall xs. F |= G *)
+                                      (* valid xs phi psi iff forall xs. phi |= psi *)
 
     (* quantification, eagerly eliminated by decision procedure *)
-    val exists : varname -> nnf -> nnf  (* exists x F = G where (exists x.F) <=> G *)
-    val forall : varname -> nnf -> nnf  (* forall x F = G where (forall x.F) <=> G *)
+    val exists : varname -> nnf -> nnf  (* exists x phi = psi where (exists x.phi) <=> psi *)
+    val forall : varname -> nnf -> nnf  (* forall x phi = psi where (forall x.phi) <=> psi *)
 
     structure Print :
     sig
@@ -113,6 +123,7 @@ datatype prop =
 
 type ctx = varname list
 type subst = (varname * arith) list
+
 exception NotClosed
 
 (* check if an arithmetic expression or proposition is closed under ctx *)
@@ -133,11 +144,10 @@ fun closed_prop ctx (Eq(e1,e2)) = closed ctx e1 andalso closed ctx e2
   | closed_prop ctx (Divides(n,e)) = closed ctx e
   | closed_prop ctx (True) = true
   | closed_prop ctx (False) = false
-  | closed_prop ctx (Or(F,G)) = closed_prop ctx F andalso closed_prop ctx G
-  | closed_prop ctx (And(F,G)) = closed_prop ctx F andalso closed_prop ctx G
-  | closed_prop ctx (Implies(F,G)) = closed_prop ctx F andalso closed_prop ctx G
-  | closed_prop ctx (Not(F)) = closed_prop ctx F
-
+  | closed_prop ctx (Or(phi,psi)) = closed_prop ctx phi andalso closed_prop ctx psi
+  | closed_prop ctx (And(phi,psi)) = closed_prop ctx phi andalso closed_prop ctx psi
+  | closed_prop ctx (Implies(phi,psi)) = closed_prop ctx phi andalso closed_prop ctx psi
+  | closed_prop ctx (Not(phi)) = closed_prop ctx phi
 
 (* compute the free variables of expressions and propositions *)
 fun free_vars (Int(n)) ctx = ctx
@@ -174,14 +184,13 @@ fun free_in v (Int(n)) = false
 fun free_in_subst v nil = false
   | free_in_subst v ((v',e)::sigma) = free_in v e orelse free_in_subst v sigma
 
-(* creates a substitution *)
-(* requires: length ctx = length es; raises ListPair.UnequalLengths otherwise *)
+(* zip [x1,...,xn] [e1,...,en] = (e1/x1,...,en/xn) *)
+(* assumes length ctx = length es; raises ListPair.UnequalLengths otherwise *)
 fun zip ctx es = ListPair.zipEq (ctx, es)
 
 (* find sg v' = [sg]v' *)
 (* assumed sg : ctx and ctx |- v' nat *)
-fun find ((v,e)::sg) v' =
-    if (v = v') then e else find sg v'
+fun find ((v,e)::sg) v' = if (v = v') then e else find sg v'
   | find nil v' = Var(v')
 
 (* apply sg e = [sg]e *)
@@ -196,8 +205,8 @@ exception NotClosed
 
 fun apply_list sg es = List.map (fn e => apply sg e) es
 
-(* apply_prog sg F = [sg]F *)
-(* assumes sg : ctx and ctx |- F prop *)
+(* apply_prop sg phi = [sg]phi *)
+(* assumes sg : ctx and ctx |- phi prop *)
 fun apply_prop sg (Eq(e1,e2)) = Eq(apply sg e1, apply sg e2)
   | apply_prop sg (Lt(e1,e2)) = Lt(apply sg e1, apply sg e2)
   | apply_prop sg (Gt(e1,e2)) = Gt(apply sg e1, apply sg e2)
@@ -206,10 +215,12 @@ fun apply_prop sg (Eq(e1,e2)) = Eq(apply sg e1, apply sg e2)
   | apply_prop sg (Divides(n,e)) = Divides(n, apply sg e)
   | apply_prop sg (True) = True
   | apply_prop sg (False) = False
-  | apply_prop sg (Or(F,G)) = Or(apply_prop sg F, apply_prop sg G)
-  | apply_prop sg (And(F,G)) = And(apply_prop sg F, apply_prop sg G)
-  | apply_prop sg (Implies(F,G)) = Implies(apply_prop sg F, apply_prop sg G)
-  | apply_prop sg (Not(F)) = Not(apply_prop sg F)
+  | apply_prop sg (Or(phi,psi)) = Or(apply_prop sg phi, apply_prop sg psi)
+  | apply_prop sg (And(phi,psi)) = And(apply_prop sg phi, apply_prop sg psi)
+  | apply_prop sg (Implies(phi,psi)) = Implies(apply_prop sg phi, apply_prop sg psi)
+  | apply_prop sg (Not(phi)) = Not(apply_prop sg phi)
+
+(* Fresh name generation *)
 
 fun next_name v = v ^ "^"
 
@@ -228,8 +239,8 @@ fun evaluate (Int(k)) = k
   | evaluate (Mult(e1,e2)) = (evaluate e1) * (evaluate e2)
   | evaluate (Var(v)) = raise NotClosed
 
-(* evaluate F = b if F |->* b *)
-(* assumes . |- F prop, raises NotClosed otherwise *)
+(* evaluate phi = b if phi |->* b *)
+(* assumes . |- phi prop, raises NotClosed otherwise *)
 fun evaluate_prop (Eq(e1,e2)) = (evaluate e1 = evaluate e2)
   | evaluate_prop (Lt(e1,e2)) = (evaluate e1 < evaluate e2)
   | evaluate_prop (Gt(e1,e2)) = (evaluate e1 > evaluate e2)
@@ -238,10 +249,10 @@ fun evaluate_prop (Eq(e1,e2)) = (evaluate e1 = evaluate e2)
   | evaluate_prop (Divides(n,e)) = ((evaluate e) mod n = 0)
   | evaluate_prop (True) = true
   | evaluate_prop (False) = false
-  | evaluate_prop (Or(F,G)) = evaluate_prop F orelse evaluate_prop G
-  | evaluate_prop (And(F,G)) = evaluate_prop F andalso evaluate_prop G
-  | evaluate_prop (Implies(F,G)) = (not (evaluate_prop F)) orelse evaluate_prop G
-  | evaluate_prop (Not(F)) = not (evaluate_prop F)
+  | evaluate_prop (Or(phi,psi)) = evaluate_prop phi orelse evaluate_prop psi
+  | evaluate_prop (And(phi,psi)) = evaluate_prop phi andalso evaluate_prop psi
+  | evaluate_prop (Implies(phi,psi)) = (not (evaluate_prop phi)) orelse evaluate_prop psi
+  | evaluate_prop (Not(phi)) = not (evaluate_prop phi)
 
 fun plus (e1, e2) =
     Int(evaluate(Add(e1,e2)))
@@ -251,14 +262,19 @@ fun minus (e1, e2) =
     Int(evaluate(Sub(e1,e2)))
     handle NotClosed => Sub(e1,e2)
 
+(************)
 (* Printing *)
-(* Defined earlier so that it can be used to instrument
- * the Presburger decision procedure
+(************)
+
+(* 
+ * Simple printing, mostly for internal purposes.
+ * See pprint.sml for (user-facing) operator precedence printing
  *)
+
 structure Print =
 struct
 
-    fun pp_arith (Int(n)) = if n >= 0 then Int.toString n else "-" ^ Int.toString (0-n)
+    fun pp_arith (Int(n)) = if n >= 0 then Int.toString n else "-" ^ Int.toString (~n)
       | pp_arith (Add(s,t)) = pp_arith_paren s ^ "+" ^ pp_arith_paren t
       | pp_arith (Sub(s,t)) = pp_arith_paren s ^ "-" ^ pp_arith_paren t
       | pp_arith (Mult(s,t)) = pp_arith_paren s ^ "*" ^ pp_arith_paren t
@@ -275,33 +291,46 @@ struct
       | pp_prop (Divides(n,t)) = Int.toString n ^ "|" ^ pp_arith t
       | pp_prop (True) = "true"
       | pp_prop (False) = "false"
-      | pp_prop (Or(F,G)) = "(" ^ pp_prop F ^ " \\/ " ^ pp_prop G ^ ")"
-      | pp_prop (And(F,G)) = "(" ^ pp_prop F ^ " /\\ " ^ pp_prop G ^ ")"
-      | pp_prop (Implies(F,G)) = "(" ^ pp_prop F ^ " => " ^ pp_prop G ^ ")"
-      | pp_prop (Not(F)) = "~" ^ pp_prop F
+      | pp_prop (Or(phi,psi)) = "(" ^ pp_prop phi ^ " \\/ " ^ pp_prop psi ^ ")"
+      | pp_prop (And(phi,psi)) = "(" ^ pp_prop phi ^ " /\\ " ^ pp_prop psi ^ ")"
+      | pp_prop (Implies(phi,psi)) = "(" ^ pp_prop phi ^ " => " ^ pp_prop psi ^ ")"
+      | pp_prop (Not(phi)) = "~" ^ pp_prop phi
 
 end (* structure Print *)
 
-(* Decision procedure for Presburger arithmetic using Cooper's algorithm *)
-(* Current restrictions:
- * Quantifiers must range over natural numbers (F-infinity is not constructed)
- * Only implicit existential quantifiers
- * Universals can be obtained by |= forall x. F iff |= ~exists x. ~F
+(**********************)
+(* Decision procedure *)
+(**********************)
+
+(*
+ * This implementation uses Cooper's algorithm
  *
- * s is a constant k if k is an integer (including 0)
- * s is a product p if it has the form k*x
- * s,t is linear if it has form k1*x1 + ... + kn*xn + k, xi all distinct
+ * Current restrictions:
+ *
+ * Quantifiers must range over natural numbers (F-infinity is not constructed)
+ * As typical, eliminated only existential quantifiers
+ * Universals can be obtained by |= forall x. phi iff |= ~exists x. ~phi
  *)
+
 
 type nnf = prop
 exception NonLinear
 
+(****************)
+(* Normal Terms *)
+(****************)
+(*
+ * variable x
+ * constant k (including 0)
+ * product  p ::= k*x
+ * linear   s ::= k1*x1 + ... + kn*xn + k, xi all distinct
+ *)
+
 (* is_prod (k*x) where integer k may be 0 *)
-(* write p for products *)
 fun is_prod (Mult(Int(k),Var(x))) = true
   | is_prod _ = false
 
-(* is_linear (k1*x1 + ... + kn*xn + k) *)
+(* is_linear (k1*x1 + ... + kn*xn + k); do not check distinctness *)
 fun is_linear (Add(p,t)) = is_prod p andalso is_linear t
   | is_linear (Int(k)) = true
   | is_linear s = false
@@ -345,7 +374,7 @@ fun mult (Add(p,s)) t = add (mult_prod p t) (mult s t)
   | mult (Int(k)) t = mult_const k t
 
 (* sub s t = lin(s - t) *)
-fun sub s t = add s (mult_const (0-1) t)
+fun sub s t = add s (mult_const ~1 t)
 
 (* subst x t s = lin([t/x]s), probably not needed *)
 (*
@@ -363,7 +392,9 @@ fun linearize (s as Int(k)) = s
   | linearize (Mult(s,t)) = mult (linearize s) (linearize t)
   | linearize (Var(x)) = Add(Mult(Int(1),Var(x)), Int(0))
 
-(* isolating a variable x in a term *)
+(************************)
+(* Isolating a Variable *)
+(************************)
 
 (* iso_term x s = (k*x, t) where s = k*x + t and x does not occur in t
  * k will be 0 if x does not occur in s
@@ -375,24 +406,31 @@ fun iso_term x (s as Int(k)) = (Mult(Int(0),Var(x)), s)
     else let val (kx, t) = iso_term x s
          in (kx, Add(p', t)) end
 
-(* strict nnf, where s, t are in linear form, n > 0
- * M,N ::= s < t | (n|s) | ~(n|s) | True | False | M \/ N | M /\ N 
+(***********************)
+(* Normal Propositions *)
+(***********************)
+
+(*
+ * (Strict) negation normal forms (NNF), where
+ * terms s and t are in linear normal form and n > 0
+ *
+ * M,N ::= s < t | (n|s) | ~(n|s) | true | false | M \/ N | M /\ N 
  *)
 
 exception NotNNF
 
-(* strict nnf, which requires linear terms *)
+(* testing nnf *)
 fun is_nnf (Lt(s,t)) = is_linear s andalso is_linear t
   | is_nnf (Divides(n,t)) = n > 0 andalso is_linear t
   | is_nnf (Not(Divides(n,t))) = n > 0 andalso is_linear t
   | is_nnf (True) = true
   | is_nnf (False) = true
-  | is_nnf (Or(F,G)) = is_nnf F andalso is_nnf G
-  | is_nnf (And(F,G)) = is_nnf F andalso is_nnf G
+  | is_nnf (Or(phi,psi)) = is_nnf phi andalso is_nnf psi
+  | is_nnf (And(phi,psi)) = is_nnf phi andalso is_nnf psi
   | is_nnf _ = false
 
-(* transforming a proposition into strict nnf *)
-(* nnf F = M, may raise NotLinear *)
+(* transforming into strict nnf *)
+(* nnf phi = M, may raise NotLinear *)
 fun nnf (Eq(s,t)) =
     (* (s = t) <=> (s < t+1 /\ t < s+1) *)
     let val s' = linearize s
@@ -405,10 +443,10 @@ fun nnf (Eq(s,t)) =
   | nnf (Divides(n,t)) = Divides(n, linearize t)
   | nnf (True) = True
   | nnf (False) = False
-  | nnf (Or(F,G)) = Or(nnf F, nnf G)
-  | nnf (And(F,G)) = And(nnf F, nnf G)
-  | nnf (Implies(F,G)) = Or(nnf_not F, nnf G)
-  | nnf (Not(F)) = nnf_not F
+  | nnf (Or(phi,psi)) = Or(nnf phi, nnf psi)
+  | nnf (And(phi,psi)) = And(nnf phi, nnf psi)
+  | nnf (Implies(phi,psi)) = Or(nnf_not phi, nnf psi)
+  | nnf (Not(phi)) = nnf_not phi
 and nnf_not (Eq(s,t)) =
     (* (s <> t) <=> (s < t \/ t < s) *)
     let val s' = linearize s
@@ -421,19 +459,20 @@ and nnf_not (Eq(s,t)) =
   | nnf_not (Divides(n,t)) = Not(Divides(n,linearize t))
   | nnf_not (True) = False
   | nnf_not (False) = True
-  | nnf_not (Or(F,G)) = And(nnf_not F, nnf_not G)
-  | nnf_not (And(F,G)) = Or(nnf_not F, nnf_not G)
-  | nnf_not (Implies(F,G)) = And(nnf F, nnf_not G) (* ~(F => G) <=> F /\ ~G *)
-  | nnf_not (Not(F)) = nnf F
+  | nnf_not (Or(phi,psi)) = And(nnf_not phi, nnf_not psi)
+  | nnf_not (And(phi,psi)) = Or(nnf_not phi, nnf_not psi)
+  | nnf_not (Implies(phi,psi)) = And(nnf phi, nnf_not psi) (* ~(phi => psi) <=> phi /\ ~psi *)
+  | nnf_not (Not(phi)) = nnf phi
 
-(* x is isolated in F if F is in strict nnf
+(*
+ * x is isolated in phi if phi is in strict nnf
  * and all atomic propositions have the form
  * k*x + s < 0 or n|k*x or ~(n|(k*x + s))
- * for this particular x (where k may be 0)
- * we write F[x] if x is isolated in F
+ * for this particular x (where k may be 0).
+ * We write phi[x] (or phi_x) if x is isolated in phi
  *)
 
-(* is x F = true if is isolated in F, written as F[x] *)
+(* is_iso x phi = true if is isolated in phi, written as phi[x] *)
 fun is_iso x (Lt(Add(Mult(Int(k),Var(x')),s),Int(0))) =
     x = x' andalso is_linear s
   | is_iso x (Divides(n,Add(Mult(Int(k),Var(x')),s))) =
@@ -441,20 +480,20 @@ fun is_iso x (Lt(Add(Mult(Int(k),Var(x')),s),Int(0))) =
   | is_iso x (Not(Divides(n,s))) = is_iso x (Divides(n,s))
   | is_iso x (True) = true
   | is_iso x (False) = true
-  | is_iso x (Or(F,G)) = is_iso x F andalso is_iso x G
-  | is_iso x (And(F,G)) = is_iso x F andalso is_iso x G
+  | is_iso x (Or(phi,psi)) = is_iso x phi andalso is_iso x psi
+  | is_iso x (And(phi,psi)) = is_iso x phi andalso is_iso x psi
   | is_iso x _ = false
 
-(* iso x F = F'[x] where F and F'[x] are in strict nnf,
-   and F <=> F'[x]
+(* iso x phi = phi'[x] where phi and phi'[x] are in strict nnf,
+   and phi <=> phi'[x]
  *)
 fun iso x (Lt(s,t)) = Lt(Add(iso_term x (sub s t)), Int(0))
   | iso x (Divides(n,t)) = Divides(n, Add(iso_term x t))
   | iso x (Not(Divides(n,t))) = Not(Divides(n, Add(iso_term x t)))
   | iso x True = True
   | iso x False = False
-  | iso x (Or(F,G)) = Or(iso x F, iso x G)
-  | iso x (And(F,G)) = And(iso x F, iso x G)
+  | iso x (Or(phi,psi)) = Or(iso x phi, iso x psi)
+  | iso x (And(phi,psi)) = And(iso x phi, iso x psi)
 
 (* computation of least common multiple, on natural numbers only *)
 (* we don't worry about overflow (here or anywhere else...) *)
@@ -468,52 +507,52 @@ fun lcm_nat k l = (k * l) div (gcd_nat k l)
 fun lcm_coeff k l =
     if k = 0 then l             (* ignore coefficients 0 *)
     else if k > 0 then lcm_nat k l
-    else (* k < 0 *) lcm_nat (0-k) l
+    else (* k < 0 *) lcm_nat (~k) l
 
-(* lcm x F[x] l = l', the least common multiple of l and
- * the absolute values of coefficients of x in F[x]
+(* lcm x phi[x] l = l', the least common multiple of l and
+ * the absolute values of coefficients of x in phi[x]
  *)
 fun lcm x (Lt(Add(Mult(Int(k),_),t),_)) l = lcm_coeff k l
   | lcm x (Divides(n,Add(Mult(Int(k),_),t))) l = lcm_coeff k l
-  | lcm x (Not(F)) l = lcm x F l
+  | lcm x (Not(phi)) l = lcm x phi l
   | lcm x True l = l
   | lcm x False l = l
-  | lcm x (Or(F,G)) l = lcm x F (lcm x G l)
-  | lcm x (And(F,G)) l = lcm x F (lcm x G l)
+  | lcm x (Or(phi,psi)) l = lcm x phi (lcm x psi l)
+  | lcm x (And(phi,psi)) l = lcm x phi (lcm x psi l)
 
-(* lcm_div x F[x] l = l', the least common multiple of l and
- * the divisors of k*x in F[x]
+(* lcm_div x phi[x] l = l', the least common multiple of l and
+ * the divisors of k*x in phi[x]
  *)
 fun lcm_div x (Lt(kx,z)) l = l
   | lcm_div x (Divides(n,Add(Mult(Int(k),_),t))) l =
     if k = 0 then l else lcm_coeff n l
   | lcm_div x True l = l
   | lcm_div x False l = l
-  | lcm_div x (Or(F,G)) l = lcm_div x F (lcm_div x G l)
-  | lcm_div x (And(F,G)) l = lcm_div x F (lcm_div x G l)
-  | lcm_div x (Not(F)) l = lcm_div x F l
+  | lcm_div x (Or(phi,psi)) l = lcm_div x phi (lcm_div x psi l)
+  | lcm_div x (And(phi,psi)) l = lcm_div x phi (lcm_div x psi l)
+  | lcm_div x (Not(phi)) l = lcm_div x phi l
 
-(* unitize delta x F[x] = F'[x] with (exists x.F[x]) <=> exists x.F'[x]
- * given delta = lcm x F[x] 1
- * where all coefficients of x in F'[x] are -1, 0, or 1
+(* unitize delta x phi[x] = phi'[x] with (exists x.phi[x]) <=> (exists x.phi'[x])
+ * given delta = lcm x phi[x] 1
+ * where all coefficients of x in phi'[x] are -1, 0, or 1
  *)
-fun unitize delta x (F as Lt(Add(Mult(Int(k),_),t), z)) = (* z = 0 *)
-    if k = 0 then F
+fun unitize delta x (phi as Lt(Add(Mult(Int(k),_),t), z)) = (* z = 0 *)
+    if k = 0 then phi
     else if k > 0 then Lt(Add(Mult(Int(1),Var(x)), mult_const (delta div k) t), z)
-    else (* k < 0 *) Lt(Add(Mult(Int(0-1),Var(x)), mult_const (delta div (0-k)) t), z)
-  | unitize delta x (F as Divides(n, Add(Mult(Int(k),_),t))) =
-    if k = 0 then F
+    else (* k < 0 *) Lt(Add(Mult(Int(0-1),Var(x)), mult_const (delta div (~k)) t), z)
+  | unitize delta x (phi as Divides(n, Add(Mult(Int(k),_),t))) =
+    if k = 0 then phi
     else if k > 0 then Divides((delta div k)*n, Add(Mult(Int(1), Var(x)), mult_const (delta div k) t))
     else (* k < 0 *)
         Divides((delta div (0-k))*n, Add(Mult(Int(1), Var(x)), mult_const (delta div k) t)) (* not div (0-k)! *)
-  | unitize delta x (Not(F)) = Not (unitize delta x F)
+  | unitize delta x (Not(phi)) = Not (unitize delta x phi)
   | unitize delta x (True) = True
   | unitize delta x (False) = False
-  | unitize delta x (Or(F,G)) = Or (unitize delta x F, unitize delta x G)
-  | unitize delta x (And(F,G)) = And (unitize delta x F, unitize delta x G)
+  | unitize delta x (Or(phi,psi)) = Or (unitize delta x phi, unitize delta x psi)
+  | unitize delta x (And(phi,psi)) = And (unitize delta x phi, unitize delta x psi)
 
 (* collect lower bounds -x + t < 0 *)
-(* lbs x F[x] = {t | -x + t < 0 in F[x]} *)
+(* lbs x phi[x] = {t | -x + t < 0 in phi[x]} *)
 fun lbs x (Lt(Add(Mult(Int(k),_),t),_)) acc =
     if k = 0 then acc
     else if k = 1 then acc
@@ -522,46 +561,50 @@ fun lbs x (Lt(Add(Mult(Int(k),_),t),_)) acc =
   | lbs x (Not(Divides _)) acc = acc
   | lbs x (True) acc = acc
   | lbs x (False) acc = acc
-  | lbs x (Or(F,G)) acc = lbs x F (lbs x G acc)
-  | lbs x (And(F,G)) acc = lbs x F (lbs x G acc)
+  | lbs x (Or(phi,psi)) acc = lbs x phi (lbs x psi acc)
+  | lbs x (And(phi,psi)) acc = lbs x phi (lbs x psi acc)
 
-(* subst_prop x t F[x] = G, F[x] must be unitary, G is strict nnf *)
+(* subst_prop x t phi[x] = psi, phi[x] must be unitary, psi is strict nnf *)
 fun subst_prop x t (Lt(Add(Mult(Int(k),Var(x')),s), z)) = (* x = x', z = 0 *)
     if k = 0 then Lt(s,z)
     else Lt(add (mult_const k t) s, z) (* k = 1 or k = -1 *)
   | subst_prop x t (Divides(n,Add(Mult(Int(k),Var(x')),s))) = (* x = x' *)
     if k = 0 then Divides(n, s)
     else Divides(n, add (mult_const k t) s) (* k = 1 or k = -1 *)
-  | subst_prop x t (Not(F)) = Not(subst_prop x t F) (* F = (n | s) *)
+  | subst_prop x t (Not(phi)) = Not(subst_prop x t phi) (* phi = (n | s) *)
   | subst_prop x t (True) = True
   | subst_prop x t (False) = False
-  | subst_prop x t (Or(F,G)) = Or(subst_prop x t F, subst_prop x t G)
-  | subst_prop x t (And(F,G)) = And(subst_prop x t F, subst_prop x t G)
+  | subst_prop x t (Or(phi,psi)) = Or(subst_prop x t phi, subst_prop x t psi)
+  | subst_prop x t (And(phi,psi)) = And(subst_prop x t phi, subst_prop x t psi)
 
-(* disjoin j bset x F[x] G = G' where G' <=> \/(0 < i <= j, b in bset)(F[b+j]) *)
-(* F[x] is unitary in x, G is strict nnf, G' will be strict nnf *)
-fun disjoin 0 bset x Fx G = G
-  | disjoin j bset x Fx G = disjoin (j-1) bset x Fx (disjoin' j bset x Fx G)
-and disjoin' j nil x Fx G = G
-  | disjoin' j (b::bset) x Fx G =
-    disjoin' j bset x Fx (Or(G, subst_prop x (add_const (Int(j)) b) Fx))
+(* disjoin j bset x phi[x] psi = psi' where psi' <=> \/(0 < i <= j, b in bset)(phi[b+j]) *)
+(* phi[x] is unitary in x, psi is strict nnf, psi' will be strict nnf *)
+fun disjoin 0 bset x phi_x psi = psi
+  | disjoin j bset x phi_x psi =
+      disjoin (j-1) bset x phi_x (disjoin' j bset x phi_x psi)
+and disjoin' j nil x phi_x psi = psi
+  | disjoin' j (b::bset) x phi_x psi =
+      disjoin' j bset x phi_x (Or(psi, subst_prop x (add_const (Int(j)) b) phi_x))
 
-(* simplification *)
-fun or_ True G = True
-  | or_ False G = G
-  | or_ F True = True
-  | or_ F False = F
-  | or_ F G = Or(F,G)
+(******************)
+(* Simplification *)
+(******************)
 
-fun and_ True G = G
-  | and_ False G = False
-  | and_ F True = F
-  | and_ F False = False
-  | and_ F G = And(F,G)
+fun or_ True psi = True
+  | or_ False psi = psi
+  | or_ phi True = True
+  | or_ phi False = phi
+  | or_ phi psi = Or(phi,psi)
+
+fun and_ True psi = psi
+  | and_ False psi = False
+  | and_ phi True = phi
+  | and_ phi False = False
+  | and_ phi psi = And(phi,psi)
 
 fun not_ True = False
   | not_ False = True
-  | not_ F = Not(F)
+  | not_ phi = Not(phi)
 
 fun simplify (Lt(Int(k),Int(k'))) = if k < k' then True else False
   | simplify (Lt(s,t)) = Lt(s,t)
@@ -569,17 +612,25 @@ fun simplify (Lt(Int(k),Int(k'))) = if k < k' then True else False
   | simplify (Divides(n,t)) = Divides(n,t)
   | simplify (True) = True
   | simplify (False) = False
-  | simplify (Or(F,G)) = or_ (simplify F) (simplify G)
-  | simplify (And(F,G)) = and_ (simplify F) (simplify G)
-  | simplify (Not(F)) = not_ (simplify F)
+  | simplify (Or(phi,psi)) = or_ (simplify phi) (simplify psi)
+  | simplify (And(phi,psi)) = and_ (simplify phi) (simplify psi)
+  | simplify (Not(phi)) = not_ (simplify phi)
                         
-(* Eliminating antecedents in con before checking con |= phi *)
-(* At the moment, we optimize only for
-     con ::= True | con /\ psi
- * where psi is an atomic assumption
- * We reason with sb : subst -> prop where
+(* Eliminating antecedents in con before checking con |= phi
+ *
+ * At the moment, we optimize only for
+ *   con ::= phi | con /\ psi  where phi is not a conjunction
+ * and psi is an atomic assumption
+ *)
+
+(*
+ * For equalities, we reason with sb : subst -> prop where
+ *
  * sb [] = True
  * sb ([x,e] :: sigma) = (x = e /\ sb sigma)
+ *
+ * This should probably be extended at least to the case where psi
+ * is broken down if it is a conjunction.
  *)
 fun rev (And(con,psi)) con' = rev con (And(con',psi))
   | rev (True) con' = con'
@@ -598,9 +649,17 @@ fun elim_eq_var (And(con,psi)) con' phi =
     )
   | elim_eq_var psi con' phi = (rev con' psi, phi)
 
+(* Eliminating assumptions x >= k by substituting
+ * (x' + k)/x  (except we actually don't rename x)
+ * exploiting x' + k >= k for x' >= 0
+ *
+ * This is currently used in a heuristic for deciding
+ * nonlinear inequalities.
+ *)
+
 (* ge_subst phi = (phi', sigma) where phi = phi' /\ sb(sigma) *)
-(* we do not create fresh names, however *)
-(* this could be applied more generally for x >= e where x not in e *)
+(* We do not create fresh names, however *)
+(* This could be applied more generally for x >= e where x not in e *)
 fun ge_subst (Gt(Var(x),Int(n))) = ge_subst (Ge(Var(x),Int(n+1)))
   | ge_subst (Ge(Var(x),Int(n))) = if n > 0 then (True, [(x,Add(Var(x),Int(n)))]) else (True, [])
   | ge_subst (Le(Int(n),Var(x))) = ge_subst (Ge(Var(x),Int(n)))
@@ -618,64 +677,78 @@ fun elim_ge_var_const (And(con,psi)) con' phi =
 fun elim_ge con phi = elim_ge_var_const con True phi
 fun elim_eq con phi = elim_eq_var con True phi
 
-(* preprocess is an important optimization for efficiency
- * in the case of linear constraints
+(*****************)
+(* Preprocessing *)
+(*****************)
+
+(*
+ * We eliminated assumptions x = e (or e = x) where x not in e
+ * by substitution.  This is an important optimization for efficiency
+ * in the case of linear constraints, and decidability for
+ * nonlinear constraints.
+ *
+ * This must happen before conversion to strict nnf, since this
+ * eliminates all equalities.
  *)
 fun preprocess xs con phi = elim_eq con phi
 
-(* elim x F = G, where (exists x. F) <=> G and x does not occur in G
- * assume F is in strict nnf; ensure G is in strict nnf
- * relativize implicit quantifier to express we are solving over nat
+(**************************)
+(* Quantifier Elimination *)
+(**************************)
+
+(*
+ * elim x phi = psi, where (exists x. phi) <=> psi and x does not occur in psi
+ * assume phi is in strict nnf; ensure psi is in strict nnf
+ * Relativize implicit quantifiers to express we are solving over nat, not int.
  *)
-fun elim_nnf x F =
+fun elim_nnf x phi =
     let 
-        val () = if is_nnf F then () else raise NotNNF (* redundant assertion *)
-        val F = And(Lt(Int(0), Add(Mult(Int(1),Var(x)),Int(1))),F) (* x >= 0  <=>  0 < x+1 *)
-        val Fx = iso x F
-        val delta = lcm x Fx 1
-        val Fx = And(unitize delta x Fx, Divides(delta, Add(Mult(Int(1),Var(x)),Int(0))))
-        val delta_div = lcm_div x Fx 1
-        val bset = lbs x Fx nil
+        val () = if is_nnf phi then () else raise NotNNF (* redundant assertion *)
+        val phi = And(Lt(Int(0), Add(Mult(Int(1),Var(x)),Int(1))),phi) (* x >= 0  <=>  0 < x+1 *)
+        val phi_x = iso x phi
+        val delta = lcm x phi_x 1
+        val phi_x = And(unitize delta x phi_x, Divides(delta, Add(Mult(Int(1),Var(x)),Int(0))))
+        val delta_div = lcm_div x phi_x 1
+        val bset = lbs x phi_x nil
         (* for natural numbers, do not calculate F-infinity *)
-        (* now calculate or(j=1..delta_div, b in bset)(F'x[b+j]) *)
-        val G = disjoin delta_div bset x Fx False
-        val G = simplify G
+        (* now calculate or(j=1..delta_div, b in bset)(phi'x[b+j]) *)
+        val psi = disjoin delta_div bset x phi_x False
+        val psi = simplify psi
     in
-        G
+        psi
     end
 
-fun elim x F = elim_nnf x (nnf F)
+fun elim x phi = elim_nnf x (nnf phi)
 
 (* ctx ; con |= phi
  * <=> forall ctx. con => phi
  * <=> not exists ctx. not (con => phi)
  * <=> not exists ctx. con /\ not phi
  *)
-(* elim_vars xs F = G, assuming F is in strict normal form *)
-(* G = True | False if xs contains all variables in F *)
-fun elim_vars nil F = F
-  | elim_vars (x::xs) F = elim_vars xs (elim_nnf x F)
+(* elim_vars xs phi = psi, assuming phi is in strict normal form *)
+(* psi = True | False if xs contains all variables in phi *)
+fun elim_vars nil phi = phi
+  | elim_vars (x::xs) phi = elim_vars xs (elim_nnf x phi)
 
 fun valid xs con phi =
     let val (con',phi') = preprocess xs con phi
-        val F = And(Not(phi'), con')
-        val F = nnf F           (* convert to strict normal form *)
-        val F = simplify F      (* only useful if xs = [] *)
-        val G = elim_vars xs F
-    in case G
+        val phi = And(Not(phi'), con')
+        val phi = nnf phi           (* convert to strict normal form *)
+        val phi = simplify phi      (* only useful if xs = [] *)
+        val psi = elim_vars xs phi
+    in case psi
         of True => false
          | False => true
-         | G => ( print ("constraint " ^ List.foldl (fn (x,s) => x ^ " " ^ s) "" xs ^ " |= "
-                         ^ Print.pp_prop G ^ " not simplified to True or False\n")
-                ; print ("this indicates an internal error in the type-checker\n")
-                ; raise Match )
+         | psi => ( print ("constraint " ^ List.foldl (fn (x,s) => x ^ " " ^ s) "" xs ^ " |= "
+                           ^ Print.pp_prop psi ^ " not simplified to True or False\n")
+                  ; print ("this indicates an internal error in the type-checker\n")
+                  ; raise Match )
     end
 
-(* neg nnF = nnG *)
-fun neg F = nnf (Not(F))        (* optimize? *)
+fun neg phi = nnf (Not(phi))
 
-fun exists x F = elim_nnf x F
-fun forall x F = neg (elim_nnf x (neg F))
+fun exists x phi = elim_nnf x phi
+fun forall x phi = neg (elim_nnf x (neg phi))
 
 end (* structure Arith *)
 
@@ -693,7 +766,7 @@ val true = valid ["x"] (Gt(Var("x"),Int(1))) (Gt(Var("x"),Int(0)))
 val false = valid ["x"] (Gt(Var("x"),Int(0))) (Gt(Var("x"),Int(1)))
 
 val True = elim "x" (Gt(Var("x"), Int(0)))
-val True = elim "x" (Lt(Mult(Int(0-1),Var("x")), Int(0)))
+val True = elim "x" (Lt(Mult(Int(~1),Var("x")), Int(0)))
 val True = elim_vars ["x","y"] (nnf (Lt(Var("x"), Var("y"))))
 (* from Hansen 2010 *)
 val True = elim "x" (And(Or(Lt(Add(Mult(Int(3),Var("x")),Int(1)),Int(10)),

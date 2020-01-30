@@ -1,4 +1,4 @@
-(* L2 Compiler
+(* 
  * Safe(r) I/O functions
  * Author: Frank Pfenning <fp@cs.cmu.edu>
  *)
@@ -23,7 +23,6 @@ struct
 
   (* result of a computation *)
   datatype 'a Result = Value of 'a | Exception of exn
-
 
   (* withOpenIn fileName (fn instream => body) = result
      opens fileName for input to obtain instream and evaluates body.
@@ -58,4 +57,4 @@ struct
 	  of Value (x) => x
 	   | Exception (exn) => raise exn
       end
-end
+end  (* structure SafeIO *)

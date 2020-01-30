@@ -66,6 +66,7 @@ fun location (NONE) = "_"
 (****************************)
 (* Building abstract syntax *)
 (****************************)
+
 fun vars ((x,phi)::l) = x::(vars l)
   | vars nil = nil
 
@@ -87,14 +88,17 @@ type region = int * int
 (* operator precedence, for arithmetic *)
 type prec = int
 
-(* valid occurrences of infix operators are always preceded by
+(* Valid occurrences of infix operators are always preceded by
  * an expression which must have already been reduced; valid
  * occurrences of prefix operators never are.  This helps to
  * disambiguate '-' (prefix or infix)
  *)
-
 datatype assoc = Left | Right | Non
 
+(* Arithmetic expressions are parsed using an operator
+ * precedence parser, mixing propositions and terms.
+ * Therefore we create something of type 'aexp'
+ *)
 datatype aexp = Prop of R.prop | Arith of R.arith
 
 (* stack items for shift/reduce parsing *)
@@ -115,6 +119,7 @@ datatype stack_item =
  | Alts of A.choices                                            (* list of alternatives in types *)
  | Action of (A.exp -> A.exp) * region                          (* prefix process action *)
  | Args of (A.chan list) * region                               (* arguments for spawn *)
+
  | Exp of A.exp * region                                        (* process expression *)
  | Branches of A.branches                                       (* list of branches *)
 
@@ -127,6 +132,10 @@ datatype stack
 
 infix 2 $
 
+(* Next section gives a static error while trying to
+ * construct either a term or a proposition from an
+ * arithmetic expression
+ *)
 fun arith2 r f (Arith(e1), Arith(e2)) = Arith(f(e1,e2))
   | arith2 r f (Prop(phi1), _) = parse_error (r, "applying arithmetic operator to proposition")
   | arith2 r f (_, Prop(phi2)) = parse_error (r, "applying arithmetic operator to proposition")
@@ -151,9 +160,14 @@ fun aexp2prop r (Prop(phi)) = phi
 fun aexp2arith r (Arith(e)) = e
   | aexp2arith r (Prop(phi)) = parse_error (r, "expected arithmetic expression, found proposition")
 
+(* precedes_infix S = true if S could be legal stack while
+ * looking at an infix operator
+ *)
 fun precedes_infix (S $ AExp _) = true
   | precedes_infix _ = false
 
+(* arithmetic prefix and infix operators *)
+(* each with precedence, associativity, region, and abstract syntax constructor *)
 fun opr (S, t, r) = case t of
     T.MINUS => if precedes_infix S
                then Infix(7, Left, t, r, arith2 r R.Sub)
@@ -171,11 +185,6 @@ fun opr (S, t, r) = case t of
   | T.AND => Infix(4, Right, t, r, prop2 r R.And)
   | T.OR => Infix(3, Right, t, r, prop2 r R.Or)
   | T.RARROW => Infix(2, Right, t, r, prop2 r R.Implies)
-(* not supported right now *)
-(*
-  | T.EXCLAMATION => Prefix(1, t, r, R.Forall)
-  | T.QUESTION => Prefix(1, t, r, R.Exists)
- *)
   | _ => Nonfix(t, r)
 
 fun left_assoc Left = true
@@ -296,67 +305,75 @@ and r_idx_seq (S $ Indices(l,r1) $ AExp(e,r2)) = S $ Indices(l @ [aexp2arith r2 
 and p_eq_type ST = case first ST of
     T.EQ => ST |> shift >> p_type
   | t => error_expected (here ST, T.EQ, t)
-(* check S = empty here? *)
 
 (* <id> <idx_seq> '=' <id> <idx_seq> *)
 and p_eqtype ST = ST |> p_id_idx_seq >> p_terminal T.EQ >> p_id_idx_seq
 
-(* ':' [ <type_opt> <turnstile> ] <type> | '=' <exp> *)
+(* ':' ( <ctx> | '.' ) <turnstile> '(' <id> ':' <type> ')' *)
 and p_exp_decl ST = case first ST of
-    T.COLON => ST |> shift >> p_context_opt >> p_turnstile_id_tp
+    T.COLON => ST |> shift >> p_ctx_opt >> p_turnstile_id_tp
   | t => error_expected (here ST, T.COLON, t)
 
-and p_context_opt ST = case first ST of
+(* '.' | <ctx> *)
+and p_ctx_opt ST = case first ST of
     T.PERIOD => ST |> drop >> push (Context([], here ST))
-  | T.LPAREN => ST |> push (Context([], here ST)) >> p_context
+  | T.LPAREN => ST |> push (Context([], here ST)) >> p_ctx
   | t => error_expected_list (here ST, [T.PERIOD, T.LPAREN], t)
-  
-and p_context ST = ST |> p_terminal T.LPAREN >> p_id >> p_terminal T.COLON >> p_type >> p_terminal T.RPAREN >> reduce r_chan_tp >> p_context2
 
-and p_context2 ST = case first ST of
-    T.LPAREN => ST |> p_context
+(* '(' <id> ':' <type> ')' [<ctx>] *)
+and p_ctx ST = ST |> p_terminal T.LPAREN >> p_id >> p_terminal T.COLON >> p_type
+                      >> p_terminal T.RPAREN >> reduce r_chan_tp >> p_ctx2
+
+(* [<ctx>] *)
+and p_ctx2 ST = case first ST of
+    T.LPAREN => ST |> p_ctx
   | T.TURNSTILE => ST
   | T.BAR => ST
   | t => error_expected_list (here ST, [T.LPAREN, T.TURNSTILE, T.BAR], t)
 
-and r_chan_tp (S $ Context(ctx, r) $ Tok(T.LPAREN, _) $ Tok(T.IDENT(id), _) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Context(ctx @ [(id,tp)], join r r2)
+and r_chan_tp (S $ Context(ctx, r) $ Tok(T.LPAREN, _) $ Tok(T.IDENT(id), _) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) =
+    S $ Context(ctx @ [(id,tp)], join r r2)
 
-(* <turnstile> <id> : <type> *)
+(* <turnstile> '(' <id> : <type> ')' *)
 and p_turnstile_id_tp ST = case first ST of
     T.TURNSTILE => ST |> shift >> p_id_tp
   | T.BAR => ST |> shift >> p_idx >> p_terminal T.MINUS >> p_id_tp
   | t => error_expected_list (here ST, [T.TURNSTILE, T.BAR], t)
 
+(* '(' <id> ':' <type> ')' *)
 and p_id_tp ST = ST |> p_terminal T.LPAREN >> p_id >> p_terminal T.COLON >> p_type >> p_terminal T.RPAREN
 
+(* <id> <- <id> <idx_seq> <id_seq> = <exp> *)
 and p_exp_def ST = ST |> p_id >> p_terminal T.LARROW >> p_id_var_seq
-                      >> push (Args ([], here ST)) >> p_id_list_opt_decl
+                      >> push (Args ([], here ST)) >> p_id_seq_exp
 
-and p_id_list_opt_decl ST = case first ST of
-    T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_list_opt_decl
+(* <id_seq> '=' <exp> *)
+and p_id_seq_exp ST = case first ST of
+    T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_seq_exp
   | T.EQ => ST |> shift >> p_exp
-  | t => parse_error (here ST, "expected = or identifier, found: " ^ pp_tok t)
+  | t => parse_error (here ST, "expected '=' or identifier, found: " ^ pp_tok t)
 
 and r_arg (S $ Args(args, r1) $ Tok(T.IDENT(id), r2)) = S $ Args(args @ [id], join r1 r2)
 
 (* reduce top-level declaration *)
+(* split in two to work around mlton compiler performance bug *)
 and r_decl (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ Tp(tp,r2)) =
     (* 'type' <id> <var_seq> = <type> *)
     S $ Decl(A.TpDef(id,vars l,phis l,tp,PS.ext(join r1 r2)))
   | r_decl (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Indices(l1,_) $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),_) $ Indices(l2, r2)) =
     (* 'eqtype' <id> <idx_seq> = <id> <idx_seq> *)
     S $ Decl(A.TpEq([],R.True,A.TpName(id1,l1),A.TpName(id2,l2),PS.ext(join r1 r2)))
-  | r_decl (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.TURNSTILE,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
-    (* 'decl' <id> <var_seq> : <context> |- <id> : <type> *)
-    S $ Decl(A.ExpDec(id,vars l,phis l,(context,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
+  | r_decl (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.TURNSTILE,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
+    (* 'decl' <id> <var_seq> : <ctx> |- <id> : <type> *)
+    S $ Decl(A.ExpDec(id,vars l,phis l,(ctx,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
   | r_decl S = r_decl_2 S
 
-and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(context,_) $ Tok(T.BAR,_) $ AExp(pot,r) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
-    (* 'decl' <id> <var_seq> : <context> '|{' <arith> '}-' <id> : <type> *)
-    S $ Decl(A.ExpDec(id,vars l,phis l,(context,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
+and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.BAR,_) $ AExp(pot,r) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
+    (* 'decl' <id> <var_seq> : <ctx> '|{' <arith> '}-' <id> : <type> *)
+    S $ Decl(A.ExpDec(id,vars l,phis l,(ctx,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
   | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r)
                 $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
-    (* 'proc' <id> '<-' <id> <var_seq> '<-' <id_list> = <exp> *)
+    (* 'proc' <id> '<-' <id> <var_seq> <id_seq> = <exp> *)
     (case (phis l)
      of R.True => S $ Decl(A.ExpDef(id,vars l,(xs, exp, x),PS.ext(join r1 r2)))
       | _ => parse_error (r, "constraint found in process definition"))
@@ -376,7 +393,7 @@ and p_idx ST = case first ST of
 (* reduce '{' <arith> '}' *)
 and r_idx (S $ Tok(T.LBRACE,r1) $ AExp(e, _) $ Tok(T.RBRACE,r2)) = S $ AExp (e, join r1 r2)
 
-(* <tp> *)
+(* <type> *)
 and p_type ST = case first ST of
     T.NAT(1) => ST |> shift >> reduce r_type >> p_type
   | T.NAT(n) => parse_error (here ST, "expected type, found " ^ Int.toString n)
@@ -396,9 +413,9 @@ and p_type ST = case first ST of
 
 (* shift/reduce decision based on operator precedence *)
 and p_type_prec ST = case ST of
-    (S $ Tp(tp1,r1) $ TpInfix(prec1, con1, _) $ Tp(tp2, r2) $ TpInfix(prec, con, r), ft) =>
+    (S $ Tp(tp1,r1) $ TpInfix(prec1, constr1, _) $ Tp(tp2, r2) $ TpInfix(prec, con, r), ft) =>
       if prec1 > prec         (* all type operators are right associative *)
-      then p_type_prec (S $ Tp(con1(tp1,tp2), join r1 r2) $ TpInfix(prec, con, r), ft) (* reduce *)
+      then p_type_prec (S $ Tp(constr1(tp1,tp2), join r1 r2) $ TpInfix(prec, con, r), ft) (* reduce *)
       else p_type ST          (* shift *)
   | (S $ Tp(_,_) $ TpInfix(_,_,_), _) => p_type ST (* shift *)
   | (S $ TpInfix(_,_,r1) $ TpInfix(_,_,r2), _) => parse_error (join r1 r2, "consecutive infix type operators")
@@ -436,9 +453,9 @@ and p_con_dot ST = case first ST of
 and r_con (S $ Tok(T.LBRACE,r1) $ AExp(e,_) $ Tok(T.RBRACE,r2)) = S $ AExp(e, join r1 r2)
 
 (* <arith> and <prop>, parsed as <aexp> *)
-(* this need to be a joint infix parser because we cannot
- * reliably predict of the next items we parse denote an
- * arithmetic expression or a proposition
+(* This needs to be a joint infix parser because we cannot
+ * reliably predict if the next items we parse denote an
+ * arithmetic expression or a proposition.
  *)
 and c_follows_nonaexp (ST as (S, ft)) = case (S, first ST) of
     (S $ AExp(e,r), _) => parse_error (join r (here ST), "consecutive arithmetic expressions")
@@ -452,7 +469,7 @@ and p_aexp (ST as (S,ft)) = case first ST of
   | t => (case opr (S, t, here ST)
            of Nonfix(t',r) => (* nonfix: do not consume token! *)
               ST |> p_aexp_prec (Nonfix(t',r))
-            | subject => (* infix or prefix: subject included token; use operator precedence *)
+            | subject => (* infix or prefix: subject includes token; use operator precedence *)
               ST |> drop >> p_aexp_prec subject)
 
 (* p_aexp_prec subject (S, ft) compares precedence of subject to S

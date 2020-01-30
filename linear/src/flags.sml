@@ -1,6 +1,8 @@
 (* Flags *)
 (* User option given on the command line or in the
  * #options pragma in the source file
+ *
+ * Author: Frank Pfenning <fp@cs.cmu.edu>
  *)
 
 signature FLAGS =
@@ -59,7 +61,7 @@ fun pp_cost (None) = "none"
 (* Syntax *)
 (* Explicit syntax performs no reconstruction
  * Implicit syntax reconstructs non-structural types
- * (quantifiers, work, time)
+ * (quantifiers, work, time), to the extent supported
  *)
 datatype syntax = Implicit | Explicit
 fun parseSyntax "implicit" = SOME(Implicit)
@@ -69,7 +71,7 @@ fun parseSyntax "implicit" = SOME(Implicit)
 fun pp_syntax (Implicit) = "implicit"
   | pp_syntax (Explicit) = "explicit"
 
-(* type equality algorithm *)
+(* Type equality algorithm *)
 datatype equality = SubsumeRefl | Subsume | Refl
 fun parseEquality "subsumerefl" = SOME(SubsumeRefl)
   | parseEquality "subsume" = SOME(Subsume)

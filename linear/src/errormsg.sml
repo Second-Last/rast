@@ -1,5 +1,5 @@
-(* Error message *)
-(* Imported from the C0 compiler *)
+(* Error messages *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
 
 signature ERRORMSG =
 sig
@@ -29,8 +29,9 @@ struct
   fun reset () = ( anyErrors := false )
   
   (* We turn tabs into spaces because they are counted as a single character in
-     the extents, so in order for the emphasis to be correct we need each
-     character to be one column wide. *)     
+   * the extents, so in order for the emphasis to be correct we need each
+   * character to be one column wide.
+   *)     
   val tabToSpace = String.translate (fn #"\t" => " " | c => String.str c)
   fun msg str ext note =
       ( ignore (Option.map (TextIO.print o Mark.show) ext)
@@ -38,9 +39,7 @@ struct
       ; ignore (Option.map (TextIO.print o tabToSpace o Mark.show_source) ext)
       )
   
-  (* print error *)
-  (* ext: extent information *)
-  (* note: error msg to print *)
+  (* error ext note = (), prints error with source extent 'ext' *)
   fun error ext note =
       ( anyErrors := true
       ; if !Flags.verbosity >= 0 (* verbosity < 0: don't print error messages! *)
@@ -53,4 +52,4 @@ struct
 
   fun ERROR ext msg = ( error ext msg ; raise Error )
 
-end
+end  (* structure ErrorMsg *)

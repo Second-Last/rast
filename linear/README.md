@@ -1,4 +1,4 @@
-# Linear
+# Rast
 
 Simple experimental implementation of purely linear logic, extended
 with temporal and ergometric types as well as constraints over natural
@@ -23,9 +23,9 @@ For building a binary (with mlton):
 
 ```
 % cd src
-% make lin
-% ./lin ../examples/trie-work.ss
-% ./lin -h
+% make rast
+% ./rast ../examples/trie-work.ss
+% ./rast -h
 ```
 
 or for interactive top level (with SML/NJ):
@@ -33,7 +33,7 @@ or for interactive top level (with SML/NJ):
 ```
 % sml
 - CM.make "sources.cm";
-- Top.lin "../examples/trie-work.ss";
+- Top.rast "../examples/trie-work.ss";
 
 % make clean
 ```
@@ -41,9 +41,9 @@ or for interactive top level (with SML/NJ):
 For regression testing:
 
 ```
-% make lin-test
-% ./lin-test ../*/*.ss
-% ./lin-test -h
+% make rast-test
+% ./rast-test ../*/*.ss
+% ./rast-test -h
 ```
 
 ## Examples
@@ -60,7 +60,7 @@ A postfix `-work` indicates use of ergometric types to capture work
 - `theorems.ss`    - simple arithmetic metatheorems and proofs
 - `trie-work.ss`   - multisets of binary numbers, as a trie
 
-## Options to ./lin
+## Options to ./rast
 
 ```
 -q quiet   (verbosity = 0) 
