@@ -62,7 +62,7 @@ struct
       else look (pos, rest, n-1) 
     | look (pos, nil, n) = 
       (* in cc0: (1, pos-1) *)
-      (* in ss: start lexer at pos = 1 *)
+      (* in rast, ss: start lexer at pos = 1 *)
       (1, pos)
 
   fun last () = (List.length (hd (!currLiness)) + 1,  0)
@@ -71,11 +71,10 @@ struct
    * guess end of current file for invalid position (0,0)
    *)
   fun ext (0, 0) = (* NONE *)
-      (* guess EOF, for potentially better error message? *)
       SOME (last (), last (), hd (!currFilenames))
     | ext (left, right) =
       SOME (look (left, hd (!currLiness), List.length (hd (!currLiness))),
 	    look (right, hd (!currLiness), List.length (hd (!currLiness))),
 	    hd (!currFilenames))
 
-end
+end  (* structure ParseState *)

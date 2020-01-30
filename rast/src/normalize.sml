@@ -1,16 +1,13 @@
-(* Normalizing Arithmetic Expressions *)
+(* Nonlinear Arithmetic *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
+
+(* 
+ * Simple heuristic for solving nonlinear constraints
+ * produced by the type checker
+ *)
 
 signature NORMALIZE = 
 sig
-
-  type normal = Arith.arith
-
-  (* normalizing an expression, combining the coefficients for each term in the multinomial *)
-  val normalize : Arith.arith -> normal
-  val check_normal : Arith.arith -> bool
-
-  (* compare two multinomials in normal form *)
-  val compare : normal -> normal -> bool
 
   (* simple checker for nonlinear constraints *)
   datatype outcome = Valid | NotValid | Unknown

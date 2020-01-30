@@ -1,6 +1,7 @@
 (* Stream Library *)
 (* Imported from C0 compiler *)
 (* Streams do not memoize *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
 
 signature STREAM =
 sig

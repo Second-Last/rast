@@ -1,5 +1,9 @@
 (* Terminal symbols *)
+
 (* Interface between lexer and parser *)
+(* Authors: Frank Pfenning <fp@cs.cmu.edu>
+ *          Ankush Das <ankushd@cs.cmu.edu>
+ *)
 
 signature TERMINAL =
 sig

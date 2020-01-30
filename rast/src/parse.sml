@@ -356,17 +356,18 @@ and p_id_seq_exp ST = case first ST of
 and r_arg (S $ Args(args, r1) $ Tok(T.IDENT(id), r2)) = S $ Args(args @ [id], join r1 r2)
 
 (* reduce top-level declaration *)
-(* split in two to work around mlton compiler performance bug *)
-and r_decl (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ Tp(tp,r2)) =
+(* split in pieces to work around mlton compiler performance bug *)
+and r_decl S = r_decl_1 S
+and r_decl_1 (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ Tp(tp,r2)) =
     (* 'type' <id> <var_seq> = <type> *)
     S $ Decl(A.TpDef(id,vars l,phis l,tp,PS.ext(join r1 r2)))
-  | r_decl (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Indices(l1,_) $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),_) $ Indices(l2, r2)) =
+  | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Indices(l1,_) $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),_) $ Indices(l2, r2)) =
     (* 'eqtype' <id> <idx_seq> = <id> <idx_seq> *)
     S $ Decl(A.TpEq([],R.True,A.TpName(id1,l1),A.TpName(id2,l2),PS.ext(join r1 r2)))
-  | r_decl (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.TURNSTILE,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
+  | r_decl_1 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.TURNSTILE,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <ctx> |- <id> : <type> *)
     S $ Decl(A.ExpDec(id,vars l,phis l,(ctx,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
-  | r_decl S = r_decl_2 S
+  | r_decl_1 S = r_decl_2 S
 
 and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.BAR,_) $ AExp(pot,r) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <ctx> '|{' <arith> '}-' <id> : <type> *)
@@ -655,6 +656,7 @@ and r_exp (S $ Action(act,r1) $ Exp(exp,r2)) = r_exp (S $ Exp(act(exp), join r1 
   | r_exp (S $ Exp(exp,r)) = S $ Exp(exp,r)
 
 (* reduce action prefix of <exp> *)
+(* split into pieces to work around mlton compiler performance bug *)
 and r_action S = r_action_1 S
 and r_action_1 (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Lab(x,id,K),join r1 r2)), join r1 r3)

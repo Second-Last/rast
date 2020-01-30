@@ -1,4 +1,7 @@
 (* Constraints *)
+(* Authors: Frank Pfenning <fp@cs.cmu.edu>
+ *          Ankush Das <ankushd@cs.cmu.edu>
+ *)
 
 (* 
  * Deciding validity and satisfiability of constraints in Presburger

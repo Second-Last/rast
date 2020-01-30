@@ -1,3 +1,18 @@
+(* Cost Models *)
+(* Authors: Frank Pfenning <fp@cs.cmu.edu>
+ *          Ankush Das <ankushd@cs.cmu.edu>
+ *)
+
+(*
+ * Applies several predefined cost models to
+ * a process expression by inserting 'work' (for ergometric
+ * types) or 'delay' (aka 'tick', for temporal types).
+ * These construct may be insert before or after certain
+ * actions, and some actions (especially related to work and
+ * time analysis itself and index objects we don't expect
+ * to be actual runtime operations).
+ *)
+
 signature COST =
 sig
     (* applying cost models to programs *)

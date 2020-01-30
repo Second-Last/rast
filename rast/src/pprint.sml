@@ -39,7 +39,7 @@ sig
 
     (* abbreviations, for compact printing *)
     structure Abbrev : sig
-        val reset : unit -> unit
+        val reset : unit -> unit                (* reset the register *)
         val register : Ast.tp -> Ast.tp -> unit (* register short long = (), registers abbreviation *)
         val abbrev : Ast.tp -> Ast.tp           (* abbrev long = short, where short = long if unregistered *)
     end 
@@ -314,9 +314,9 @@ fun pp_tpj_compact env D pot zC =
 
 fun pp_chanlist [] = ""
   | pp_chanlist [x] = x
-  | pp_chanlist (x::l) = x ^ " " ^ pp_chanlist l
+  | pp_chanlist (x::xs) = x ^ " " ^ pp_chanlist xs
 
-fun pp_exp env i (A.Spawn(P,Q)) = (* P = f *)
+fun pp_exp env i (A.Spawn(P,Q)) = (* P = x <- f{..} ys *)
     pp_exp env i P ^ " ;\n" ^ pp_exp_indent env i Q
   | pp_exp env i (A.Id(x,y)) = x ^ " <-> " ^ y
   | pp_exp env i (A.Lab(x,k,P)) = x ^ "." ^ k ^ " ;\n" ^ pp_exp_indent env i P
@@ -393,7 +393,6 @@ fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
   | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) =
     "proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " " ^ pp_chanlist xs ^ " = \n"
     ^ pp_exp_after env 0 ("  ") P
-    (* pp_exp_after env 0 ("proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " " ^ pp_chanlist xs ^ " = ") P *)
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line
 

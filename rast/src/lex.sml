@@ -1,4 +1,7 @@
 (* Lexer *)
+(* Authors: Frank Pfenning <fp@cs.cmu.edu> 
+ *          Ankush Das <ankushd@cs.cmu.edu>
+ *)
 
 signature LEX =
 sig
@@ -14,8 +17,8 @@ structure M = Stream
 structure T = Terminal
 
 (* lexing error *)
-(* (lpos,rpos) => source location information *)
-(* msg => error message *)
+(* (lpos,rpos)  is source location information *)
+(* msg is error message *)
 fun error (lpos,rpos) msg = ( ErrorMsg.error (PS.ext(lpos,rpos)) msg
                             ; raise ErrorMsg.Error )
 
