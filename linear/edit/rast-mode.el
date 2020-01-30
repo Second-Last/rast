@@ -1,39 +1,39 @@
 ;; load from your .emacs file
 (setq auto-mode-alist
-      (cons '("\\.ss$" . ss-mode) auto-mode-alist))
+      (cons '("\\.rast$" . rast-mode) auto-mode-alist))
 
 (defface font-lock-cost-face
   '((t :foreground "blue"))
-  "ss cost model annotations"
-  :group 'ss-mode)
+  "rast cost model annotations"
+  :group 'rast-mode)
 (defvar font-lock-cost-face 'font-lock-cost-face)
 
 (defface font-lock-time-face
   '((t :foreground "red"))
-  "ss time actions"
-  :group 'ss-mode)
+  "rast time actions"
+  :group 'rast-mode)
 (defvar font-lock-time-face 'font-lock-time-face)
 
 (defface font-lock-work-face
   '((t :foreground "red"))
-  "ss work actions"
-  :group 'ss-mode)
+  "rast work actions"
+  :group 'rast-mode)
 (defvar font-lock-work-face 'font-lock-work-face)
 
 (defface font-lock-constraints-face
   '((t :foreground "darkgreen"))
-  "ss constraints"
-  :group 'ss-mode)
+  "rast constraints"
+  :group 'rast-mode)
 (defvar font-lock-constraints-face 'font-lock-constraints-face)
 
 (defface font-lock-decl-face
   '((t :foreground "purple"
        :weight bold))
   "face for declarations"
-  :group 'ss-mode)
+  :group 'rast-mode)
 (defvar font-lock-decl-face 'font-lock-decl-face)
 
-(defvar ss-font-lock-keywords
+(defvar rast-font-lock-keywords
   '(("type\\|eqtype\\|decl\\|proc\\|exec" . font-lock-decl-face)
     ("case\\|wait\\|close\\|send\\|recv" . font-lock-keyword-face)
     ("tick\\|work" . font-lock-cost-face)
@@ -42,7 +42,7 @@
     ("delay\\|when\\|now" . font-lock-time-face)
     ))
 
-(setq ss-mode-syntax-table
+(setq rast-mode-syntax-table
   (let ((tbl (copy-syntax-table (standard-syntax-table))))
     (modify-syntax-entry ?# "<" tbl)
     (modify-syntax-entry ?\n ">" tbl)
@@ -54,7 +54,7 @@
     (modify-syntax-entry ?_ "_" tbl)
     tbl))
 
-(define-derived-mode ss-mode fundamental-mode "ss"
+(define-derived-mode rast-mode fundamental-mode "rast"
   "major mode for editing subsingleton code"
-  (setq font-lock-defaults '(ss-font-lock-keywords))
-  (set-syntax-table ss-mode-syntax-table))
+  (setq font-lock-defaults '(rast-font-lock-keywords))
+  (set-syntax-table rast-mode-syntax-table))
