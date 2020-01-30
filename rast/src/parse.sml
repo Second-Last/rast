@@ -527,10 +527,8 @@ and p_type_opt ST = case first ST of
 (* broken up into separate function to avoid mlton performance bug *)
 and r_type S = r_type_1 S
 and r_type_1 (S $ Tok(T.NAT(1),r)) = S $ Tp(A.One, r)
-  | r_type_1 (S $ Tok(T.PLUS,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) =
-    S $ Tp(A.Plus(alts), join r1 r2)
-  | r_type_1 (S $ Tok(T.AMPERSAND,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) =
-    S $ Tp(A.With(alts), join r1 r2)
+  | r_type_1 (S $ Tok(T.PLUS,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) = S $ Tp(A.Plus(alts), join r1 r2)
+  | r_type_1 (S $ Tok(T.AMPERSAND,r1) $ Tok(T.LBRACE,_) $ Alts(alts) $ Tok(T.RBRACE,r2)) = S $ Tp(A.With(alts), join r1 r2)
   | r_type_1 (S $ Tok(T.BACKQUOTE,r1) $ Tp(tp,r2)) = S $ Tp(A.Next(R.Int(1),tp), join r1 r2)
   | r_type_1 (S $ Tok(T.LPAREN,r1) $ Tok(T.RPAREN,_) $ Tp(tp,r2)) = S $ Tp(A.Next(R.Int(1),tp), join r1 r2)
   | r_type_1 (S $ Tok(T.LPAREN,r1) $ AExp(t,r) $ Tok(T.RPAREN,_) $ Tp(tp,r2)) = S $ Tp(A.Next(aexp2arith r t,tp), join r1 r2)
@@ -545,13 +543,14 @@ and r_type_2 (S $ Tok(T.BAR,r1) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPo
   | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ AExp(e,r) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(aexp2prop r e,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.QUESTION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsNat(id,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
-  | r_type_2 (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
-  | r_type_2 (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
-  | r_type_2 (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
-  | r_type_2 (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
-  | r_type_2 (S $ TpInfix(_,_,r)) = parse_error (r, "trailing infix type operator")
-  | r_type_2 (S $ Tp(tp,r)) = S $ Tp(tp,r)
-  | r_type_2 (S $ Tok(_,r)) = parse_error (r, "unknown or empty type expression")
+  | r_type_2 S = r_type_3 S
+and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
+  | r_type_3 (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
+  | r_type_3 (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
+  | r_type_3 (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
+  | r_type_3 (S $ TpInfix(_,_,r)) = parse_error (r, "trailing infix type operator")
+  | r_type_3 (S $ Tp(tp,r)) = S $ Tp(tp,r)
+  | r_type_3 (S $ Tok(_,r)) = parse_error (r, "unknown or empty type expression")
   (* should be the only possibilities *)
 
 (* <choices> *)
@@ -656,41 +655,43 @@ and r_exp (S $ Action(act,r1) $ Exp(exp,r2)) = r_exp (S $ Exp(act(exp), join r1 
   | r_exp (S $ Exp(exp,r)) = S $ Exp(exp,r)
 
 (* reduce action prefix of <exp> *)
-and r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+and r_action S = r_action_1 S
+and r_action_1 (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Lab(x,id,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.IDENT(y),r1) $ Tok(T.LARROW,_) $ Tok(T.RECV,_) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_1 (S $ Tok(T.IDENT(y),r1) $ Tok(T.LARROW,_) $ Tok(T.RECV,_) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Recv(x,y,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_1 (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.LBRACE,r1) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,_) $ Tok(T.LARROW,_)
+  | r_action_1 (S $ Tok(T.LBRACE,r1) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,_) $ Tok(T.LARROW,_)
                 $ Tok(T.RECV, _) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.RecvNat(x,v,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Tok(T.IDENT(w),r2) $ Tok(T.SEMICOLON, r3)) =
+  | r_action_1 (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Tok(T.IDENT(w),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.Send(x,w,K), join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ AExp(e, r2) $ Tok(T.SEMICOLON, r3)) =
+  | r_action_1 (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ AExp(e, r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.SendNat(x,aexp2arith r2 e,K), join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.WAIT,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_1 (S $ Tok(T.WAIT,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Wait(id,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.DELAY,r1) $ AExp(t,r) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_1 S = r_action_2 S
+and r_action_2 (S $ Tok(T.DELAY,r1) $ AExp(t,r) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(aexp2arith r t,K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.TICK,r1) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_2 (S $ Tok(T.TICK,r1) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Delay(R.Int(1),K),r1)), join r1 r2)
-  | r_action (S $ Tok(T.WHEN,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_2 (S $ Tok(T.WHEN,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.When(id,K),join r1 r2)), join r1 r3)
-  | r_action (S $ Tok(T.NOW,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_2 (S $ Tok(T.NOW,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Now(id,K),join r1 r2)), join r1 r3)
-  | r_action S = r_action_2 S
-
-and r_action_2 (S $ Tok(T.WORK,r1) $ AExp(pot,r) $ Tok(T.SEMICOLON,r2)) =
+  | r_action_2 S = r_action_3 S
+and r_action_3 (S $ Tok(T.WORK,r1) $ AExp(pot,r) $ Tok(T.SEMICOLON,r2)) =
     S $ Action((fn K => m_exp(A.Work(aexp2arith r pot,K),r1)), join r1 r2)
-  | r_action_2 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ AExp(pot,r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_3 (S $ Tok(T.PAY,r1) $ Tok(T.IDENT(id),_) $ AExp(pot,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Pay(id,aexp2arith r2 pot,K),join r1 r2)), join r1 r3)
-  | r_action_2 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ AExp(pot,r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_3 (S $ Tok(T.GET,r1) $ Tok(T.IDENT(id),_) $ AExp(pot,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Get(id,aexp2arith r2 pot,K), join r1 r2)), join r1 r3)
-  | r_action_2 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_3 (S $ Tok(T.ASSERT,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Assert(id,aexp2prop r2 e,K), join r1 r2)), join r1 r2)
-  | r_action_2 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
+  | r_action_3 (S $ Tok(T.ASSUME,r1) $ Tok(T.IDENT(id),_) $ AExp(e,r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Assume(id,aexp2prop r2 e,K),join r1 r2)), join r1 r2)
+  (* no other actions should be possible *)
 
 (* <branches> *)
 and p_branches ST = case first ST of
