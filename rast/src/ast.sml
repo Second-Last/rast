@@ -5,7 +5,7 @@ sig
 
 type label = string             (* l,k for internal and external choice *)
 type tpname = string            (* a, for types defined with a = A *)
-type expname = string           (* f, for processes defined with f = P *)
+type expname = string           (* f, for processes defined with x <- f ... = P *)
 type ext = Mark.ext option      (* optional extent (source region info) *)
 
 type pot = Arith.arith          (* p,q, potential for work *)
@@ -37,59 +37,59 @@ type context = chan_tp list
 (* Process Expressions *)
 datatype exp =
        (* judgmental constructs *)
-         Id of chan * chan                                             (* x <-> y *)
-       | Spawn of exp * exp                                            (* P || Q *)
-       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f{es} xs *)
+         Id of chan * chan                          (* x <-> y *)
+       | Spawn of exp * exp                         (* x <- f{es} xs ; Q *)
+       | ExpName of chan * expname * Arith.arith list * chan list (* x <- f{es} xs *)
 
-       (* internal/external choice +{...} *)
+       (* internal/external choice +{...}, &{...} *)
        | Lab of chan * label * exp                   (* x.k ; P *)
        | Case of chan * (label * ext * exp) list     (* case x (...) *)
 
-       (* tensor and lolli *)
+       (* tensor (A * B) and lolli (A -o B) *)
        | Send of chan * chan * exp                   (* send x w ; P *)
        | Recv of chan * chan * exp                   (* y <- recv x ; P *)
 
        (* termination 1 *)
-       | Close of chan                               (* closeR *)
-       | Wait of chan * exp                          (* waitL ; P *)
+       | Close of chan                               (* close x *)
+       | Wait of chan * exp                          (* wait x ; P *)
 
        (* existential quantifier ?{phi}. A *)
-       | Assert of chan * Arith.prop * exp           (* assertR{phi} ; P *)
-       | Assume of chan * Arith.prop * exp           (* assumeL{phi} ; P *)
+       | Assert of chan * Arith.prop * exp           (* assert x {phi} ; P *)
+       | Assume of chan * Arith.prop * exp           (* assume x {phi} ; P *)
 
        (* quantifying variables ?n. A and !n. A *)
        | SendNat of chan * Arith.arith * exp         (* send x {e} *)
        | RecvNat of chan * Arith.varname * exp       (* {v} <- recv x *)                       
 
-       (* impossibility; no concrete syntax for now *)
+       (* impossibility *)
        | Imposs                                      (* impossible *)             
 
        (* work *)
        | Work of pot * exp                           (* work ; P or work{p} ; P *)
 
        (* pay potential |>A *)
-       | Pay of chan * pot * exp                     (* payR ; P or payR{p} ; P *)
-       | Get of chan * pot * exp                     (* getL ; P or getL{p} ; P *)
+       | Pay of chan * pot * exp                     (* pay x ; P or pay x {p} ; P *)
+       | Get of chan * pot * exp                     (* get x ; P or get x {p} ; P *)
 
        (* next time ()A *)
-       | Delay of time * exp                         (* delay ; P or delay{t} ; P *)
+       | Delay of time * exp                         (* tick ; P or delay ; P or delay{t} ; P *)
 
        (* some future time <>A *)
-       | Now of chan * exp                           (* nowR ; P *)
-       | When of chan * exp                          (* whenL ; P *)
+       | Now of chan * exp                           (* now x ; P *)
+       | When of chan * exp                          (* when x ; P *)
 
        (* mark with source region *)
        | Marked of exp Mark.marked
 
-type branches = (label * ext * exp) list       (* (l1 => P1 | ... | ln => Pn) *)
+type branches = (label * ext * exp) list             (* (l1 => P1 | ... | ln => Pn) *)
 
 (* Declarations *)
 datatype decl =
          Pragma of string * string * ext                     (* #options, #test *)
-       | TpDef of tpname * Arith.ctx * Arith.prop * tp * ext (* type a = A *)
-       | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a = b *)
+       | TpDef of tpname * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
+       | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a{..} = b{..} *)
        | ExpDec of expname * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
-                                                             (* decl f{..} : Delta |{pot}- C *)
+                                                             (* decl f{..} : Delta |{p}- (z : C) *)
        | ExpDef of expname * Arith.ctx * (chan list * exp * chan) * ext
                                                              (* proc x <- f{es} xs = P *)
        | Exec of expname * ext                               (* exec f *)
@@ -97,12 +97,12 @@ datatype decl =
 type env = decl list
 
 (* Substitution *)
-val apply_tp : Arith.subst -> tp -> tp    (* [sigma]A *)
-val apply_exp : Arith.subst -> exp -> exp (* [sigma]P *)
-val apply_chan_tp : Arith.subst -> chan_tp -> chan_tp
-val apply_context : Arith.subst -> context -> context
+val apply_tp : Arith.subst -> tp -> tp                (* [sigma]A *)
+val apply_exp : Arith.subst -> exp -> exp             (* [sigma]P *)
+val apply_chan_tp : Arith.subst -> chan_tp -> chan_tp (* [sigma](x:A) *)
+val apply_context : Arith.subst -> context -> context (* [sigma]Delta *)
 
-(* Environment Lookup *)
+(* Environment lookup *)
 val lookup_tp : env -> tpname -> (Arith.ctx * Arith.prop * tp) option
 val lookup_expdec : env -> expname -> (Arith.ctx * Arith.prop * (context * pot * chan_tp)) option
 val lookup_expdef : env -> expname -> (Arith.ctx * (chan list * exp * chan)) option
@@ -110,8 +110,8 @@ val lookup_expdef : env -> expname -> (Arith.ctx * (chan list * exp * chan)) opt
 val lookup_choice : choices -> label -> tp option
 val lookup_branch : branches -> label -> exp option
 
-(* Definitions and Declarations *)
-val expd_tp : env -> tpname * Arith.arith list -> tp  (* must exist, by some invariant *)
+(* Definitions and declarations *)
+val expd_tp : env -> tpname * Arith.arith list -> tp  (* must exist *)
 val expd_expdec : env -> expname * Arith.arith list -> (Arith.prop * (context * pot * chan_tp)) option
 val expd_expdef : env -> expname * Arith.arith list -> exp option
 
@@ -377,6 +377,10 @@ and strip_exts_branches nil = nil
 (* Printing *)
 (************)
 
+(* these are intended for internal printing/debugging
+ * for other functions, see pprint.sml
+ *)
+
 structure Print =
 struct
 
@@ -402,8 +406,8 @@ fun pp_prop phi = "{" ^ RP.pp_prop phi ^ "}"
 fun pp_tp (One) = "1"
   | pp_tp (Plus(choice)) = "+{" ^ pp_choice choice ^ "}"
   | pp_tp (With(choice)) = "&{" ^ pp_choice choice ^ "}"
-  | pp_tp (Tensor(A,B)) = pp_tp A ^ " * " ^ pp_tp B
-  | pp_tp (Lolli(A,B)) = pp_tp A ^ " -o " ^ pp_tp B
+  | pp_tp (Tensor(A,B)) = pp_tp_paren A ^ " * " ^ pp_tp B
+  | pp_tp (Lolli(A,B)) = pp_tp_paren A ^ " -o " ^ pp_tp B
   | pp_tp (Next(t,A)) = "(" ^ pp_time t ^ ")" ^ pp_tp A
   | pp_tp (Box(A)) = "[]" ^ pp_tp A
   | pp_tp (Dia(A)) = "<>" ^ pp_tp A
@@ -418,6 +422,9 @@ and pp_choice nil = ""
   | pp_choice ((l,A)::nil) = l ^ " : " ^ pp_tp A
   | pp_choice ((l,A)::choices) =
     l ^ " : " ^ pp_tp A ^ ", " ^ pp_choice choices
+and pp_tp_paren (A as One) = pp_tp A
+  | pp_tp_paren (A as TpName _) = pp_tp A
+  | pp_tp_paren A = "(" ^ pp_tp A ^ ")"
 
 fun pp_chanlist [] = ""
   | pp_chanlist [x] = x
@@ -456,7 +463,6 @@ fun pp_chan_tp (x,A) = "(" ^ x ^ " : " ^ pp_tp A ^ ")"
 fun pp_context nil = "."
   | pp_context [xA] = pp_chan_tp xA
   | pp_context (xA::D) = pp_chan_tp xA ^ " " ^ pp_context D
-
 
 fun pp_decl (TpDef(a,vs,R.True,A,_)) = "type " ^ a ^ pp_vars vs ^ " = " ^ pp_tp A
   | pp_decl (TpDef(a,vs,con,A,_)) = "type " ^ a ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A

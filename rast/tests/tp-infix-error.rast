@@ -1,0 +1,10 @@
+#test error
+
+type t1 = t1 * t1 * t1
+type t2 = (t2 -o t2) * t2
+type t3 = t3 * t3 -o t3
+type t4 = t4 -o t4 * t4
+type t5 = (t5 * t5) * t5
+type t6 = t6 -o t6 -o t6
+type t7{k} = !n. t7{n} -o t7{n}
+type t8{k} = (!n. t7{n}) -o t8{n}

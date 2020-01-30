@@ -1,4 +1,7 @@
 (* Pretty Printing *)
+(* Authors: Frank Pfenning <fp@cs.cmu.edu>
+ *          Ankush Das <ankushd@cs.cmu.edu>
+ *)
 
 (*
  * Client code should only use this printing
@@ -55,13 +58,13 @@ structure P = A.Print
 (* Externalizing types *)
 (***********************)
 
-fun is_internal a = String.sub (a,0) = #"%"
-
 (* In order to have a reasonable type equality algorithm, types
  * only have one layer of constructors followed by a type name
  * internal type names (starting with '%') are expanded and
- * external type names (all others) are kept
+ * external type names (all others) are kept for printing purposes.
  *)
+fun is_internal a = String.sub (a,0) = #"%"
+
 (* ext_tp env A = A_ext, in external form *)
 fun ext_tp env (A.One) = A.One
   | ext_tp env (A.Plus(choices)) = A.Plus(ext_choices env choices)
@@ -90,12 +93,22 @@ and ext_choices env nil = nil
 (* Abbreviations *)
 (*****************)
 
-(* abbreviations are used for improved error messages *)
+(* Abbreviations are a heuristic to improve error messages
+ *
+ * In places where defined types a{vs} = A are expanded
+ * from a{es} to [es/vs]A, we register a{es} as the short
+ * form of [es/vs]A.  Before printing for error messages,
+ * for example, we see if the current type has a short form
+ * that will be much easier to understand by the user.
+ *)
+
 structure Abbrev =
 struct
-  (* abbrev_table is a pair (short, long) of types, intended
+  (*
+   * abbrev_table is a pair (short, long) of types, intended
    * for looking up long forms (using built-in polymorphic equality)
-   * in order to print the short form of a type *)
+   * in order to print the short form of a type
+   *)
   val abbrev_table : ((A.tp * A.tp) list) ref = ref nil
 
   fun reset () = abbrev_table := nil
@@ -119,7 +132,7 @@ end (* struct abbrev *)
 (* Arithmetic expressions *)
 (**************************)
               
-(* Uses precedence
+(* Uses operator precedence
  * prec('+','-') = 7 prec('*') = 8, prec('-') = 9 (for unary minus)
  *)
 fun parens prec_left prec s =
@@ -150,7 +163,7 @@ fun pp_arith e = pp_arith_prec 6 e
 (****************)
 
 (* omit parenthesis for /\ and \/ and right-associative => *)
-(* precedence: ~ > /\,\/,=> *)
+(* precedence: ~  >  /\  >  \/  >  => *)
 
 datatype opr = Or | And | Implies | Not | None
 
@@ -216,6 +229,20 @@ fun spaces n =
 
 fun len s = String.size s
 
+(* We have two infix operators, A * B and A -o B,
+ * both right associative and of the same precedence
+ *)
+fun is_infix A = case A of
+     A.Tensor _ => true | A.Lolli _ => true
+  | _ => false
+
+fun is_prefix A = case A of
+    A.Next _ => true | A.Box _ => true | A.Dia _ => true
+  | A.GetPot _ => true | A.PayPot _ => true
+  | A.Exists _ => true | A.Forall _ => true
+  | A.ExistsNat _ => true | A.ForallNat _ => true
+  | _ => false
+
 (* pp_tp i A = "A", where i is the indentation after a newline
  * A must be externalized, or internal name '%n' will be printed
  *)
@@ -223,16 +250,16 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.Plus(choice)) = "+{ " ^ pp_choice (i+3) choice ^ " }"
   | pp_tp i (A.With(choice)) = "&{ " ^ pp_choice (i+3) choice ^ " }"
   | pp_tp i (A.Tensor(A,B)) =
-      let val astr = pp_tp i A ^ " * "
+      let val astr = pp_tp_paren (is_infix A orelse is_prefix A) i A ^ " * "
           val l = len (astr)
       in
-      astr ^ pp_tp (i+l) B
+          astr ^ pp_tp (i+l) B
       end
   | pp_tp i (A.Lolli(A,B)) =
-      let val astr = pp_tp i A ^ " -o "
+      let val astr = pp_tp_paren (is_infix A orelse is_prefix A) i A ^ " -o "
           val l = len (astr)
       in
-      astr ^ pp_tp (i+l) B
+          astr ^ pp_tp (i+l) B
       end
   | pp_tp i (A.Next(t,A)) = "(" ^ pp_time t ^ ") " ^ pp_tp (i+len(pp_time t)+3) A
   | pp_tp i (A.Box(A)) = "[]" ^ pp_tp (i+2) A
@@ -246,6 +273,8 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.TpName(a,l)) = a ^ pp_idx l
 and pp_tp_indent i A = spaces i ^ pp_tp i A
 and pp_tp_after i s A = s ^ pp_tp (i+len(s)) A
+and pp_tp_paren true i A = "(" ^ pp_tp i A ^ ")"
+  | pp_tp_paren false i A = pp_tp i A
 
 and pp_choice i nil = ""
   | pp_choice i ((l,A)::nil) =
