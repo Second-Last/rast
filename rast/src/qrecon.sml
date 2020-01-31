@@ -16,7 +16,8 @@ structure A = Ast
 structure PP = PPrint
 structure C = Constraints
 structure E = TpError
-structure TC = TypeCheck
+structure TU = TypeUtil
+structure TCU = TypeCheckUtil
 val ERROR = ErrorMsg.ERROR
 
 (* skipping over non-structural types, stopping at quantifiers or
@@ -26,7 +27,7 @@ fun skip env (A.PayPot(_,A')) = skip env A'
   | skip env (A.Next(_,A')) = skip env A'
   | skip env (A.Dia(A')) = skip env A'
   | skip env (A.Box(A')) = skip env A'
-  | skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
+  | skip env (A as A.TpName(a,es)) = skip env (TU.expd env A)
   | skip env A = A
 
 fun skipQ env A = case skip env A
@@ -41,7 +42,7 @@ fun skipQ env A = case skip env A
 (* impossL_assumes env x A = assume x {phi1} ; assume x {phi2} ; ... impossible *)
 (* depending on whether A contains Exists(phi, A') *)
 fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env x A)
-  | impossL_assumes env x (A as A.TpName(a,es)) = impossL_assumes env x (TC.expd env A)
+  | impossL_assumes env x (A as A.TpName(a,es)) = impossL_assumes env x (TU.expd env A)
   | impossL_assumes env x A = A.Imposs
 
 (* impossL_branch env (l,A) l_opt = impossL_assumes env x A
@@ -52,14 +53,14 @@ fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env
 fun impossL_branch env (x,(l,A.Exists(phi,A'))) l_opt ext' =
     (l, NONE, impossL_assumes env x (A.Exists(phi,A')))
   | impossL_branch env (x,(l,A as A.TpName(a,es))) l_opt ext' =
-    impossL_branch env (x,(l,TC.expd env A)) l_opt ext'
+    impossL_branch env (x,(l,TU.expd env A)) l_opt ext'
   | impossL_branch env (x,(l,A)) NONE ext' = E.error_label_missing_branch (l,ext')
   | impossL_branch env (x,(l,A)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
 
 (* impossR_assumes env x A = assume x {phi1} ; assume x {phi2} ; ... impossible *)
 (* depending on whether A contains Forall(phi, A') *)
 fun impossR_assumes env x (A.Forall(phi,C)) = A.Assume(x,phi,impossR_assumes env x C)
-  | impossR_assumes env x (A as A.TpName(a,es)) = impossR_assumes env x (TC.expd env A)
+  | impossR_assumes env x (A as A.TpName(a,es)) = impossR_assumes env x (TU.expd env A)
   | impossR_assumes env x C = A.Imposs
 
 (* impossR_branch env (l,A) = ImpossR(phi)
@@ -75,7 +76,7 @@ fun impossR_branch env (z,(l,A.Forall(phi,C'))) l' ext' =
       else (l, NONE, A.AssumeR(phi,Imposs))
      *)
   | impossR_branch env (z,(l,A as A.TpName(a,es))) l' ext' =
-    impossR_branch env (z,(l,TC.expd env A)) l' ext'
+    impossR_branch env (z,(l,TU.expd env A)) l' ext'
   | impossR_branch env (z,(l,C)) NONE ext' = E.error_label_missing_branch (l,ext')
   | impossR_branch env (z,(l,C)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
 
@@ -105,7 +106,7 @@ fun addL_assume env (y,A.Exists(phi,A)) P = A.Assume(y,phi,addL_assume env (y,sk
 
 fun addLs_assert env D nil P = P
   | addLs_assert env D (x::xs) P =
-    addLs_assert env D xs (addL_assert env (x, TC.lookup_context env x D NONE) P)
+    addLs_assert env D xs (addL_assert env (x, TCU.lookup_context env x D NONE) P)
 
 fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
     addLs_assert env D xs PQ
@@ -142,11 +143,11 @@ and recon_assumeL env D (x,A) P (z,C) ext =
 and recon' env D (P as A.Id(z',y)) (z,C) ext =
     (* about to terminate, add asserts if needed *)
     let val P'  = addR_assert env P (z,skip env C)
-        val P'' = addL_assert env (y, skip env (TC.lookup_context env y D ext)) P'
+        val P'' = addL_assert env (y, skip env (TCU.lookup_context env y D ext)) P'
     in P'' end
   | recon' env D (A.Spawn(P,Q)) (z,C) ext =
     (* D' is the context after the spawn, used to recon tail Q *)
-    let val D' = TC.syn_call env D P ext
+    let val D' = TCU.syn_call env D P ext
         val Q' = recon env D' Q (z,C) ext
 
         (* add_call adds pending asserts on the channel being used in the spawn *)
@@ -163,51 +164,51 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
   (* finally, add pending asserts on the channel being communicated, if necessary *)
   | recon' env D (A.Lab(x,k,P)) (z,C) ext =
     if x = z
-    then let val P' = recon_assumeR env D P (TC.syn_altR env (z,skipQ env C) k) ext
+    then let val P' = recon_assumeR env D P (TCU.syn_altR env (z,skipQ env C) k) ext
              val P'' = addR_assert env (A.Lab(x, k, P')) (z,skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_altL env (TC.update_tp (x,skipQ env A) D) x k
-             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_altL env (TCU.update_tp (x,skipQ env A) D) x k
+             val P' = recon_assumeL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_assert env (x,skip env A) (A.Lab(x,k,P'))
          in P'' end
 
   | recon' env D (A.Case(x,branches)) (z,C) ext =
     if x = z
-    then let val branches' = recon_branchesR env D branches (TC.syn_branchesR env (z,skipQ env C)) ext
+    then let val branches' = recon_branchesR env D branches (TCU.syn_branchesR env (z,skipQ env C)) ext
              val P'' = addR_assert env (A.Case(x, branches')) (z, skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val choices' = TC.syn_branchesL env (TC.update_tp (x,skipQ env A) D) x
+    else let val A = TCU.lookup_context env x D ext
+             val choices' = TCU.syn_branchesL env (TCU.update_tp (x,skipQ env A) D) x
              val branches' = recon_branchesL env D choices' branches (z,C) ext
              val P'' = addL_assert env (x,skip env A) (A.Case(x,branches'))
          in P'' end
 
   | recon' env D (A.Send(x,y,P)) (z,C) ext =
     if x = z
-    then let val B = TC.lookup_context env y D ext
-             val P' = recon_assumeR env (TC.remove_chan y D ext) P (TC.syn_sendR env (z,skipQ env C)) ext
+    then let val B = TCU.lookup_context env y D ext
+             val P' = recon_assumeR env (TCU.remove_chan y D ext) P (TCU.syn_sendR env (z,skipQ env C)) ext
              val P'' = addR_assert env (A.Send(x,y,P')) (z,skip env C)
              val P''' = addL_assert env (y,skip env B) P''
          in P''' end
-    else let val A = TC.lookup_context env x D ext
-             val B = TC.lookup_context env y D ext
-             val D' = TC.remove_chan y (TC.syn_sendL env (TC.update_tp (x,skipQ env A) D) x) ext
-             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val B = TCU.lookup_context env y D ext
+             val D' = TCU.remove_chan y (TCU.syn_sendL env (TCU.update_tp (x,skipQ env A) D) x) ext
+             val P' = recon_assumeL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_assert env (x,skip env A) (A.Send(x,y,P'))
              val P''' = addL_assert env (y,skip env B) P''
          in P''' end
 
   | recon' env D (A.Recv(x,y,P)) (z,C) ext =
     if x = z
-    then let val D' = TC.syn_recvR1 env D (z,skipQ env C) y
-             val P' = recon_assumeR env D' P (TC.syn_recvR2 env (z,skipQ env C)) ext
+    then let val D' = TCU.syn_recvR1 env D (z,skipQ env C) y
+             val P' = recon_assumeR env D' P (TCU.syn_recvR2 env (z,skipQ env C)) ext
              val P'' = P'
              val P''' = addR_assert env (A.Recv(x,y,P'')) (z,skip env C)
          in P''' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_recvL env (TC.update_tp (x,skipQ env A) D) x y
-             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_recvL env (TCU.update_tp (x,skipQ env A) D) x y
+             val P' = recon_assumeL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = P'
              val P''' = addL_assert env (x,skip env A) (A.Recv(x,y,P''))
          in P''' end
@@ -216,32 +217,32 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
     addR_assert env P (z,skip env C)
 
   | recon' env D (A.Wait(x,P)) (z,C) ext = (* x <> z *)
-    let val A = TC.lookup_context env x D ext
-        val D' = TC.syn_waitL env (TC.update_tp (x,skipQ env A) D) x
+    let val A = TCU.lookup_context env x D ext
+        val D' = TCU.syn_waitL env (TCU.update_tp (x,skipQ env A) D) x
         val P' = recon env D' P (z,C) ext
         val P'' = addL_assert env (x,skip env A) (A.Wait(x,P'))
     in P'' end
 
   | recon' env D (A.SendNat(x,e,P)) (z,C) ext =
     if x = z
-    then let val P' = recon_assumeR env D P (TC.syn_sendNatR env e (z, skipQ env C)) ext
+    then let val P' = recon_assumeR env D P (TCU.syn_sendNatR env e (z, skipQ env C)) ext
              val P'' = addR_assert env (A.SendNat(x,e,P')) (z, skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_sendNatL env (TC.update_tp (x, skipQ env A) D) e x
-             val P' = recon_assumeL env D' (x, TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_sendNatL env (TCU.update_tp (x, skipQ env A) D) e x
+             val P' = recon_assumeL env D' (x, TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_assert env (x,skip env A) (A.SendNat(x,e,P'))
          in P'' end
 
   | recon' env D (A.RecvNat(x,v,P)) (z,C) ext =
     if x = z
     then let val D' = D (* v goes into index variable context, which we don't track *)
-             val P' = recon_assumeR env D' P (TC.syn_recvNatR env v (z, skipQ env C)) ext
+             val P' = recon_assumeR env D' P (TCU.syn_recvNatR env v (z, skipQ env C)) ext
              val P'' = addR_assert env (A.RecvNat(x,v,P')) (x, skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_recvNatL env (TC.update_tp (x, skipQ env A) D) x v
-             val P' = recon_assumeL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_recvNatL env (TCU.update_tp (x, skipQ env A) D) x v
+             val P' = recon_assumeL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_assert env (x,skip env A) (A.RecvNat(x,v,P'))
          in P'' end
 
@@ -264,7 +265,7 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
 and recon_branchesL env D (x,nil) nil (z,C) ext = nil
   | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) (z,C) ext =
     if l = l'
-    then (l',ext',recon_assumeL env (TC.update_tp (x,A) D) (x,A) P (z,C) ext)
+    then (l',ext',recon_assumeL env (TCU.update_tp (x,A) D) (x,A) P (z,C) ext)
          ::(recon_branchesL env D (x,choices) branches (z,C) ext)
     else (impossL_branch env (x,(l,A)) (SOME(l')) ext')
          ::(recon_branchesL env D (x,choices) ((l',ext',P)::branches) (z,C) ext)

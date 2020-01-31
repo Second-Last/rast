@@ -24,14 +24,15 @@ structure A = Ast
 structure PP = PPrint
 structure C = Constraints
 structure E = TpError
-structure TC = TypeCheck
+structure TU = TypeUtil
+structure TCU = TypeCheckUtil
 val ERROR = ErrorMsg.ERROR
 
 (* skip temporal operations; quantifiers are considered structural here *)
 fun skip env (A.Next(_,A')) = skip env A'
   | skip env (A.Dia(A')) = skip env A'
   | skip env (A.Box(A')) = skip env A'
-  | skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
+  | skip env (A as A.TpName(a,es)) = skip env (TU.expd env A)
   | skip env A = A
 
 fun skipW env A =
@@ -55,7 +56,7 @@ fun addL_get env (y,A.PayPot(p,A)) P = A.Get(y,p,addL_get env (y,skip env A) P)
 
 fun addLs_pay env D nil P = P
   | addLs_pay env D (x::xs) P =
-    addLs_pay env D xs (addL_pay env (x, TC.lookup_context env x D NONE) P)
+    addLs_pay env D xs (addL_pay env (x, TCU.lookup_context env x D NONE) P)
 
 fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
     addLs_pay env D xs PQ
@@ -88,10 +89,10 @@ and recon_getL env D (x,A) P (z,C) ext =
 (* judgmental constructs: id, cut, spawn, call *)
 and recon' env D (P as A.Id(z',y)) (z,C) ext =
     let val P' = addR_pay env P (z,skip env C)
-        val P'' = addL_pay env (y,skip env (TC.lookup_context env y D ext)) P'
+        val P'' = addL_pay env (y,skip env (TCU.lookup_context env y D ext)) P'
     in P'' end
   | recon' env D (A.Spawn(P,Q)) (z,C) ext =
-    let val D' = TC.syn_call env D P ext
+    let val D' = TCU.syn_call env D P ext
         val Q' = recon env D' Q (z,C) ext
         val PQ' = add_call env D (A.Spawn(P,Q'))
     in PQ' end
@@ -102,60 +103,60 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
   (* follows the same strategy as proof constraints *)
   | recon' env D (A.Lab(x,k,P)) (z,C) ext =
     if x = z
-    then let val P' = recon_getR env D P (TC.syn_altR env (z,skipW env C) k) ext
+    then let val P' = recon_getR env D P (TCU.syn_altR env (z,skipW env C) k) ext
              val P'' = addR_pay env (A.Lab(x, k, P')) (z,skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_altL env (TC.update_tp (x,skipW env A) D) x k
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_altL env (TCU.update_tp (x,skipW env A) D) x k
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Lab(x,k,P'))
          in P'' end
 
   | recon' env D (A.Case(x,branches)) (z,C) ext =
     if x = z
-    then let val branches' = recon_branchesR env D branches (TC.syn_branchesR env (z,skipW env C)) ext
+    then let val branches' = recon_branchesR env D branches (TCU.syn_branchesR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Case(x, branches')) (z, skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val choices' = TC.syn_branchesL env (TC.update_tp (x,skipW env A) D) x
+    else let val A = TCU.lookup_context env x D ext
+             val choices' = TCU.syn_branchesL env (TCU.update_tp (x,skipW env A) D) x
              val branches' = recon_branchesL env D choices' branches (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Case(x,branches'))
          in P'' end
 
   | recon' env D (A.Send(x,y,P)) (z,C) ext =
     if x = z
-    then let val B = TC.lookup_context env y D ext
-             val P' = recon_getR env (TC.remove_chan y D ext) P (TC.syn_sendR env (z,skipW env C)) ext
+    then let val B = TCU.lookup_context env y D ext
+             val P' = recon_getR env (TCU.remove_chan y D ext) P (TCU.syn_sendR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Send(x,y,P')) (z,skip env C)
              val P''' = addL_pay env (y,skip env B) P''
          in P''' end
-    else let val A = TC.lookup_context env x D ext
-             val B = TC.lookup_context env y D ext
-             val D' = TC.remove_chan y (TC.syn_sendL env (TC.update_tp (x,skipW env A) D) x) ext
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val B = TCU.lookup_context env y D ext
+             val D' = TCU.remove_chan y (TCU.syn_sendL env (TCU.update_tp (x,skipW env A) D) x) ext
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Send(x,y,P'))
              val P''' = addL_pay env (y,skip env B) P''
          in P''' end
 
   | recon' env D (A.Recv(x,y,P)) (z,C) ext =
     if x = z
-    then let val D' = TC.syn_recvR1 env D (z,skipW env C) y
-             val P' = recon_getR env D' P (TC.syn_recvR2 env (z,skipW env C)) ext
-             val P'' = P' (* recon_assumeL env D' (y,TC.lookup_context env y D' ext) P' (z,C) ext *)
+    then let val D' = TCU.syn_recvR1 env D (z,skipW env C) y
+             val P' = recon_getR env D' P (TCU.syn_recvR2 env (z,skipW env C)) ext
+             val P'' = P' (* recon_assumeL env D' (y,TCU.lookup_context env y D' ext) P' (z,C) ext *)
              val P''' = addR_pay env (A.Recv(x,y,P'')) (z,skip env C)
          in P''' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_recvL env (TC.update_tp (x,skipW env A) D) x y
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
-             val P'' = P' (* recon_assumeL env D' (y,TC.lookup_context env y D' ext) P' (z,C) ext *)
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_recvL env (TCU.update_tp (x,skipW env A) D) x y
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
+             val P'' = P' (* recon_assumeL env D' (y,TCU.lookup_context env y D' ext) P' (z,C) ext *)
              val P''' = addL_pay env (x,skip env A) (A.Recv(x,y,P''))
          in P''' end
 
   | recon' env D (P as A.Close(x)) (z,C) ext = (* x = z *)
     addR_pay env P (z,skip env C)
   | recon' env D (A.Wait(x,P)) (z,C) ext = (* x <> z *)
-    let val A = TC.lookup_context env x D ext
-        val D' = TC.syn_waitL env (TC.update_tp (x,skipW env A) D) x
+    let val A = TCU.lookup_context env x D ext
+        val D' = TCU.syn_waitL env (TCU.update_tp (x,skipW env A) D) x
         val P' = recon env D' P (z,C) ext
         val P'' = addL_pay env (x,skip env A) (A.Wait(x,P'))
     in P'' end
@@ -163,45 +164,45 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
   (* quantifiers *)
   | recon' env D (A.Assert(x,phi,P)) (z,C) ext =
     if x = z
-    then let val P' = recon_getR env D P (TC.syn_assertR env (z,skipW env C)) ext
+    then let val P' = recon_getR env D P (TCU.syn_assertR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Assert(x, phi, P')) (z,skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_assertL env (TC.update_tp (x,skipW env A) D) x
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_assertL env (TCU.update_tp (x,skipW env A) D) x
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Assert(x,phi,P'))
          in P'' end
   | recon' env D (A.Assume(x,phi, P)) (z,C) ext =
     if x = z
-    then let val P' = recon_getR env D P (TC.syn_assumeR env (z,skipW env C)) ext
+    then let val P' = recon_getR env D P (TCU.syn_assumeR env (z,skipW env C)) ext
              val P'' = addR_pay env (A.Assume(x,phi,P')) (z,skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_assumeL env (TC.update_tp (x,skipW env A) D) x
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_assumeL env (TCU.update_tp (x,skipW env A) D) x
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.Assume(x,phi,P'))
          in P'' end
 
   | recon' env D (A.SendNat(x,e,P)) (z,C) ext =
     if x = z
-    then let val P' = recon_getR env D P (TC.syn_sendNatR env e (z, skipW env C)) ext
+    then let val P' = recon_getR env D P (TCU.syn_sendNatR env e (z, skipW env C)) ext
              val P'' = addR_pay env (A.SendNat(x,e,P')) (z,skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_sendNatL env (TC.update_tp (x, skipW env A) D) e x
-             val P' = recon_getL env D' (x, TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_sendNatL env (TCU.update_tp (x, skipW env A) D) e x
+             val P' = recon_getL env D' (x, TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.SendNat(x,e,P'))
          in P'' end
 
   | recon' env D (A.RecvNat(x,v,P)) (z,C) ext =
     if x = z
     then let val D' = D (* v goes into index variable context, which we don't track *)
-             val P' = recon_getR env D' P (TC.syn_recvNatR env v (z, skipW env C)) ext
+             val P' = recon_getR env D' P (TCU.syn_recvNatR env v (z, skipW env C)) ext
              val P'' = addR_pay env (A.RecvNat(x,v,P')) (x, skip env C)
          in P'' end
-    else let val A = TC.lookup_context env x D ext
-             val D' = TC.syn_recvNatL env (TC.update_tp (x, skipW env A) D) x v
-             val P' = recon_getL env D' (x,TC.lookup_context env x D' ext) P (z,C) ext
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_recvNatL env (TCU.update_tp (x, skipW env A) D) x v
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
              val P'' = addL_pay env (x,skip env A) (A.RecvNat(x,v,P'))
          in P'' end
 
@@ -228,7 +229,7 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
 and recon_branchesL env D (x,nil) nil (z,C) ext = nil
   | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) (z,C) ext =
     (* after quantifer reconstruction, branches must match choices exactly *)
-    (l',ext',recon_getL env (TC.update_tp (x,A) D) (x,A) P (z,C) ext)
+    (l',ext',recon_getL env (TCU.update_tp (x,A) D) (x,A) P (z,C) ext)
     ::(recon_branchesL env D (x,choices) branches (z,C) ext)
 
 and recon_branchesR env D nil (z,nil) ext = nil
@@ -252,7 +253,7 @@ fun last_insert env pot (P as A.Id(x,y)) = A.Work(pot,P)
 fun insert_work env pot (P as A.Id(z,x)) =
     last_insert env pot P
   | insert_work env pot (A.Spawn(P,Q)) =
-    let val potP = TC.syn_pot env P NONE
+    let val potP = TCU.syn_pot env P NONE
         val potQ = R.minus(pot,potP)
     in A.Spawn(P, insert_work env potQ Q) end
   | insert_work env pot (P as A.ExpName(x,f,es,xs)) =

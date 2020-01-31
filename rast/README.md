@@ -94,7 +94,7 @@ so with `--syntax=implicit` we must have `--time=none`
 ## Grammar 
 
 In arithmetic expressions, operator precedence is as follows, where
-unary minus `-` has highest precedent
+unary minus `-` has highest precedence
 
 ```text
 '*' > '+' '-' > '=' '<' '<=' '=' '<>' '>=' '>' > '~' > '/\' > '\/' > '=>'
@@ -104,7 +104,12 @@ Left associative are `*` `+` `-`
 
 Right associative are `/\` `\/` `=>`
 
-Not associative are `<` `<=` `=` `>=` `>`
+Not associative are `<` `<=` `=` `<>` `>=` `>`
+
+In types, we have infix operators `*` (tensor) and `-o` (lolli)
+which are both right associative and have the same precedence,
+which is higher than the all prefix operators (`()` `[]` `<>`
+`|>` `<|` `?{..}.` `!{..}.` `?v.` `!v.`)
 
 Note: the order of branches must match the order of the alternatives
 in the external or internal choice type
@@ -119,7 +124,7 @@ in the external or internal choice type
 ### Syntax
 
 ```text
-<id_start> = [a-zA-Z_$?!']
+<id_start> = [a-zA-Z_$']
 <id> = <id_start> (<id_start> | [0-9])*
 <nat> = ([0-9])*
 <unop> = -
@@ -196,7 +201,7 @@ in the external or internal choice type
            | { <var> } <var_seq>
            | { <var> | <prop> } <var_seq>
 
-<ctx> ::= . | ( <id> : <type> ) <ctx>
+<ctx> ::= . | ( <id> : <type> )+
 
 <decl> ::= type <id> <var_seq> = <type>
          | eqtype <id> <idx_seq> = <id> <idx_seq>

@@ -1,4 +1,5 @@
 (* Type Errors *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
 (* Shared between various reconstruction and checking modules
  * Each function raises exception ErrorMsg.Error
  *)

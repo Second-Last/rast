@@ -29,6 +29,10 @@ local
     constraints.sml
 
     tperror.sml
+    tp-util.sml
+    tp-valid.sml
+    tp-eq.sml
+    tc-util.sml
     typecheck.sml
 
     recon-sig.sml

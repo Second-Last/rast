@@ -16,11 +16,12 @@ struct
 structure A = Ast
 structure PP = PPrint
 structure E = TpError
-structure TC = TypeCheck
+structure TU = TypeUtil
+structure TCU = TypeCheckUtil
 val ERROR = ErrorMsg.ERROR
 
 (* skipping over non-structural types, stopping at structural types *)
-fun skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
+fun skip env (A as A.TpName(a,es)) = skip env (TU.expd env A)
   | skip env (A.Exists(_,A')) = skip env A'
   | skip env (A.Forall(_,A')) = skip env A'
   | skip env (A.PayPot(_,A')) = skip env A'
@@ -30,7 +31,7 @@ fun skip env (A as A.TpName(a,es)) = skip env (TC.expd env A)
   | skip env (A.Box(A')) = skip env A'
   | skip env A = A
 
-fun lookup_skip env x D ext = skip env (TC.lookup_context env x D ext)
+fun lookup_skip env x D ext = skip env (TCU.lookup_context env x D ext)
 
 fun check_declared env (f,es) ext =
     (case A.lookup_expdec env f
@@ -74,7 +75,7 @@ and plusR env D (A.Lab(x,k,P)) (z,C as A.Plus(choices)) ext = (* x = z *)
 
 and withL env D (A as A.With(choices)) (A.Lab(x,k,P)) zC ext =
     (case A.lookup_choice choices k
-      of SOME(Ak) => A.Lab(x,k,recon env (TC.update_tp (x,Ak) D) P zC ext)
+      of SOME(Ak) => A.Lab(x,k,recon env (TCU.update_tp (x,Ak) D) P zC ext)
        | NONE => E.error_label_invalid env (k, A, ext))
   | withL env D A (A.Lab(x,k,P)) zC ext =
     error_mismatch env x A ("&{" ^ k ^ ":_, ...}") ext
@@ -107,7 +108,7 @@ and plusL env D (A.Plus(choices)) (A.Case(x,branches)) zC ext = (* z <> x *)
 and recon_branchesL env D (x,nil) nil zC ext = nil
   | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) zC ext =
     if l = l'
-    then (l',ext',recon env (TC.update_tp (x,A) D) P zC ext)::(recon_branchesL env D (x,choices) branches zC ext)
+    then (l',ext',recon env (TCU.update_tp (x,A) D) P zC ext)::(recon_branchesL env D (x,choices) branches zC ext)
     else recon_branchesL env D (x,choices) ((l',ext',P)::branches) zC ext (* alternative l missing; ignore *)
   | recon_branchesL env D (x,(l,A)::choices) nil zC ext = (* alternative l missing; ignore *)
     recon_branchesL env D (x,choices) nil zC ext
@@ -117,12 +118,12 @@ and recon_branchesL env D (x,nil) nil zC ext = nil
 
 and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
     (* do not check type equality here, just remove w *)
-    A.Send(x,w,recon env (TC.remove_chan w D ext) P (z,B) ext)
+    A.Send(x,w,recon env (TCU.remove_chan w D ext) P (z,B) ext)
   | tensorR env D (A.Send(x,w,P)) (z,C) ext =
     error_mismatch env x C "(_ * _)" ext
 
 and lolliL env D (A.Lolli(A,B)) (A.Send(x,w,P)) zC ext = (* x <> z *)
-    A.Send(x,w,recon env (TC.update_tp (x,B) (TC.remove_chan w D ext)) P zC ext)
+    A.Send(x,w,recon env (TCU.update_tp (x,B) (TCU.remove_chan w D ext)) P zC ext)
   | lolliL env D A (A.Send(x,w,P)) zC ext =
     error_mismatch env x A "(_ -o _)" ext
 
@@ -132,7 +133,7 @@ and lolliR env D (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext = (* x = z *)
     error_mismatch env x C "(_ -o _)" ext
 
 and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
-    A.Recv(x,y,recon env ((y,A)::TC.update_tp (x,B) D) P zC ext) (* check if y is fresh here? *)
+    A.Recv(x,y,recon env ((y,A)::TCU.update_tp (x,B) D) P zC ext) (* check if y is fresh here? *)
   | tensorL env D A (A.Recv(x,y,P)) zC ext =
     error_mismatch env x A "(_ * _)" ext
 
@@ -145,7 +146,7 @@ and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
     error_mismatch env x C "1" ext
 
 and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
-    A.Wait(x,recon env (TC.remove_chan x D ext) P zC ext)
+    A.Wait(x,recon env (TCU.remove_chan x D ext) P zC ext)
   | oneL env D A (A.Wait(x,P)) zC ext =
     error_mismatch env x A "1" ext
 
@@ -154,7 +155,7 @@ and existsNatR env D (A.SendNat(x,e,P)) (z,A.ExistsNat(v,C)) ext =
   | existsNatR env D (A.SendNat(x,e,P)) (z,C) ext =
     error_mismatch env x C "?v._" ext
 and forallNatL env D (A.ForallNat(v,A)) (A.SendNat(x,e,P)) zC ext = (* Q: any reason to substitute here? *)
-    A.SendNat(x,e,recon env (TC.update_tp (x,A) D) P zC ext)
+    A.SendNat(x,e,recon env (TCU.update_tp (x,A) D) P zC ext)
   | forallNatL env D A (A.SendNat(x,e,P)) zC ext =
     error_mismatch env x A "!v._" ext
 and forallNatR env D (A.RecvNat(x,v,P)) (z,A.ForallNat(v',C)) ext = (* Q: any reason to alpha-convert here? *)
@@ -162,7 +163,7 @@ and forallNatR env D (A.RecvNat(x,v,P)) (z,A.ForallNat(v',C)) ext = (* Q: any re
   | forallNatR env D (A.RecvNat(x,v,P)) (z,C) ext =
     error_mismatch env x C "!v._" ext
 and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any reason to alpha-convert here? *)
-    A.RecvNat(x,v,recon env (TC.update_tp (x,A) D) P zC ext)
+    A.RecvNat(x,v,recon env (TCU.update_tp (x,A) D) P zC ext)
   | existsNatL env D A (A.RecvNat(x,v,P)) zC ext =
     error_mismatch env x A "?v._" ext
 
@@ -176,20 +177,20 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
                  else ERROR ext ("channel mismatch in forward:\n"
                                  ^ "expected " ^ z ^ "\n"
                                  ^ "found    " ^ x)
-        val D' = TC.remove_chan y D ext
+        val D' = TCU.remove_chan y D ext
         val () = case D'
                   of nil => ()
                    | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " at forward")
     in P end
   | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) zC ext =
-    let val D' = TC.syn_call env D P ext
+    let val D' = TCU.syn_call env D P ext
     in A.Spawn(P, recon env D' Q zC ext) end
   | recon' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
     let val () = if x = z then ()
                  else ERROR ext ("channel mismatch in tail call:\n"
                                  ^ "expected " ^ z ^ "\n"
                                  ^ "found    " ^ x)
-        val D' = TC.remove_chans xs D ext
+        val D' = TCU.remove_chans xs D ext
         val () = case D'
                   of nil => ()
                    | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " at tail call")

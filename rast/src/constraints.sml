@@ -14,7 +14,7 @@ signature CONSTRAINTS =
 sig
     (* judgments *)
     val entails : Arith.ctx -> Arith.prop -> Arith.prop -> bool
-    val hardentails : Arith.ctx -> Arith.prop -> Arith.prop -> bool
+    val hardentails : Arith.ctx -> Arith.prop -> Arith.prop -> bool (* currently unused *)
     val equiv : Arith.ctx -> Arith.prop -> Arith.prop -> Arith.prop -> bool
     val contradictory : Arith.ctx -> Arith.prop -> Arith.prop -> bool
 
