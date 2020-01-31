@@ -1,4 +1,9 @@
 (* Evaluation *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
+
+(* A sequential evaluator based on a shared memory semantics
+ * proposed by Pruiksma and Pfenning (2019)
+ *)
 
 signature EVAL =
 sig
@@ -36,27 +41,44 @@ exception DynError
 structure Print =
 struct
 
-fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v  (* k(v) *)
+fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v                  (* k(v) *)
   | pp_value (Send(w,v)) = "(" ^ pp_value w ^ ") ; " ^ pp_value v (* (w,v) *)
-  | pp_value (Close) = "close"  (* () *)
-  | pp_value (SendNat(n,v)) = if !Flags.verbosity >= 2
-                              then "{" ^ Int.toString n ^ "} ; " ^ pp_value v
-                              else pp_value v
-  | pp_value (CloRecv(eta,(x,P),z)) = "-"
-  | pp_value (CloCase(eta,branches,z)) = "-"
-  | pp_value (CloRecvNat(eta,(k,P),z)) = "-"
+  | pp_value (Close) = "close"                                    (* () *)
+  | pp_value (SendNat(n,v)) =
+    if !Flags.verbosity >= 2
+    then "{" ^ Int.toString n ^ "} ; " ^ pp_value v
+    else pp_value v
+  | pp_value (CloRecv(eta,(x,P),z)) = "-"     (* closures not observable *)
+  | pp_value (CloCase(eta,branches,z)) = "-"  (* closures not observable *)
+  | pp_value (CloRecvNat(eta,(k,P),z)) = "-"  (* closures not observable *)
 
 fun pp_eta [] = "."
   | pp_eta ((x,v)::eta) = x ^ " = " ^ pp_value v ^ "\n" ^ pp_eta eta
                                    
 end (* structure Print *)
 
+(*************************)
+(* Environment utilities *)
+(*************************)
+
 fun lookup ((x,v)::eta) y =
     if x = y then v else lookup eta y
+
 fun update ((x,v)::eta) (y,w) =
     if x = y then (y,w)::eta else (x,v)::update eta (y,w)
+
 fun remove ((x,v)::eta) y =
     if x = y then eta else (x,v)::remove eta y
+
+(* split ys ys' eta1_rev eta = (eta1', eta2)
+ * assumes each variable y in ys is defined in eta
+ * generates eta1' = v/y' for every such y
+ * also returns eta2, the remaining binding from eta
+ * eta1_rev is an accumulator argument for eta1'
+ *
+ * This is used for a call x <- f y1...yn where f is defined
+ * with x' <- f y1'...yn' = P
+ *)
 fun split nil nil eta1_rev eta = (List.rev eta1_rev, eta)
   | split (y::ys) (y'::ys') eta1_rev eta =
     let val v = lookup eta y
@@ -73,6 +95,10 @@ fun body env f es =
               val P' = A.apply_exp sigma P
           in (ys', P', x') end )
 
+(* eval env eta P z = v, where v the value of [eta]P
+ * Requires eta : D and z : C where D |- P :: (z : C)
+ * Ensures v : C
+ *)
 fun eval env eta P z = eval' env eta P z
 and eval' env eta (A.Id(x,y)) z = (* x = z *)
     lookup eta y

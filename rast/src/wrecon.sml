@@ -1,5 +1,11 @@
-(* Work Reconstruction
- * applies to implicit syntax, after approximate and
+(* Work Reconstruction *)
+
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
+
+(*
+ * Applies to implicit syntax, after approximate and
  * quantifier reconstruction
  *
  * Fill in pay/get potential and additional work{p} expressions
@@ -13,7 +19,7 @@
  * and for noninvertible types as late as possible.  That is, we
  * get potential as soon as we can and pay as late as we can.
  * Calls provide the main difficult part, since they fix
- * an interface type
+ * an interface type.
  *)
 
 structure WRecon :> RECON =

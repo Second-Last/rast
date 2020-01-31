@@ -1,4 +1,8 @@
 (* Approximate Reconstruction *)
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
+
 (* Applied to implicit syntax, ignoring quantifiers, time, and work
  *
  * Ensures the structural types match so this does not need to

@@ -10,7 +10,7 @@ sig
     val load : Ast.env -> string list -> Ast.env (* Top.load env [<file>,...] = env' *)
     val run : Ast.env -> Ast.decl list -> unit   (* Top.run env decls = (), may raise Eval.DynError *)
 
-    val rast : string -> OS.Process.status         (* Top.lin "<command line arguments>" = status *)
+    val rast : string -> OS.Process.status         (* Top.rast "<command line arguments>" = status *)
     val main : string * string list -> OS.Process.status (* for stand-alone executable *)
 end (* signature TOP *)
 
@@ -71,8 +71,10 @@ val options : option G.opt_descr list =
     ]
 
 val usage_info = G.usageInfo {header = header, options = options}
+
 exception OS_FAILURE
 exception OS_SUCCESS
+
 fun exit_failure msg = ( say msg ; raise OS_FAILURE )
 fun exit_success msg = ( say msg ; raise OS_SUCCESS )
 

@@ -1,4 +1,8 @@
 (* Quantifier Reconstruction *)
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
+
 (* Applies to implicit syntax, after approximate reconstruction
  *
  * Fills in assume, assert, and impossible constructs to match

@@ -12,13 +12,18 @@
 
 signature TYPE_CHECK =
 sig
-    (* check_exp trace env ctx con A pot P C ext = ()
-     * checks that A |- P : C with potential pot
+    (* check_exp trace env ctx con D pot P zC ext = ()
+     * checks that D |- P : (z : C) with potential pot
      * trace = true means print some tracinng information
      * ctx = context of free index variables
-     * con = constraints
+     * con = constraints on index variables
+     * D = context of channels
+     * pot = available potential
+     * P = process expression
+     * zC = (z : C) = provided channel and type
      * ext is approximation of source extent for P, if available
-     * may raise ErrorMsg.Error *)
+     * may raise ErrorMsg.Error
+    *)
     val check_exp : bool -> Ast.env -> Arith.ctx -> Arith.prop
                     -> Ast.context -> Ast.pot -> Ast.exp -> Ast.chan_tp -> Ast.ext -> unit
 
@@ -44,12 +49,10 @@ fun exists_chan x ((y,A)::D) = if x = y then true else exists_chan x D
   | exists_chan x [] = false
 
 fun gen_context env xs D ext = List.map (fn x => (x,TCU.lookup_context env x D ext)) xs
-
                                
 (*************************************)
 (* Type checking process expressions *)
 (*************************************)
-
 
 (* match_contexts env ctx con D D' ext = ()
  * D is typing of channels passed to a process f in call
@@ -94,10 +97,6 @@ fun check_explist_pos ctx con (nil) ext = ()
  * trace = true means to print some tracing information
  *
  * entry point is check_exp'
- *
- * We expand type definitions lazily, based on the direction of
- * interactions.  This is done so tracing (if enabled) or error
- * message are more intelligible.
  *)
 fun check_exp' trace env ctx con D pot P zC ext =
     ( if trace

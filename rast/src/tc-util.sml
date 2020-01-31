@@ -8,8 +8,9 @@ sig
 
     (* operations on approximately typed expressions (see arecon.sml) *)
     (* synthesizing the expected types *)
-    val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context
-    val syn_pot : Ast.env -> Ast.exp -> Ast.ext -> Ast.pot
+    val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context (* may raise ErrorMsg.error *)
+    val syn_pot : Ast.env -> Ast.exp -> Ast.ext -> Ast.pot                     (* may raise ErrorMsg.error *)
+
     val synL : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.context
     val synR : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.chan_tp
 
@@ -124,7 +125,7 @@ fun syn_pot env (P as A.ExpName(x,f,es,xs)) ext =
     syn_pot env (Mark.data marked_P) (Mark.ext marked_P)
   | syn_pot env P ext = ERROR ext ("call must be a process name")
 
-(* synL env (f,es) = A where D |- f : _, approximately *)
+(* synL env (f,es) = D where D |- f : _, approximately *)
 fun synL env (y, f, es, xs) =
     (case A.expd_expdec env (f, es)
       of SOME(con, (D, pot, zC)) => ListPair.mapEq (fn (x,(x',A')) => (x,A')) (xs,D)

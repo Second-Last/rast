@@ -1,5 +1,9 @@
 (* Elaboration *)
 
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
+
 (*
  * Perform validity checks for types, reconstruction, type checking
  * and return an environment with elaborated declarations
@@ -88,32 +92,6 @@ fun wrecon env ctx con A pot P C ext =
         val P = WR.recon env ctx con A pot P C ext
     in P end
 
-(*
-(* time reconstruction: first do quantifier reconstruction *)
-fun trecon env ctx con A pot P C ext =
-    let val P = qrecon env ctx con A pot P C ext
-        val P = Cost.apply_cost_time P
-        val P' = TR.recon env ctx con A pot P C ext 
-        val _ = TRBT.recon env ctx con A pot P C ext (* redundant; to check backtracking reconstruction *)
-    in P' end 
-
-fun tqrecon env ctx con A pot P C ext =
-    let val P = AR.recon env ctx con A pot P C ext 
-        val P = BR.recon env ctx con A pot P C ext (* fill in missing branches *)
-        val P = Cost.apply_cost_time P
-        val P = TQR.recon env ctx con A pot P C ext
-    in
-        P
-    end
-
-fun twrecon env ctx con A pot P C ext =
-    let val P = wrecon env ctx con A pot P C ext
-        val P = Cost.apply_cost_time P
-        val P' = TR.recon env ctx con A pot P C ext
-        val _ = TRBT.recon env ctx con A pot P C ext (* redundant; to check backtracking reconstruction *)
-    in P' end
-*)
-
 (* reconstruct syntax work time A pot P C ext = P'
  * where P' is the reconstructed version of P
  * syntax = explicit: just return P
@@ -125,11 +103,6 @@ fun reconstruct Flags.Explicit _          _          env ctx con A pot P C ext =
   | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = qrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          Flags.None env ctx con A pot P C ext = wrecon env ctx con A pot P C ext
   | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = ERROR ext ("only explicit syntax allowed")
-(*
-  | reconstruct Flags.Implicit Flags.None _          env ctx con A pot P C ext = tqrecon env ctx con A pot P C ext
-  | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = twrecon env ctx con A pot P C ext
-*)
-
 
 (* dups vs = true if there is a duplicate variable in vs *)
 fun dups (nil:R.varname list) = false

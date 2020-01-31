@@ -3,6 +3,20 @@
  *          Frank Pfenning <fp@cs.cmu.edu>
  *)
 
+(*
+ * Checking validity of types
+ *
+ * Besides being closed with respect to index variables
+ * this comes in two forms: for explicit syntax and for
+ * implicit syntax.  In explicit syntax, we need to make sure
+ * that the constraints are sufficient to guarantee that
+ * potentials, times, and index objects are all >= 0.
+ *
+ * For implicit syntax, we issue a warning if there are
+ * positive/negative polarity transitions in types which
+ * could make reconstruction incomplete
+ *)
+
 signature TYPE_VALID =
 sig
 
@@ -100,8 +114,7 @@ and closed_branches ctx nil ext = ()
 (* valid_explicit env ctx con A ext = ()
  * raises ErrorMsg.Error if not a valid type
  * env must be the full environment which checking any
- * type to allow mutually recursive definitions
- * Type A must be an actual type (not '.' = A.Dot)
+ * type to allow mutually recursive definitions.
  *)
 fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con choice ext
   | valid_explicit env ctx con (A.With(choice)) ext = valid_choice env ctx con choice ext
