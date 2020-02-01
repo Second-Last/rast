@@ -1,7 +1,5 @@
-(*
- * Positional Markers for Parsing
- * Author: Frank Pfenning <fp@cs.cmu.edu>
- *)
+(* Positional Markers for Parsing *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
 
 signature MARK =
 sig

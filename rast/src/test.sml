@@ -1,4 +1,7 @@
-(* Simple regression testing for RAST *)
+(* Simple Regression Testing *)
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
 
 signature TEST =
 sig
@@ -63,10 +66,9 @@ fun process_option (Verbose(level)) = TestFlags.verbosity := level
 datatype outcome =
          StaticError            (* includes lexer, parser, type-checker error *)
        | Success                (* parses, type-checks, and runs successfully *)
-       | ApproxDynSuccess       (* parses, fuzzily type-checks and runs successfully *)
-       | ApproxDynError         (* parses, fuzzily type-checks but fails at runtime in a controlled way *)
+       | ApproxSuccess          (* parses, fuzzily type-checks and runs successfully *)
        (* remaining ones are never expected, right now *)
-       | DynamicError           (* should not happen *)
+       | DynamicError           (* parses, type-checks, but fails at runtime *)
        | UncaughtException      (* uncaught exception should always be a bug *)
        | IllegalTestFormat      (* #test pragma not parsable *)
        | FileNotReadable        (* file is not readable *)
@@ -74,15 +76,13 @@ datatype outcome =
 
 fun parse_outcome ("error"::nil) = StaticError
   | parse_outcome ("success"::nil) = Success
-  | parse_outcome ("approx"::"success"::nil) = ApproxDynSuccess
-  | parse_outcome ("approx"::"error"::nil) = ApproxDynError
+  | parse_outcome ("approx"::"success"::nil) = ApproxSuccess
   | parse_outcome _ = IllegalTestFormat
 
 fun pp_outcome outcome = case outcome of
     StaticError => "static error (lexing, parsing, type-checking)"
   | Success => "success"
-  | ApproxDynSuccess => "approx success"
-  | ApproxDynError => "approx error"
+  | ApproxSuccess => "approx success"
   | DynamicError => "dynamic error (execution)"
   | UncaughtException => "uncaught exception"
   | IllegalTestFormat => "illegal #test format"
@@ -102,21 +102,17 @@ exception Outcome of outcome * outcome (* expected, actual *)
 
 fun accept_outcome (StaticError, StaticError) = true
   | accept_outcome (Success, Success) = true
-  | accept_outcome (ApproxDynSuccess, ApproxDynSuccess) = true
-  | accept_outcome (ApproxDynSuccess, Success) = true (* constraint actually solved *)
-  | accept_outcome (ApproxDynError, ApproxDynError) = true
+  | accept_outcome (ApproxSuccess, ApproxSuccess) = true
+  | accept_outcome (ApproxSuccess, Success) = true (* constraint actually solved *)
   | accept_outcome (_, _) = false
 
 fun test_file2 expected filename =
     let val env = Top.load nil [filename]
             handle ErrorMsg.Error => raise Outcome(expected, StaticError)
         val () = Top.run env env
-            (*
-            handle Exec.SoftError => raise Outcome(expected, if !Constraints.approx then ApproxDynError else DynamicError)
-                 | Exec.HardError => raise Outcome(expected, DynamicError)
-            *)
+                 handle Eval.DynError => raise Outcome(expected, DynamicError)
     in
-        raise Outcome(expected, if !Constraints.approx then ApproxDynSuccess else Success)
+        raise Outcome(expected, if !Constraints.approx then ApproxSuccess else Success)
     end handle e as Outcome(expected, actual) => raise e
              | e => raise Outcome(expected, UncaughtException)
 

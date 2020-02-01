@@ -1,7 +1,5 @@
-(* 
- * Safe(r) I/O functions
- * Author: Frank Pfenning <fp@cs.cmu.edu>
- *)
+(* Safe(r) I/O *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
 
 signature SAFE_IO =
 sig

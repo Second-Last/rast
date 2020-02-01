@@ -1,6 +1,5 @@
 (* Presburger arithmetic over natural numbers *)
-(* 
- * Authors: Frank Pfenning <fp@cs.cmu.edu>
+(* Authors: Frank Pfenning <fp@cs.cmu.edu>
  *          Ankush Das <ankushd@cs.cmu.edu>
  *)
 

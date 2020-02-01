@@ -39,22 +39,12 @@ fun lookup_skip env x D ext = skip env (TCU.lookup_context env x D ext)
 
 fun check_declared env (f,es) ext =
     (case A.lookup_expdec env f
-      of SOME(vs,con,(A,pot,C)) =>
+      of SOME(vs,con,(D,pot,C)) =>
          if List.length es = List.length vs
          then ()
-         else ERROR ext ("process " ^ f ^ " called with wrong number of indices:\n"
-                         ^ "expected " ^ Int.toString (List.length vs)
-                         ^ "found    " ^ Int.toString (List.length es))
-       | NONE => E.error_undeclared (f, ext))
-
-fun pp_channels (nil) = ""
-  | pp_channels ((x,A)::nil) = x
-  | pp_channels ((x,A)::D) = x ^ " " ^ pp_channels D
-
-fun error_mismatch env x A_expected found ext =
-    ERROR ext ("type_mismatch for channel " ^ x ^ ":\n"
-               ^ "expected exp of type " ^ PP.pp_tp_compact env A_expected
-               ^ "found exp of type    " ^ found)
+         else E.error_index_number "call" (List.length vs, List.length es) ext
+       | NONE => E.error_undeclared (f, ext)
+    )
 
 (* recon env A P C ext = P' where P' == P
  * may raise ErrorMsg.error
@@ -75,19 +65,19 @@ and plusR env D (A.Lab(x,k,P)) (z,C as A.Plus(choices)) ext = (* x = z *)
       of SOME(Ck) => A.Lab(x,k,recon env D P (z,Ck) ext)
        | NONE => E.error_label_invalid env (k, C, ext))
   | plusR env D (A.Lab(x,k,P)) (z,C) ext = (* x = z *)
-    error_mismatch env x C ("+{" ^ k ^ ":_, ...}") ext
+    E.error_channel_type_mismatch env ("+{ <choices> }", (z,C)) ext
 
 and withL env D (A as A.With(choices)) (A.Lab(x,k,P)) zC ext =
     (case A.lookup_choice choices k
       of SOME(Ak) => A.Lab(x,k,recon env (TCU.update_tp (x,Ak) D) P zC ext)
        | NONE => E.error_label_invalid env (k, A, ext))
   | withL env D A (A.Lab(x,k,P)) zC ext =
-    error_mismatch env x A ("&{" ^ k ^ ":_, ...}") ext
+    E.error_channel_type_mismatch env ("&{ <choices> }", (x,A)) ext
 
 and withR env D (A.Case(x,branches)) (z,A.With(choices)) ext = (* x = z *)
     A.Case(x,recon_branchesR env D branches (z,choices) ext)
   | withR env D (A.Case(x,branches)) (z,C) ext =
-    error_mismatch env x C ("&{...}") ext
+    E.error_channel_type_mismatch env ("&{ <choices> }", (z,C)) ext
 
 (* branchesR for case handling external choice *)
 (* tolerate missing branches *)
@@ -105,7 +95,7 @@ and recon_branchesR env D nil (z,nil) ext = nil
 and plusL env D (A.Plus(choices)) (A.Case(x,branches)) zC ext = (* z <> x *)
     A.Case(x,recon_branchesL env D (x,choices) branches zC ext)
   | plusL env D A (A.Case(x,branches)) zC ext =
-    error_mismatch env x A ("+{...}") ext
+    E.error_channel_type_mismatch env ("+{ <choices> }", (x,A)) ext
 
 (* branchesL for case handling internal choice *)
 (* tolerate missing branches *)
@@ -124,52 +114,54 @@ and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
     (* do not check type equality here, just remove w *)
     A.Send(x,w,recon env (TCU.remove_chan w D ext) P (z,B) ext)
   | tensorR env D (A.Send(x,w,P)) (z,C) ext =
-    error_mismatch env x C "(_ * _)" ext
+    E.error_channel_type_mismatch env ("<type> * <type>", (z,C)) ext
 
 and lolliL env D (A.Lolli(A,B)) (A.Send(x,w,P)) zC ext = (* x <> z *)
     A.Send(x,w,recon env (TCU.update_tp (x,B) (TCU.remove_chan w D ext)) P zC ext)
   | lolliL env D A (A.Send(x,w,P)) zC ext =
-    error_mismatch env x A "(_ -o _)" ext
+    E.error_channel_type_mismatch env ("<type> -o <type>", (x,A)) ext
 
 and lolliR env D (A.Recv(x,y,P)) (z,A.Lolli(A,B)) ext = (* x = z *)
     A.Recv(x,y,recon env ((y,A)::D) P (z,B) ext)        (* check if y is fresh here? *)
   | lolliR env D (A.Recv(x,y,P)) (z,C) ext =
-    error_mismatch env x C "(_ -o _)" ext
+    E.error_channel_type_mismatch env ("<type> -o <type>", (z,C)) ext
 
 and tensorL env D (A.Tensor(A,B)) (A.Recv(x,y,P)) zC ext =
     A.Recv(x,y,recon env ((y,A)::TCU.update_tp (x,B) D) P zC ext) (* check if y is fresh here? *)
   | tensorL env D A (A.Recv(x,y,P)) zC ext =
-    error_mismatch env x A "(_ * _)" ext
+    E.error_channel_type_mismatch env ("<type> * <type>", (x,A)) ext
 
 and oneR env D (A.Close(x)) (z,A.One) ext = (* x = z *)
-    let val () = case D
-                  of nil => ()
-                   | _ => ERROR ext ("unconsumed channels " ^ pp_channels D ^ " at close")
+    let val () = case D of nil => ()
+                         | _ => E.error_channels_open "close" D ext
     in A.Close(x) end
   | oneR env D (A.Close(x)) (z,C) ext =
-    error_mismatch env x C "1" ext
+    E.error_channel_type_mismatch env ("1", (z,C)) ext
 
 and oneL env D (A.One) (A.Wait(x,P)) zC ext = (* x <> z *)
     A.Wait(x,recon env (TCU.remove_chan x D ext) P zC ext)
   | oneL env D A (A.Wait(x,P)) zC ext =
-    error_mismatch env x A "1" ext
+    E.error_channel_type_mismatch env ("1", (x,A)) ext
 
 and existsNatR env D (A.SendNat(x,e,P)) (z,A.ExistsNat(v,C)) ext =
     A.SendNat(x,e,recon env D P (z,C) ext) (* Q: any reason to substitute here? *)
   | existsNatR env D (A.SendNat(x,e,P)) (z,C) ext =
-    error_mismatch env x C "?v._" ext
+    E.error_channel_type_mismatch env ("?<id>. <type>", (z,C)) ext
+
 and forallNatL env D (A.ForallNat(v,A)) (A.SendNat(x,e,P)) zC ext = (* Q: any reason to substitute here? *)
     A.SendNat(x,e,recon env (TCU.update_tp (x,A) D) P zC ext)
   | forallNatL env D A (A.SendNat(x,e,P)) zC ext =
-    error_mismatch env x A "!v._" ext
+    E.error_channel_type_mismatch env ("!<id>. <type>", (x,A)) ext
+
 and forallNatR env D (A.RecvNat(x,v,P)) (z,A.ForallNat(v',C)) ext = (* Q: any reason to alpha-convert here? *)
     A.RecvNat(x,v,recon env D P (z,C) ext)
   | forallNatR env D (A.RecvNat(x,v,P)) (z,C) ext =
-    error_mismatch env x C "!v._" ext
+    E.error_channel_type_mismatch env ("!<id>. <type>", (z,C)) ext
+
 and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any reason to alpha-convert here? *)
     A.RecvNat(x,v,recon env (TCU.update_tp (x,A) D) P zC ext)
   | existsNatL env D A (A.RecvNat(x,v,P)) zC ext =
-    error_mismatch env x A "?v._" ext
+    E.error_channel_type_mismatch env ("?<id>. <type>", (x,A)) ext
 
 (* recon' env A P C ext
  * assumes A, C are structural
@@ -177,31 +169,23 @@ and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any r
  *)
 (* judgmental constructs: id, cut, spawn *)
 and recon' env D (P as A.Id(x,y)) (z,C) ext =
-    let val () = if x = z then ()
-                 else ERROR ext ("channel mismatch in forward:\n"
-                                 ^ "expected " ^ z ^ "\n"
-                                 ^ "found    " ^ x)
+    let val () = if x <> z then E.error_channel_mismatch "forward" (z,x) ext else ()
         val D' = TCU.remove_chan y D ext
-        val () = case D'
-                  of nil => ()
-                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " at forward")
+        val () = case D' of nil => ()
+                          | _ => E.error_channels_open "forward" D' ext
     in P end
   | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) (zC as (z,C)) ext =
     let val () = if x = z
-                 then ERROR ext ("variable " ^ x ^ " equal to provided channel " ^ z ^ "\n"
-                                 ^ "only permitted in tail call, not spawn")
+                 then E.error_channel_mismatch "spawn" ("fresh <id>", x) ext
                  else ()
         val D' = TCU.syn_call env D P ext
     in A.Spawn(P, recon env D' Q zC ext) end
   | recon' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
     let val () = if x = z then ()
-                 else ERROR ext ("channel mismatch in tail call:\n"
-                                 ^ "expected " ^ z ^ "\n"
-                                 ^ "found    " ^ x)
+                 else E.error_channel_mismatch "tail call" (z,x) ext
         val D' = TCU.remove_chans xs D ext
-        val () = case D'
-                  of nil => ()
-                   | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " at tail call")
+        val () = case D' of nil => ()
+                          | _ => E.error_channels_open "tail call" D' ext
         val () = check_declared env (f,es) ext
     in P end
 
@@ -229,13 +213,11 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
   | recon' env D (P as A.Close(x)) (z,C) ext =
     if x = z
     then oneR env D P (z,skip env C) ext
-    else ERROR ext ("channel mismatch at close:\n"
-                    ^ "expected " ^ z ^ "\n"
-                    ^ "found    " ^ x)
+    else E.error_channel_mismatch "close" (z, x) ext
 
   | recon' env D (P as A.Wait(x,P')) (z,C) ext =
     if x = z
-    then ERROR ext ("cannot wait on provided channel " ^ z)
+    then E.error_channel_mismatch "wait" ("<id> not equal " ^ z, x) ext
     else oneL env D (lookup_skip env x D ext) P (z,C) ext
 
   | recon' env D (P as A.SendNat(x,e,P')) (z,C) ext =

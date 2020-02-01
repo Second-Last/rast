@@ -1,8 +1,10 @@
 (* Flags *)
-(* User option given on the command line or in the
- * #options pragma in the source file
- *
- * Author: Frank Pfenning <fp@cs.cmu.edu>
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
+
+(* 
+ * User option given on the command line or in the
+ * #options pragma in the source file, plus the
+ * version number and date
  *)
 
 signature FLAGS =

@@ -1,9 +1,14 @@
 (* Parsing State *)
+(* Author: Frank Pfenning <fp@cs.cmu.edu> *)
 (* Imported from C0 compiler *)
+
 (*
  * This tracks filename and newline characters
  * so character positions in lexer tokens
  * can be converted to line.column format for error messages
+ *
+ * It supports nested loading of files, which is currently no
+ * used in Rast
  *)
 
 signature PARSE_STATE =

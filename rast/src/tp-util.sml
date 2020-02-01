@@ -10,15 +10,15 @@ sig
     val expand : Ast.env -> Ast.tp -> Ast.tp (* expand until no longer a definition *)
 
     val eventually_box : Ast.env -> Ast.tp -> bool
-    val eventually_box_ctx : Ast.env -> Ast.context -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
     val eventually_dia : Ast.env -> Ast.tp -> bool
 
+    (* decrement functions may raise ErrorMsg.error *)
     val decrementL : Ast.env -> Arith.ctx -> Arith.prop
-                     -> Ast.tp -> Arith.arith -> Ast.ext -> Ast.tp (* may raise ErrorMsg.Error *)
-    val decrement : Ast.env -> Arith.ctx -> Arith.prop
-                    ->  Ast.context -> Arith.arith -> Ast.ext -> Ast.context (* may raise ErrorMsg.Error *)
+                     -> Ast.tp -> Arith.arith -> Ast.ext -> Ast.tp
+    val decrement_context : Ast.env -> Arith.ctx -> Arith.prop
+                            ->  Ast.context -> Arith.arith -> Ast.ext -> Ast.context
     val decrementR : Ast.env -> Arith.ctx -> Arith.prop
-                     -> Ast.tp -> Arith.arith -> Ast.ext -> Ast.tp (* may raise ErrorMsg.Error *)
+                     -> Ast.tp -> Arith.arith -> Ast.ext -> Ast.tp
 
     val strip_next0 : Ast.env -> Arith.ctx -> Arith.prop -> Ast.chan_tp -> Ast.chan_tp
     val strip_next0_context : Ast.env -> Arith.ctx -> Arith.prop -> Ast.context -> Ast.context
@@ -58,16 +58,10 @@ fun eventually_box env (A.Box(A)) = true
   | eventually_box env (A as A.TpName(a,es)) = eventually_box env (expd env A)
   | eventually_box _ _ = false
 
-fun eventually_box_ctx env [] ext = ()
-  | eventually_box_ctx env ((x,A)::D') ext =
-    if eventually_box env A then eventually_box_ctx env D' ext
-    else ERROR ext ("type of " ^ x ^ " : " ^ PP.pp_tp_compact env A ^ " is not patient (ie, not (n)[]A")
-
 fun eventually_dia env (A.Dia(A)) = true
   | eventually_dia env (A.Next(_,A)) = eventually_dia env A
   | eventually_dia env (A as A.TpName(a,es)) = eventually_dia env (expd env A)
   | eventually_dia _ _ = false
-
 
 (***********************)
 (* Operations on types *)
@@ -87,7 +81,8 @@ fun decrementL env ctx con (A.Next(t,A)) t' ext =
     else ERROR ext ("left type " ^ PP.pp_tp_compact env A ^ " is neither (_)A nor []A :\n"
                     ^ C.pp_jfail con (R.Eq(t',R.Int(0))))
 
-fun decrement env ctx con D t ext = List.map (fn (x,A) => (x,decrementL env ctx con A t ext)) D
+fun decrement_context env ctx con D t ext =
+    List.map (fn (x,A) => (x,decrementL env ctx con A t ext)) D
 
 fun decrementR env ctx con (A.Next(t,A)) t' ext =
     if C.entails ctx con (R.Ge(t,t'))

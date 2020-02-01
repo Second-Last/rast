@@ -11,8 +11,10 @@ sig
     val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context (* may raise ErrorMsg.error *)
     val syn_pot : Ast.env -> Ast.exp -> Ast.ext -> Ast.pot                     (* may raise ErrorMsg.error *)
 
+    (*
     val synL : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.context
     val synR : Ast.env -> (Ast.chan * Ast.expname * Arith.arith list * Ast.chan list) -> Ast.chan_tp
+    *)
 
     val syn_altR : Ast.env -> Ast.chan_tp -> Ast.label -> Ast.chan_tp
     val syn_altL : Ast.env -> Ast.context -> Ast.chan -> Ast.label -> Ast.context
@@ -91,44 +93,38 @@ fun zip_check f vs es ext =
 fun expd_expdec_check env (f,es) ext =
     (case A.lookup_expdec env f
       of SOME(vs,con,(D,pot,zC)) =>
-         let val sg = zip_check f vs es ext
+         let val () = if List.length es = List.length vs then ()
+                      else E.error_index_number "call" (List.length vs, List.length es) ext
+             val sg = R.zip vs es
          in (R.apply_prop sg con, (A.apply_context sg D, R.apply sg pot, A.apply_chan_tp sg zC)) end
-       | NONE => E.error_undeclared (f, ext))
+       | NONE => E.error_undeclared (f, ext)
+    )
 
-(* syn_call env D (x <- f{es} <- xs) ext = (x : B) :: (D / [es/vs]D')
- * if vs ; con ; D' |{p}- f : B
+(* syn_call env D (x <- f{es} <- ys) ext = (x : [es/vs]A) (D-ys)
+ * if vs ; con ; D' |{p}- f : A
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
-fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
-    (case A.lookup_expdec env f
-      of SOME(vs,con',(D',pot',(y,B'))) =>
-         let val sg = zip_check f vs es ext
-             val B = A.apply_tp sg B'
-             val D' = remove_chans xs D ext
-             val () = if List.exists (fn (x',A') => x = x') D'
-                      then ERROR ext ("variable " ^ x ^ " not fresh")
-                      else ()
-         in (x,B)::D' end
-       | NONE => ERROR ext ("process " ^ f ^ " undeclared"))
-  | syn_call env D (A.Marked(marked_P)) ext = (* Q: preserve mark? *)
+fun syn_call env D (P as A.ExpName(x,f,es,ys)) ext =
+    let val (con', (D', pot', (x',A))) = expd_expdec_check env (f,es) ext
+        val contD = remove_chans ys D ext
+        val () = if List.exists (fn (y,_) => x = y) contD
+                 then E.error_channel_mismatch "call" ("fresh <id>", x) ext
+                 else ()
+    in (x,A)::contD end
+  | syn_call env D (A.Marked(marked_P)) ext =
     syn_call env D (Mark.data marked_P) (Mark.ext marked_P)
-  | syn_call env D P ext = ERROR ext ("call must be a process name")
 
-(* syn_pot env D (x <- f{es} <- xs) ext = [es/vs]p
+(* syn_pot env D (x <- f{es} <- ys) ext = [es/vs]p
  * if vs ; con ; D' |{p}- f : B
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
-fun syn_pot env (P as A.ExpName(x,f,es,xs)) ext =
-    (case A.lookup_expdec env f
-      of SOME(vs,con',(D',pot',(y,B'))) =>
-         let val sg = zip_check f vs es ext
-             val pot = R.apply sg pot'
-         in pot end
-       | NONE => ERROR ext ("process " ^ f ^ " undeclared"))
-  | syn_pot env (A.Marked(marked_P)) ext = (* Q: preserve mark? *)
+fun syn_pot env (P as A.ExpName(x,f,es,ys)) ext =
+    let val (con', (D', pot', (x',A'))) = expd_expdec_check env (f,es) ext
+    in pot' end
+  | syn_pot env (A.Marked(marked_P)) ext =
     syn_pot env (Mark.data marked_P) (Mark.ext marked_P)
-  | syn_pot env P ext = ERROR ext ("call must be a process name")
 
+(*
 (* synL env (f,es) = D where D |- f : _, approximately *)
 fun synL env (y, f, es, xs) =
     (case A.expd_expdec env (f, es)
@@ -149,6 +145,7 @@ fun synLR env (f, es) =
       of SOME(con, (D, pot, zC)) => (D, pot, zC)
          (* NONE impossible, since f{es} approximately typed *)
     )
+*)
 
 (* syn_altR env z +(l : Al)_(l in L) k = (z,Ak), assumes k in L *)
 fun syn_altR' env z (A.Plus(choices)) k = (z, Option.valOf (A.lookup_choice choices k))

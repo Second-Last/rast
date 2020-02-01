@@ -1,5 +1,10 @@
 (* Parser *)
-(* Handwritten shift/reduce parser to support
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
+
+(*
+ * Handwritten shift/reduce parser to support
  * best possible error messages
  *)
 
@@ -10,6 +15,7 @@ sig
     val parse_preamble : string -> Ast.env (* may raise IO.Io _ *)
 
 end  (* signature PARSE *)
+
 
 structure Parse :> PARSE =
 struct

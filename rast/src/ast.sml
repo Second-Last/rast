@@ -1,4 +1,7 @@
 (* Abstract Syntax *)
+(* Authors: Ankush Das <ankushd@cs.cmu.edu>
+ *          Frank Pfenning <fp@cs.cmu.edu>
+ *)
 
 signature AST =
 sig

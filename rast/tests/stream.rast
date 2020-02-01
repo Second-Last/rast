@@ -1,0 +1,20 @@
+#test success
+#options --time=free --syntax=explicit
+
+type stream{i} = !j. !{j < i}. 1 * stream{j}
+
+decl copy{i} : (x : stream{i}) |- (y : stream{i})
+proc y <- copy{i} x =
+  {j} <- recv y ;
+  assume y {j < i} ;
+  send x {j} ;
+  assert x {j < i} ;
+  u <- recv x ;
+  send y u ;
+  % check: j < i according to termination ordering
+  y <- copy{j} x
+
+decl diverge{i} : (x : stream{i}) |- (y : stream{i})
+proc y <- diverge{i} x =
+  % check: i < i according termination ordering
+  y <- diverge{i} x
