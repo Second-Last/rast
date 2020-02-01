@@ -28,7 +28,7 @@ local
     normalize.sml
     constraints.sml
 
-    tperror.sml
+    tp-error.sml
     tp-util.sml
     tp-valid.sml
     tp-eq.sml
