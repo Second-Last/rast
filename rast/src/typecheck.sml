@@ -124,7 +124,7 @@ and fwd trace env ctx con D pot (A.Id(x,y)) zC ext =
                  else ()
     in () end
 
-and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
+and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) (zC as (z,C)) ext =
     (case TCU.expd_expdec_check env (f,es) ext
       of (con',(D',pot',(z',B))) =>
          let val () = if List.length D' = List.length xs then ()
@@ -144,7 +144,13 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) zC ext =
                       then ERROR ext ("constraint not entailed: " ^ C.pp_jfail con con')
                       else ()
              val contD = TCU.remove_chans xs D ext
-             val () = if exists_chan x (zC::D) then ERROR ext ("variable " ^ x ^ " not fresh") else ()
+             val () = if x = z
+                      then ERROR ext ("variable " ^ x ^ " equal to provided channel " ^ z ^ "\n"
+                                      ^ "only permitted in tail call, not spawn")
+                      else ()
+             val () = if exists_chan x contD
+                      then ERROR ext ("variable " ^ x ^ " not fresh\n" ^ "cannot shadow linear variable")
+                      else ()
          in
              check_exp' trace env ctx con ((x,B)::contD) (R.minus(pot,pot')) Q zC ext
          end

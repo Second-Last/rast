@@ -143,7 +143,7 @@ and recon_assumeL env D (x,A) P (z,C) ext =
     let val P' = recon env D P (z,C) ext
     in addL_assume env (x,skip env A) P' end
 
-(* judgmental constructs: id, cut, spawn *)
+(* judgmental constructs: id, spawn, call *)
 and recon' env D (P as A.Id(z',y)) (z,C) ext =
     (* about to terminate, add asserts if needed *)
     let val P'  = addR_assert env P (z,skip env C)

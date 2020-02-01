@@ -117,21 +117,26 @@ proc s <- primes{n} x =
   c1 <- succ{0} c0 ; % first position is 2, not 1
   s <- head{n}{1}{n+1} t c1
 
-%%% Simple example
-decl n100 : . |- (x : nat{100})
-proc x <- n100 =
-  x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;
-  x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;    x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;
-  x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;    x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;
-  x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;    x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;
-  x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;    x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;
-  x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ; x.succ ;    x.zero ; close x
+%%% Simple examples
 
-%%% Classification of numbers 2, 3, 4, ..., 101
-decl primes100 : . |- (s : stream{100})
-proc s <- primes100 =
-  x <- n100 ;
-  s <- primes{100} x
+decl double{n} : (x : nat{n}) |- (y : nat{2*n})
+proc y <- double{n} x =
+  case x ( succ => y.succ ; y.succ ;
+                   y <- double{n-1} x
+         | zero => y.zero ; wait x ; close y
+         )
 
-exec n100
-exec primes100
+decl n256 : . |- (x : nat{256})
+proc x <- n256 =
+  y <- zero ; y <- succ{0} y ; y <- double{1} y ;
+  y <- double{2} y ; y <- double{4} y ; y <- double{8}  y ; y <- double{16}  y ;
+  y <- double{32} y ; y <- double{64}  y ; y <- double{128}  y ;
+  x <-> y
+
+%%% Classification of numbers 2, 3, 4, ..., 257
+decl primes256 : . |- (s : stream{256})
+proc s <- primes256 =
+  x <- n256 ;
+  s <- primes{256} x
+
+exec primes256

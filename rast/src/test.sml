@@ -1,4 +1,4 @@
-(* Simple regression testing for ss *)
+(* Simple regression testing for RAST *)
 
 signature TEST =
 sig
@@ -19,8 +19,8 @@ datatype option =
 
 fun say s = TextIO.output (TextIO.stdErr, s ^ "\n")
 
-val usage = "ss-test <option>* <file>*"
-val header = usage
+val usage = "rast-test <option>* <file>*"
+val header = Flags.version ^ "\n" ^ usage
 val options : option G.opt_descr list =
     [
      {short = "v", long = ["verbose"],

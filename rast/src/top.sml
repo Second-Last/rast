@@ -39,9 +39,9 @@ fun say s = TextIO.output (TextIO.stdErr, s ^ "\n")
 
 val usage =
     if "sml" = #file (OS.Path.splitDirFile (CommandLine.name ()))
-    then "Top.ss \"<option>* <file>*\";"
-    else "ss <option>* <file>*"
-val header = "Usage: " ^ usage ^ "\nwhere <option> is"
+    then "Top.rast \"<option>* <file>*\";"
+    else "rast <option>* <file>*"
+val header = Flags.version ^ "\n" ^ "Usage: " ^ usage ^ "\nwhere <option> is"
 val options : option G.opt_descr list =
     [
      {short = "v", long = ["verbose"],
@@ -66,7 +66,7 @@ val options : option G.opt_descr list =
       desc = G.ReqArg ((fn s => Syntax(s)), "<syntax>"),
       help = "Syntax, one of 'implicit' (default) or 'explicit'"},
      {short = "u", long = ["equality"],
-      desc = G.ReqArg ((fn r => Equality(r)), "<type equality algorithm>"),
+      desc = G.ReqArg ((fn r => Equality(r)), "<algo>"),
       help = "Type equality algorithm, one of 'subsumerefl' (default), 'subsume', or 'refl'"}
     ]
 
@@ -194,6 +194,9 @@ fun run env decls =
                  else ()
     in () end
 
+fun exit_on_empty_files nil = exit_success Flags.version
+  | exit_on_empty_files (_::_) = ()
+
 (* main function to run file *)
 fun test args =
     (* reset flags *)
@@ -202,6 +205,7 @@ fun test args =
         (* get and apply options *)
         val (options, filenames) = get_options args
         val () = List.app process_option options
+        val () = exit_on_empty_files filenames
         (* parse and load file, i.e., generate an environment *)
         val env = load nil filenames
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"

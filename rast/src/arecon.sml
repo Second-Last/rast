@@ -186,8 +186,12 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
                   of nil => ()
                    | _ => ERROR ext ("unclosed channels " ^ pp_channels D' ^ " at forward")
     in P end
-  | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) zC ext =
-    let val D' = TCU.syn_call env D P ext
+  | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) (zC as (z,C)) ext =
+    let val () = if x = z
+                 then ERROR ext ("variable " ^ x ^ " equal to provided channel " ^ z ^ "\n"
+                                 ^ "only permitted in tail call, not spawn")
+                 else ()
+        val D' = TCU.syn_call env D P ext
     in A.Spawn(P, recon env D' Q zC ext) end
   | recon' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
     let val () = if x = z then ()

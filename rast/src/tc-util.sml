@@ -104,7 +104,11 @@ fun syn_call env D (P as A.ExpName(x,f,es,xs)) ext =
       of SOME(vs,con',(D',pot',(y,B'))) =>
          let val sg = zip_check f vs es ext
              val B = A.apply_tp sg B'
-         in (x,B)::remove_chans xs D ext end
+             val D' = remove_chans xs D ext
+             val () = if List.exists (fn (x',A') => x = x') D'
+                      then ERROR ext ("variable " ^ x ^ " not fresh")
+                      else ()
+         in (x,B)::D' end
        | NONE => ERROR ext ("process " ^ f ^ " undeclared"))
   | syn_call env D (A.Marked(marked_P)) ext = (* Q: preserve mark? *)
     syn_call env D (Mark.data marked_P) (Mark.ext marked_P)

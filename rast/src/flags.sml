@@ -32,6 +32,8 @@ sig
 
     (* reset all flags to their default value *)
     val reset : unit -> unit
+
+    val version : string
 end  (* signature FLAGS *)
 
 structure Flags :> FLAGS =
@@ -97,5 +99,7 @@ fun reset () =
     ; equality := SubsumeRefl
     ; verbosity := 1
     ; help := false )
+
+val version = "Rast v1.0 (Fri Jan 31 16:31:59 EST 2020)"
 
 end (* structure Flags *)
