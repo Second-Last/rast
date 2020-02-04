@@ -290,12 +290,12 @@ proc q <- queue_new =
 %%% Queue as a bucket brigade
 %%% The cost of enq here cannot be amortized
 
-type queue'{n} = &{ enq : <{2*n+2}| nat -o queue'{n+1},
-                    deq : +{ none : ?{n = 0}. 1,
-                             some : ?{n > 0}. nat * queue'{n-1} } }
+type queue'{n} = &{ enq : <{2*n}| nat -o queue'{n+1},
+                    deq : <{2}| +{ none : ?{n = 0}. 1,
+                                   some : ?{n > 0}. nat * queue'{n-1} } }
 
-decl back : . |{2}- (q : queue'{0})
-decl front{n} : (x : nat) (r : queue'{n}) |{2}- (q : queue'{n+1})
+decl back : . |- (q : queue'{0})
+decl front{n} : (x : nat) (r : queue'{n}) |- (q : queue'{n+1})
 
 proc q <- back =
   case q ( enq => x <- recv q ;
