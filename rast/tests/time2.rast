@@ -1,0 +1,142 @@
+#options --syntax=explicit --time=recvsend
+#test error
+
+type A = [] 1
+type list{n}{r} = +{cons : `?{n > 0}. (A * `({r+2}) list{n-1}{r}),
+                    nil : `?{n = 0}. 1}
+
+decl append{n}{k}{r} : (l1 : list{n}{r}) (l2 : ({(r+4)*n+2}) list{k}{r}) |- (l : ({2}) list{n+k}{r})
+
+proc l <- append{n}{k}{r} l1 l2 =
+  case l1 (
+    cons => assume l1 {n > 0} ;
+            x <- recv l1 ;
+            l.cons ;
+            assert l {n+k > 0} ;
+            send l x ;
+            delay {r} ;
+            l <- append{n-1}{k}{r} l1 l2
+  | nil => assume l1 {n = 0} ;
+           wait l1 ;
+           l <-> l2
+  )
+
+type stream{k} = A * `({k}) stream{k}
+
+decl alternate{k} : (l1 : stream{2*k+3}) (l2 : ({k+2}) stream{2*k+3}) |- (l : () stream{k+1})
+
+proc l <- alternate{k} l1 l2 =
+  x <- recv l1 ;
+  send l x ;
+  delay {k} ;
+  l <- alternate{k} l2 l1
+
+
+type bool = +{b0 : `1, b1 : `1}
+type tree{h} = &{parity : `({5*h+2}) bool}
+
+decl xor : (a : bool) (b : ()() bool) |- (c : ()()()() bool)
+decl leaf : . |- (t : tree{0})
+decl node{h} : (l : () tree{h}) (r : ({3}) tree{h}) |- (t : tree{h+1})
+
+proc t <- leaf =
+  case t (
+    parity => delay {2} ;
+              t.b0 ;
+              close t
+  )
+
+proc t <- node{h} l r =
+  case t (
+    parity => l.parity ;
+              delay ;
+              r.parity ;
+              delay {5*h} ;
+              t <- xor l r
+  )
+
+type flist{n}{k} = +{cons : `?{n > 0}. (A * `({k+4}) flist{n-1}{k}),
+                    nil : `?{n = 0}. 1}
+
+type B = 1
+
+type folder{k} = &{next : `(A -o `((()B) -o `({k}) ((({6}) B) * `({2}) folder{k}))),
+                   done : `1}
+
+decl fold{n}{k} : (l : flist{n}{k}) (f : ({2}) folder{k}) (b : ({5}) B) |- (r : ({(k+6)*n+5}) B)
+
+proc r <- fold{n}{k} l f b =
+  case l (
+    cons => assume l {n > 0} ;
+            x <- recv l ;
+            f.next ; send f x ; send f b ;
+            delay {k} ;
+            y <- recv f ;
+            r <- fold{n-1}{k} l f y
+  | nil => assume l {n = 0} ;
+           wait l ; f.done ; wait f ;
+           r <-> b
+  )
+
+type C = [] 1
+type mapper{r} = &{next : `A -o `({r}) (C * `({4}) mapper{r}),
+                done : `1}
+
+type listA{n}{r} = +{cons : `?{n > 0}. (A * `({r+5}) listA{n-1}{r}),
+                    nil : `?{n = 0}. 1}
+
+type listC{n}{r} = +{cons : `?{n > 0}. (C * `({r+5}) listC{n-1}{r}),
+                    nil : `?{n = 0}. 1}
+
+decl map{n}{r} : (l : listA{n}{r}) (m : ({2}) mapper{r}) |- (k : ({r+5}) listC{n}{r})
+
+proc k <- map{n}{r} l m =
+  case l (
+    cons => assume l {n > 0} ;
+            x <- recv l ;
+            m.next ;
+            send m x ;
+            delay {r} ;
+            y <- recv m ;
+            k.cons ;
+            assert k {n > 0} ;
+            send k y ;
+            k <- map{n-1}{r} l m
+  | nil => assume l {n = 0} ;
+           wait l ;
+           m.done ;
+           wait m ;
+           delay {r+1} ;
+           k.nil ;
+           assert k {n = 0} ;
+           close k
+  )
+
+type queue{n} = [] &{ enq : () A -o ()()()queue{n+1},
+                      deq : () +{ none : () ?{n = 0}. 1,
+                                  some : () ?{n > 0}. A * ()queue{n-1} } }
+
+decl empty : . |- (q : queue{0})
+decl elem{n} : (x : A) (r : queue{n}) |- (q : queue{n+1})
+
+proc q <- empty =
+  when q ;
+  case q ( enq =>                  % |- q : A -o ()()()queue{1}
+                  x <- recv q ;    % (x : A) |- q : ()()queue{1}
+                  delay {2} ;      % (x : A) |- q : queue{1}
+                  e <- empty ;     % (x : A) (e : queue{0}) |- q : queue{1} 
+                  q <- elem{0} x e
+         | deq => q.none ; assert q {0 = 0} ;
+                  close q )
+
+proc q <- elem{n} x r =          % (x:A) (r:queue{n}) |- q : queue{n+1}
+  when q ;                       % (x:A) (r:queue{n}) |- q : &{...}
+  case q ( enq =>                % (x:A) (r:queue{n}) |- q : A -o ()()()queue{n+1}
+                  y <- recv q ;  % (x:A) (r:queue{n}) (y:A) |- q : ()()queue{n+1}
+                  now r ;        % (x:A) (r:&{...}) (y:A) |- q : ()()queue{n+1}
+                  r.enq ;        % (x:A) (r:A -o ()()()q) (y:A) |- q : ()queue{n+1}
+                  send r y ;     % (x:A) (r:()()queue) |- q : queue{n+1}
+                  q <- elem{n+1} x r
+         | deq => q.some ; assert q {n+1 > 0} ;
+                  send q x ;
+                  q <-> r )
