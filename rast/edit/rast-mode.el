@@ -34,12 +34,12 @@
 (defvar font-lock-decl-face 'font-lock-decl-face)
 
 (defvar rast-font-lock-keywords
-  '(("type\\|eqtype\\|decl\\|proc\\|exec" . font-lock-decl-face)
-    ("case\\|wait\\|close\\|send\\|recv" . font-lock-keyword-face)
-    ("tick\\|work" . font-lock-cost-face)
-    ("pay\\|get" . font-lock-work-face)
-    ("assert\\|assume\\|impossible" . font-lock-constraints-face)
-    ("delay\\|when\\|now" . font-lock-time-face)
+  '(("\\_<\\(type\\|eqtype\\|decl\\|proc\\|exec\\)\\_>" . font-lock-decl-face)
+    ("\\_<\\(case\\|wait\\|close\\|send\\|recv\\)\\_>" . font-lock-keyword-face)
+    ("\\_<\\(tick\\|work\\)\\_>" . font-lock-cost-face)
+    ("\\_<\\(pay\\|get\\)\\_>" . font-lock-work-face)
+    ("\\_<\\(assert\\|assume\\|impossible\\)\\_>" . font-lock-constraints-face)
+    ("\\_<\\(delay\\|when\\|now\\)\\_>" . font-lock-time-face)
     ))
 
 (setq rast-mode-syntax-table
