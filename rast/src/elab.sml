@@ -259,6 +259,8 @@ fun elab_tps env nil = nil
     (* do not print process declaration so they are printed close to their use *)
     (* check for duplicates and validity *)
     let
+        val chs = z::List.map (fn (y,_) => y) D
+        val () = if dups chs then ERROR ext ("duplicate variable in process declaration") else ()
         val () = if dups vs then ERROR ext ("duplicate index variable in process declaration") else ()
         val () = valid_con env vs con ext
         val () = validL env vs con D ext
@@ -313,7 +315,8 @@ and elab_exps env nil = nil
       of NONE => ERROR ext ("process " ^ f ^ " undeclared")
        | SOME(vs',con',(D',pot',zC')) =>
          (* check validity, duplicates, corresponds with the declaration *)
-         let 
+         let
+             val () = if dups (x::xs) then ERROR ext ("duplicate variable in process definition") else ()
              val () = if dups vs then ERROR ext ("duplicate index variable in process definition") else ()
              val () = if List.length vs = List.length vs' then ()
                       else ERROR ext ("process defined with " ^ Int.toString (List.length vs) ^ " indices and "
