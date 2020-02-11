@@ -228,3 +228,14 @@ proc y <- t269 =
   y <-> x
 
 exec t269
+
+decl b5 : . |- (x : bin{5})
+proc x <- b5 =
+  x.b1 ; send x {2} ; x.b0 ; send x {1} ; x.b1 ; send x {0} ; x.e ; close x
+  
+decl t5 : . |- (y : tern{5}{0})
+proc y <- t5 =
+  x5 <- b5 ;
+  y <- bin2tern{5} x5
+
+exec t5
