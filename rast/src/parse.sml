@@ -595,7 +595,7 @@ and p_exp ST = case first ST of
   (* asserts and assumes for propositions *)
   | T.ASSERT => ST |> shift >> p_id >> p_con_semi >> p_exp
   | T.ASSUME => ST |> shift >> p_id >> p_con_semi >> p_exp
-  | T.IMPOSSIBLE => ST |> shift >> p_id >> p_con >> p_exp
+  | T.IMPOSSIBLE => ST |> shift >> reduce r_exp_atomic >> p_exp
   (* receiving an natural number *)
   | T.LBRACE => ST |> shift >> p_id >> p_terminal T.RBRACE >> p_recv_nat >> p_exp
   (* end of expression; do not consume token *)
@@ -636,10 +636,6 @@ and p_idx_opt ST = case first ST of
 and p_con_semi ST = case first ST of
     T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.SEMICOLON >> reduce r_action
   | t => error_expected (here ST, T.LBRACE, t)
-
-(* <con> ::= '{' <prop> '}' as postfix of 'impossible'<dir> *)
-and p_con ST = case first ST of
-    T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_con >> reduce r_exp_atomic
 
 (* reduce <exp>, where <exp> has no continuation (atomic expressions) *)
 and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.Close(id),join r1 r2),join r1 r2)
