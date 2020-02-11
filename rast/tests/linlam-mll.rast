@@ -1,0 +1,147 @@
+#options --work=none --time=none --syntax=implicit
+#test error
+
+% linear lambda-calculus with "subtyping"
+
+(*
+eval (lam f) = lam f
+eval (app e1 e2) = 
+  case eval e1 ( lam f => eval (f e2) ) % no case for app needed
+*)
+
+% because there is no subtyping, we have an explicit
+% inclusion of values in expressions
+type exp = +{ lam : val -o exp,
+              app : exp * exp,
+              pair : exp * exp,
+              casePair : exp * (val -o val -o exp),
+              unit : 1,
+              caseUnit : exp * exp,
+              value : val }
+              
+type val = +{ lam : val -o exp,
+              pair : val * val,
+              unit : 1 }
+
+decl lam : (f : val -o exp) |- (e : exp)
+proc e <- lam f = e.lam ; e <-> f
+
+decl app : (e1 : exp) (e2 : exp) |- (e : exp)
+proc e <- app e1 e2 =
+  e.app ; send e e1 ; e <-> e2
+
+decl pair : (e1 : exp) (e2 : exp) |- (e : exp)
+proc e <- pair e1 e2 =
+  e.pair ; send e e1 ; e <-> e2
+
+decl casePair : (e1 : exp) (f : val -o val -o exp) |- (e : exp)
+proc e <- casePair e1 f =
+  e.casePair ; send e e1 ; e <-> f
+
+decl unit : . |- (e : exp)
+proc e <- unit = e.unit ; close e
+
+decl caseUnit : (e1 : exp) (e2 : exp) |- (e : exp)
+proc e <- caseUnit e1 e2 = e.caseUnit ; send e e1 ; e <-> e2
+
+decl value : (v : val) |- (e : exp)
+proc e <- value v =
+  e.value ; e <-> v
+
+decl vLam : (f : val -o exp) |- (v : val)
+proc v <- vLam f = v.lam ; v <-> f
+
+decl vPair : (v1 : val) (v2 : val) |- (v : val)
+proc v <- vPair v1 v2 =
+  v.pair ; send v v1 ; v <-> v2
+
+decl vUnit : . |- (v : val)
+proc v <- vUnit = v.unit ; close v
+
+decl swallow1 : (v1 : val * val) (v : exp) |- (v : val)  % wait, this should be illegal!
+proc v <- swallow1 f v =
+        v <- swallow1 f v
+
+decl swallow3 : (u : 1) (e : exp) |- (v : val)
+proc v <- swallow3 u e = v <- swallow3 u e
+
+decl swallow2 : (f : val -o exp) (g : val -o val -o exp) |- (v : val)
+proc v <- swallow2 f g =
+       v <- swallow2 f g
+
+decl swallow4 : (u : 1) (g : val -o val -o exp) |- (v : val)
+proc v <- swallow4 u g = v <- swallow4 u g
+
+decl swallow5 : (f : val -o exp) (e : exp) |- (v : val)
+proc v <- swallow5 f e = v <- swallow5 f e
+
+decl eval : (e : exp) |- (v : val)
+proc v <- eval e =
+  case e ( lam => v <- vLam e
+         | app => e1 <- recv e ; % e = e2
+                  v1 <- eval e1 ;
+                  case v1 ( lam => v2 <- eval e ;
+                                   send v1 v2 ;
+                                   v <- eval v1
+                          | pair => v <- swallow1 v1 e
+                          | unit => v <- swallow3 v1 e )
+         | pair => e1 <- recv e ; % e = e2
+                   v1 <- eval e1 ;
+                   v2 <- eval e ;
+                   v <- vPair v1 v2
+         | casePair => e1 <- recv e ; % e = (<x,y> => e2)
+                       v12 <- eval e1 ;
+                       case v12 ( lam => v <- swallow2 v12 e 
+                                | pair => v1 <- recv v12 ; % v2 = v12
+                                          send e v1 ;
+                                          send e v12 ;
+                                          v <- eval e
+                                | unit => v <- swallow4 v12 e )
+         | unit => wait e ; v <- vUnit
+         | caseUnit => e1 <- recv e ; % e = e2
+                       v1 <- eval e1 ;
+                       case v1 ( lam => v <- swallow5 v1 e
+                               | pair => v <- swallow1 v1 e
+                               | unit => wait v1 ; v <- eval e )
+         | value => v <-> e
+         )             
+
+(* id = \x. x *)
+decl id : . |- (e : exp)
+proc e <- id =
+  e.lam ; x <- recv e ; e.value ; e <-> x
+
+(* id id *)
+decl idid : . |- (e : exp)
+proc e <- idid =
+  i1 <- id ;
+  i2 <- id ;
+  e <- app i1 i2
+
+(* swap = \f. \x. \y. (f y) x *)
+decl swap : . |- (e : exp)
+proc e <- swap =
+  e.lam ; f <- recv e ; f' <- value f ;
+  e.lam ; x <- recv e ; x' <- value x ;
+  e.lam ; y <- recv e ; y' <- value y ;
+  fy <- app f' y' ;
+  e <- app fy x'
+
+decl swap_args : . |- (e : val -o val -o exp)
+proc e <- swap_args =
+  v1 <- recv e ;
+  v2 <- recv e ;
+  v21 <- vPair v2 v1 ;
+  e <- value v21
+
+(* pair ; ( lam ; - ) ; unit ; close ) *)
+decl test : . |- (v : val)
+proc v <- test =
+     e1 <- unit ;
+     e2 <- id ;
+     e12 <- pair e1 e2 ;
+     sw <- swap_args ;
+     e <- casePair e12 sw ;
+     v <- eval e
+
+exec test
