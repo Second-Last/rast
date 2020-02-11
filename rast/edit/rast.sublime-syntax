@@ -1,9 +1,9 @@
 %YAML 1.2
 ---
 # See http://www.sublimetext.com/docs/3/syntax.html
-name: SILL-SubSing
-file_extensions: [ss]
-scope: source.ss
+name: Rast
+file_extensions: [rast]
+scope: source.rast
 
 variables:
   ident: '[A-Za-z_][A-Za-z_0-9]*'
@@ -43,14 +43,18 @@ contexts:
     - match: '\b(exec )\b'
       scope: constant.language.ss
       push: expecting_procname
-  
+
+    - match: '\b(decl )\b'
+      scope: constant.language.ss
+      push: expecting_procname
+
   expecting_procname:
     - meta_scope: procname.ss
     - match: '\b{{ident}}\b'
       scope: variable.parameter.ss
 
     - match: ' |\n'
-      pop: true 
+      pop: true
 
   expecting_typename:
     - meta_scope: typename.ss
@@ -66,7 +70,7 @@ contexts:
     # strings in YAML. When using single quoted strings, only single quotes
     # need to be escaped: this is done by using two single quotes next to each
     # other.
-    - match: '\b(caseL|caseR|waitL|closeR|work|payL|payR|getL|getR|tick|delay|nowL|nowR|whenL|whenR|whenI|assumeL|assumeR|assertL|assertR)\b'
+    - match: '\b(case|wait|close|work|pay|get|tick|delay|now|when|assume|assert|impossible)\b'
       scope: support.constant.ss
     - match: '(\<-\>|L\.|R\.)'
       scope: support.constant.ss
