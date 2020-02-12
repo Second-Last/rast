@@ -1,0 +1,100 @@
+#test success
+#options --syntax=implicit
+
+(* Encoding of sized types a la Abel & Pientka *)
+
+% dummy type to represent polymorphism
+type A = 1
+
+decl unit : . |- (u : A)
+proc u <- unit = close u
+
+% a simple termination measure
+type term{i} = !j. !{j < i}. term{j}
+
+% stream{i} is coinductive
+type stream{i} = !j. !{j < i}. A * stream{j}
+
+decl zip{i} : (m : term{i}) (s1 : stream{i}) (s2 : stream{i}) |- (s : stream{i})
+proc s <- zip{i} m s1 s2 =
+  {j} <- recv s ;
+  send s1 {j} ;
+  send s2 {j} ;
+  x1 <- recv s1 ; wait x1 ; % drop first element
+  x2 <- recv s2 ;           % forward second element
+  send s x2 ;
+  % j < i
+  send m {j} ;              % check termination measure
+  s <- zip{j} m s1 s2
+
+% next example does not type check
+(*
+decl loop{i} : (t : term{i}) (s1 : stream{i}) (s2 : stream{i}) |- (s : stream{i})
+proc s <- loop{i} t s1 s2 =
+  send t {i} ;
+  s <- loop{i} t s1 s2
+*)
+
+% this definition is sometimes used
+% type stream_ = !j. A * stream{j}
+
+% an infinite-free representation
+type stream_ = A * stream_
+
+% termination measure for a simple mutual recursion
+type term1{i} = !j. !{j < i}. term2{j}
+type term2{j} = !k. !{k <= j}. term1{k}
+
+decl evens{i} : (m : term1{i}) (t : stream_) |- (s : stream{i})
+decl odds{j} : (m : term2{j}) (t : stream_) |- (s : stream{j})
+
+proc s <- evens{i} m t =
+  {j} <- recv s ;
+  x <- recv t ;
+  send s x ;
+  % j < i
+  send m {j} ;
+  s <- odds{j} m t
+
+proc s <- odds{j} m t =
+  x <- recv t ;
+  wait x ;
+  % j <= j
+  send m {j} ;
+  s <- evens{j} m t
+
+% repeating an element we can generate
+decl repeat{i} : (m : term{i}) (u : A) |- (s : stream{i})
+proc s <- repeat{i} m u =
+  {j} <- recv s ;
+  send s u ;
+  v <- unit ;
+  send m {j} ;
+  s <- repeat{j} m v
+
+% stream processor example for mutual
+% induction/co-induction, from Abel & Pientka
+type B = 1
+
+type SP{i}{j} =
+  +{ gett : A -o ?j'. ?{j' < j}. SP{i}{j'},
+     putt : B * !i'. !{i' < i}. SP{i'}{j} }
+
+type term3{i}{j} = &{ pos1 : !i'. !{i' < i}. !j'. term3{i'}{j'},
+                      pos2 : !j'. !{j' < j}. term3{i}{j'} }
+
+decl run{i}{j} : (m : term3{i}{j}) (p : SP{i}{j}) (t : stream_) |- (s : stream{i})
+
+proc s <- run{i}{j} m p t =
+   case p ( gett => x <- recv t ;
+                    send p x ;
+                    {j'} <- recv p ;
+                    m.pos2 ; send m {j'} ;
+                    s <- run{i}{j'} m p t
+          | putt => y <- recv p ;
+                    {i'} <- recv s ;
+                    send s y ;
+                    m.pos1 ; send m {i'} ; send m {j} ;
+                    send p {i'} ;
+                    s <- run{i'}{j} m p t
+          )
