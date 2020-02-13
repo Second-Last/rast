@@ -1,0 +1,12 @@
+#options --syntax=explicit
+
+type nat{n} = +{succ : ?{n > 0}. nat{n-1},
+                zero : ?{n = 0}. 1 }
+
+decl pred{n} : (x : nat{n+1}) |- (y : nat{n})
+
+proc y <- pred{n} x =
+  case x (
+    succ => assume x {n+1 > 0} ; y <-> x
+  | zero => assume x {n+1 = 0} ; impossible
+  )
