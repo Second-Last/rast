@@ -17,24 +17,24 @@ type stream{i} = !j. !{j < i}. A * stream{j}
 
 decl zip{i} : (m : term{i}) (s1 : stream{i}) (s2 : stream{i}) |- (s : stream{i})
 proc s <- zip{i} m s1 s2 =
-  {j} <- recv s ;
+  {j} <- recv s ;  % j < i
   send s1 {j} ;
-  send s2 {j} ;
+  send s2 {j} ;    % (m : term{i}) (s1 : A * stream{j}) (s2 : A * stream{j}) |- (s : A * stream{j})
   x1 <- recv s1 ; wait x1 ; % drop first element
   x2 <- recv s2 ;           % forward second element
-  send s x2 ;
+  send s x2 ;      % (m : term{i}) (s1 : stream{j}) (s2 : stream{j}) |- (s : stream{j})
   % j < i
   send m {j} ;              % check termination measure
   s <- zip{j} m s1 s2
 
 % next example does not type check
+% and, indeed, it doesn't terminate
 (*
 decl loop{i} : (t : term{i}) (s1 : stream{i}) (s2 : stream{i}) |- (s : stream{i})
 proc s <- loop{i} t s1 s2 =
   send t {i} ;
   s <- loop{i} t s1 s2
 *)
-
 % this definition is sometimes used
 % type stream_ = !j. A * stream{j}
 
@@ -98,3 +98,4 @@ proc s <- run{i}{j} m p t =
                     send p {i'} ;
                     s <- run{i'}{j} m p t
           )
+

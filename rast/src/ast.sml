@@ -8,6 +8,7 @@ sig
 
 type label = string             (* l,k for internal and external choice *)
 type tpname = string            (* a, for types defined with a = A *)
+type tpvarname = string         (* A, for type parameters *)
 type expname = string           (* f, for processes defined with x <- f ... = P *)
 type ext = Mark.ext option      (* optional extent (source region info) *)
 
@@ -30,8 +31,11 @@ datatype tp =
        | Next of time * tp         (* ()A  or  ({t}) A *)
        | Dia of tp                 (* <> A *)
        | Box of tp                 (* [] A *)
-       | TpName of tpname * Arith.arith list (* a  or  a{...} *)
+       | TpVar of tpvarname        (* alpha *)
+       | TpName of tpname * tp list * Arith.arith list (* a or a[...] or a[...]{...} or a{...} *)
 type choices = (label * tp) list
+
+type tp_ctx = tpvarname list
 
 type chan = string
 type chan_tp = chan * tp
@@ -42,7 +46,7 @@ datatype exp =
        (* judgmental constructs *)
          Id of chan * chan                          (* x <-> y *)
        | Spawn of exp * exp                         (* x <- f{es} xs ; Q *)
-       | ExpName of chan * expname * Arith.arith list * chan list (* x <- f{es} xs *)
+       | ExpName of chan * expname * tp list * Arith.arith list * chan list (* x <- f[As]{es} xs *)
 
        (* internal/external choice +{...}, &{...} *)
        | Lab of chan * label * exp                   (* x.k ; P *)
@@ -89,11 +93,11 @@ type branches = (label * ext * exp) list             (* (l1 => P1 | ... | ln => 
 (* Declarations *)
 datatype decl =
          Pragma of string * string * ext                     (* #options, #test *)
-       | TpDef of tpname * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
+       | TpDef of tpname * tp_ctx * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
        | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a{..} = b{..} *)
-       | ExpDec of expname * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
+       | ExpDec of expname * tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
                                                              (* decl f{..} : Delta |{p}- (z : C) *)
-       | ExpDef of expname * Arith.ctx * (chan list * exp * chan) * ext
+       | ExpDef of expname * tp_ctx * Arith.ctx * (chan list * exp * chan) * ext
                                                              (* proc x <- f{es} xs = P *)
        | Exec of expname * ext                               (* exec f *)
 
@@ -106,17 +110,17 @@ val apply_chan_tp : Arith.subst -> chan_tp -> chan_tp (* [sigma](x:A) *)
 val apply_context : Arith.subst -> context -> context (* [sigma]Delta *)
 
 (* Environment lookup *)
-val lookup_tp : env -> tpname -> (Arith.ctx * Arith.prop * tp) option
-val lookup_expdec : env -> expname -> (Arith.ctx * Arith.prop * (context * pot * chan_tp)) option
-val lookup_expdef : env -> expname -> (Arith.ctx * (chan list * exp * chan)) option
+val lookup_tp : env -> tpname -> (tp_ctx * Arith.ctx * Arith.prop * tp) option
+val lookup_expdec : env -> expname -> (tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp)) option
+val lookup_expdef : env -> expname -> (tp_ctx * Arith.ctx * (chan list * exp * chan)) option
 
 val lookup_choice : choices -> label -> tp option
 val lookup_branch : branches -> label -> exp option
 
 (* Definitions and declarations *)
-val expd_tp : env -> tpname * Arith.arith list -> tp  (* must exist *)
-val expd_expdec : env -> expname * Arith.arith list -> (Arith.prop * (context * pot * chan_tp)) option
-val expd_expdef : env -> expname * Arith.arith list -> exp option
+val expd_tp : env -> tpname * tp list * Arith.arith list -> tp  (* must exist *)
+val expd_expdec : env -> expname * tp list * Arith.arith list -> (Arith.prop * (context * pot * chan_tp)) option
+val expd_expdef : env -> expname * tp list * Arith.arith list -> exp option
 
 (* Operational Semantics *)
 val strip_exts : exp -> exp     (* remove all marks to support pattern matching *)
@@ -148,6 +152,7 @@ structure RP = R.Print
 
 type label = string
 type tpname = string
+type tpvarname = string
 type expname = string
 type ext = Mark.ext option
 
@@ -170,8 +175,11 @@ datatype tp =
        | Next of time * tp         (* ()A  or  ({t}) A *)
        | Dia of tp                 (* <> A *)
        | Box of tp                 (* [] A *)
-       | TpName of tpname * R.arith list (* a  or  a{...} *)
+       | TpVar of tpvarname        (* alpha *)
+       | TpName of tpname * tp list * Arith.arith list (* a or a[...] or a[...]{...} or a{...} *)
 type choices = (label * tp) list
+
+type tp_ctx = tpvarname list
 
 type chan = string
 type chan_tp = chan * tp
@@ -181,7 +189,7 @@ datatype exp =
        (* judgmental constructs *)
          Id of chan * chan                                             (* x <-> y *)
        | Spawn of exp * exp                                            (* P || Q *)
-       | ExpName of chan * expname * Arith.arith list * chan list      (* x <- f{es} xs *)
+       | ExpName of chan * expname * tp list * Arith.arith list * chan list      (* x <- f[As]{es} xs *)
 
        (* internal/external choice +{...} *)
        | Lab of chan * label * exp                   (* x.k ; P *)
@@ -226,12 +234,14 @@ datatype exp =
 type branches = (label * ext * exp) list       (* (l1 => P1 | ... | ln => Pn) *)
 
 datatype decl =
-         Pragma of string * string * ext
-       | TpDef of tpname * R.ctx * R.prop * tp * ext
-       | TpEq of R.ctx * R.prop * tp * tp * ext
-       | ExpDec of expname * R.ctx * R.prop * (context * pot * chan_tp) * ext
-       | ExpDef of expname * R.ctx * (chan list * exp * chan) * ext
-       | Exec of expname * ext
+         Pragma of string * string * ext                     (* #options, #test *)
+       | TpDef of tpname * tp_ctx * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
+       | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a{..} = b{..} *)
+       | ExpDec of expname * tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
+                                                             (* decl f{..} : Delta |{p}- (z : C) *)
+       | ExpDef of expname * tp_ctx * Arith.ctx * (chan list * exp * chan) * ext
+                                                             (* proc x <- f{es} xs = P *)
+       | Exec of expname * ext                               (* exec f *)
 
 type env = decl list
 
@@ -253,7 +263,8 @@ fun apply_tp sg (One) = One
   | apply_tp sg (Forall(phi,A)) = Forall(R.apply_prop sg phi, apply_tp sg A)
   | apply_tp sg (ExistsNat(v,A)) = ExistsNat(apply_tp_bind sg (v,A))
   | apply_tp sg (ForallNat(v,A)) = ForallNat(apply_tp_bind sg (v,A))
-  | apply_tp sg (TpName(a,es)) = TpName(a, R.apply_list sg es)
+  | apply_tp sg (TpVar(alpha)) = TpVar(alpha)
+  | apply_tp sg (TpName(a,As,es)) = TpName(a, List.map (apply_tp sg) As, R.apply_list sg es)
 and apply_tp_bind sg (v,A) =
     let val v' = R.fresh_var sg v
     in (v', apply_tp ((v,R.Var(v'))::sg) A) end
@@ -282,7 +293,7 @@ fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (RecvNat(x,v,P)) = RecvNat(apply_exp_bind sg (x,v,P))
   | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
-  | apply_exp sg (ExpName(x,f,es,xs)) = ExpName(x,f, R.apply_list sg es, xs)
+  | apply_exp sg (ExpName(x,f,As,es,xs)) = ExpName(x,f, List.map (apply_tp sg) As, R.apply_list sg es, xs)
   | apply_exp sg (Marked(marked_P)) = Marked(Mark.mark' (Mark.data marked_P, Mark.ext marked_P))
 and apply_exp_bind sg (x,v,P) =
     let val v' = R.fresh_var sg v
@@ -293,18 +304,18 @@ and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P
 (* Environment Lookup *)
 (**********************)
 
-fun lookup_tp (TpDef(a',vs,con,A,_)::env') a  =
-    if a = a' then SOME(vs,con,A) else lookup_tp env' a
+fun lookup_tp (TpDef(a',alphas,vs,con,A,_)::env') a  =
+    if a = a' then SOME(alphas,vs,con,A) else lookup_tp env' a
   | lookup_tp (_ ::env') a = lookup_tp env' a
   | lookup_tp (nil) a = NONE
 
-fun lookup_expdec (ExpDec(f',vs,con,(D, pot, zC),_)::env') f =
-    if f = f' then SOME(vs,con,(D,pot,zC)) else lookup_expdec env' f
+fun lookup_expdec (ExpDec(f',alphas,vs,con,(D, pot, zC),_)::env') f =
+    if f = f' then SOME(alphas,vs,con,(D,pot,zC)) else lookup_expdec env' f
   | lookup_expdec (_::env') f = lookup_expdec env' f
   | lookup_expdec nil f = NONE
 
-fun lookup_expdef (ExpDef(f',vs,(xs,P,x),_)::env') f =
-    if f = f' then SOME(vs,(xs,P,x)) else lookup_expdef env' f
+fun lookup_expdef (ExpDef(f',alphas,vs,(xs,P,x),_)::env') f =
+    if f = f' then SOME(alphas,vs,(xs,P,x)) else lookup_expdef env' f
   | lookup_expdef (_::env') f = lookup_expdef env' f
   | lookup_expdef nil f = NONE
 
@@ -322,59 +333,27 @@ fun lookup_branch ((l:label,_,P)::branches) k =
 (* Definitions and Declarations *)
 (********************************)
 
-(* expd_tp env (a,es) = [es/vs]A if a{vs} = A
- * assumes a is defined and |es| = |vs|
- * requires that constraints con |= a{vs} = A are entailed
+(* expd_tp env (a,As,es) = [As/alphas][es/vs]A if a[alphas]{vs} = A
+ * assumes a is defined and |es| = |vs| and |As| = |alphas|
+ * requires that constraints con |= a[alphas]{vs} = A are entailed
  * in current context, which should be enforced by type validity
  *)
-fun expd_tp env (a,es) =
+fun expd_tp env (a,As,es) =
     case lookup_tp env a
-     of SOME(vs,con,A) => apply_tp (R.zip vs es) A (* cannot return NONE *)
+     of SOME(alphas,vs,con,A) => apply_tp (R.zip vs es) A (* cannot return NONE *) (* !!! *)
 
-fun expd_expdec env (f,es) =
+fun expd_expdec env (f,As,es) =
     (case lookup_expdec env f
-      of SOME(vs,con,(D,pot,(z,C))) =>
+      of SOME(alphas,vs,con,(D,pot,(z,C))) =>
          let val sg = R.zip vs es (* requires |vs| = |es| *)
-         in SOME(R.apply_prop sg con, (apply_context sg D, R.apply sg pot, (z,apply_tp sg C)))
+         in SOME(R.apply_prop sg con, (apply_context sg D, R.apply sg pot, (z,apply_tp sg C))) (* !!! *)
          end
        | NONE => NONE)
 
-fun expd_expdef env (f,es) =
+fun expd_expdef env (f,As,es) =
   (case lookup_expdef env f of
-    SOME(vs,(xs,P,x)) => SOME(apply_exp (R.zip vs es) P) (* requires |vs| = |es| *)
+    SOME(alphas,vs,(xs,P,x)) => SOME(apply_exp (R.zip vs es) P) (* requires |vs| = |es| *) (* !!! *)
   | NONE => NONE)
-
-(*************************)
-(* Operational Semantics *)
-(*************************)
-
-(* strip_exts P = P' strips all source location information from P
- * This helps in writing the operational rules by pattern matching
- *)
-fun strip_exts (Id(x,y)) = Id(x,y)
-  | strip_exts (Spawn(P,Q)) = Spawn(strip_exts P,strip_exts Q)
-  | strip_exts (ExpName(x,f,es,xs)) = ExpName(x,f,es,xs)
-  | strip_exts (Lab(x,k,P)) = Lab(x,k, strip_exts P)
-  | strip_exts (Case(x,branches)) = Case(x,strip_exts_branches branches)
-  | strip_exts (Send(x,w,P)) = Send(x,w, strip_exts P)
-  | strip_exts (Recv(x,y,Q)) = Recv(x,y, strip_exts Q)
-  | strip_exts (Close(x)) = Close(x)
-  | strip_exts (Wait(x,Q)) = Wait(x,strip_exts Q)
-  | strip_exts (Assert(x,phi,P)) = Assert(x,phi, strip_exts P)
-  | strip_exts (Assume(x,phi,Q)) = Assume(x,phi, strip_exts Q)
-  | strip_exts (SendNat(x,e,P)) = SendNat(x,e,strip_exts P)
-  | strip_exts (RecvNat(x,v,P)) = RecvNat(x,v,strip_exts P)
-  | strip_exts (Imposs) = Imposs
-  | strip_exts (Work(p,P)) = Work(p,strip_exts P)
-  | strip_exts (Pay(x,p,P)) = Pay(x,p,strip_exts P)
-  | strip_exts (Get(x,p,P)) = Get(x,p,strip_exts P)
-  | strip_exts (Delay(t,P)) = Delay(t,strip_exts P)
-  | strip_exts (Now(x,P)) = Now(x,strip_exts P)
-  | strip_exts (When(x,Q)) = When(x,strip_exts Q)
-  | strip_exts (Marked(marked_P)) = strip_exts (Mark.data marked_P)
-and strip_exts_branches nil = nil
-  | strip_exts_branches ((l,ext,P)::branches) =
-    (l,ext,strip_exts P)::strip_exts_branches branches
 
 (************)
 (* Printing *)
@@ -398,6 +377,9 @@ fun pp_potpos (R.Int(1)) = ""
 fun pp_time (R.Int(1)) = ""
   | pp_time e = "{" ^ RP.pp_arith e ^ "}"
 
+fun pp_alphas nil = ""
+  | pp_alphas (alpha::alphas) = "[" ^ alpha ^ "]" ^ pp_alphas alphas
+
 fun pp_vars nil = ""
   | pp_vars (v::vs) = "{" ^ v ^ "}" ^ pp_vars vs
 
@@ -420,7 +402,8 @@ fun pp_tp (One) = "1"
   | pp_tp (Forall(phi,A)) = "!" ^ pp_prop phi ^ ". " ^ pp_tp A
   | pp_tp (ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp A
   | pp_tp (ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp A
-  | pp_tp (TpName(a,l)) = a ^ pp_idx l
+  | pp_tp (TpVar(alpha)) = alpha
+  | pp_tp (TpName(a,As,es)) = a ^ pp_tps ^ pp_idx es
 and pp_choice nil = ""
   | pp_choice ((l,A)::nil) = l ^ " : " ^ pp_tp A
   | pp_choice ((l,A)::choices) =
@@ -428,6 +411,8 @@ and pp_choice nil = ""
 and pp_tp_paren (A as One) = pp_tp A
   | pp_tp_paren (A as TpName _) = pp_tp A
   | pp_tp_paren A = "(" ^ pp_tp A ^ ")"
+and pp_tps nil = ""
+  | pp_tps (A::As) = "[" ^ pp_tp A ^ "]" ^ pp_tps As
 
 fun pp_chanlist [] = ""
   | pp_chanlist [x] = x
@@ -452,7 +437,7 @@ fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
   | pp_exp (SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_arith e ^ " ; " ^ pp_exp P
   | pp_exp (RecvNat(x,v,P)) = pp_arith (R.Var(v)) ^ " <- recv " ^ x ^ " ; " ^ pp_exp P
   | pp_exp (Imposs) = "impossible"
-  | pp_exp (ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " " ^ pp_chanlist xs
+  | pp_exp (ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp (Marked(marked_exp)) = pp_exp (Mark.data marked_exp)
 and pp_branches (nil) = ""
   | pp_branches ((l,_,P)::nil) = l ^ " => " ^ pp_exp P
@@ -467,11 +452,11 @@ fun pp_context nil = "."
   | pp_context [xA] = pp_chan_tp xA
   | pp_context (xA::D) = pp_chan_tp xA ^ " " ^ pp_context D
 
-fun pp_decl (TpDef(a,vs,R.True,A,_)) = "type " ^ a ^ pp_vars vs ^ " = " ^ pp_tp A
-  | pp_decl (TpDef(a,vs,con,A,_)) = "type " ^ a ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
+fun pp_decl (TpDef(a,alphas,vs,R.True,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ " = " ^ pp_tp A
+  | pp_decl (TpDef(a,alphas,vs,con,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
   | pp_decl (TpEq(ctx,con,TpName(a,l),TpName(a',l'),_)) = "eqtype " ^ a ^ pp_idx l ^ " = " ^ a' ^ pp_idx l'
-  | pp_decl (ExpDec(f,vs,con,(D,pot,zC),_)) = "proc " ^ f ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
-  | pp_decl (ExpDef(f,vs,(xs,P,x),_)) = "proc " ^ f ^ pp_vars vs ^ " : " ^ x ^ " " ^ pp_chanlist xs ^ " = " ^ pp_exp P
+  | pp_decl (ExpDec(f,alphas,vs,con,(D,pot,zC),_)) = "decl " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
+  | pp_decl (ExpDef(f,alphas,vs,(xs,P,x),_)) = "proc " ^ x ^ " <- " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ " " ^ pp_chanlist xs ^ " = " ^ pp_exp P
   | pp_decl (Exec(f,_)) = "exec " ^ f
   | pp_decl (Pragma(p,line,_)) = p ^ line
 

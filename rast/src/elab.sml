@@ -359,7 +359,8 @@ and elab_exps env nil = nil
              val tc_final = Time.toMicroseconds (Time.now ())
              val tc = tc_final - tc_init
              val () = tc_time := !tc_time + tc
-             val P' = A.strip_exts P' (* always strip extents whether implicit or explicit syntax *)
+             (* val P' = A.strip_exts P' *)
+             (* no longer needed, we believe *)
          in
              A.ExpDef(f,vs,(xs,P',x),ext)::elab_exps' env decls
          end)
