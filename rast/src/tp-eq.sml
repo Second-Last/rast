@@ -49,8 +49,8 @@ fun eq_idx ctx con nil nil = true
 
 (* Structural equality *)
 
-(* mem_env env a a' => SOME(CTX,CON,TpName(a,es),TpName(a',es')) if exists in env *)
-fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,ES),A' as A.TpName(B',ES'),_)::env) a a' =
+(* mem_env env a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As,es')) if exists in env *)
+fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,nil,ES),A' as A.TpName(B',nil,ES'),_)::env) a a' =
     if B = a andalso B' = a'
     then SOME(CTX,CON,(A,A'))
     else if B = a' andalso B' = a
@@ -59,8 +59,8 @@ fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,ES),A' as A.TpName(B',ES'),_)::env) 
   | mem_env (_::env) a a' = mem_env env a a'
   | mem_env nil a a' = NONE
 
-(* mem_env env seen a a' => SOME(CTX,CON,TpName(a,es),TpName(a',es')) if exists in seen *)
-fun mem_seen env ((E as (CTX,CON,(A as A.TpName(B, ES), A' as A.TpName(B', ES'))))::seen) a a' =
+(* mem_env env seen a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As,es')) if exists in seen *)
+fun mem_seen env ((E as (CTX,CON,(A as A.TpName(B,nil,ES), A' as A.TpName(B',nil,ES'))))::seen) a a' =
     if B = a andalso B' = a'
     then SOME(CTX,CON,(A,A'))
     else if B = a' andalso B' = a
@@ -106,7 +106,7 @@ fun gen_prop_eq FCTX FCON FES es FES' es' =
  *)
 fun aggregate_nexts' env ctx con s (A.Next(t,A')) =
     aggregate_nexts' env ctx con (R.plus(s,t)) A'
-  | aggregate_nexts' env ctx con s (A as A.TpName(a,es)) =
+  | aggregate_nexts' env ctx con s (A as A.TpName(a,As,es)) =
     aggregate_nexts' env ctx con s (TU.expd env A)
   | aggregate_nexts' env ctx con s A = (* A <> Next _ *)
     if C.entails ctx con (R.Eq(s,R.Int(0)))
@@ -171,8 +171,10 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     eq_tp' env ctx con seen A A'
   | eq_tp env ctx con seen (A.Dia(A)) (A.Dia(A')) =
     eq_tp' env ctx con seen A A'
+  | eq_tp env ctx con seen (A.TpVar(alpha)) (A.TpVar(alpha')) =
+    alpha = alpha'
 
-  | eq_tp env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
+  | eq_tp env ctx con seen (A as A.TpName(a,nil,es)) (A' as A.TpName(a',nil,es')) =
     if a = a'
     (* reflexivity *)
     then case !Flags.equality
@@ -180,9 +182,9 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
            | Flags.Subsume => eq_name_name env ctx con seen A A' (* only coinductive equality *)
            | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
-  | eq_tp env ctx con seen (A as A.TpName(a,es)) A' =
+  | eq_tp env ctx con seen (A as A.TpName(a,nil,es)) A' =
     eq_tp' env ctx con seen (TU.expd env A) A'
-  | eq_tp env ctx con seen A (A' as A.TpName(a',es')) =
+  | eq_tp env ctx con seen A (A' as A.TpName(a',nil,es')) =
     eq_tp' env ctx con seen A (TU.expd env A')
 
   | eq_tp env ctx con seen A A' = false
@@ -201,11 +203,11 @@ and eq_choice env ctx con seen nil nil = true
   | eq_choice env ctx con seen ((l,A)::choice) nil = false
   | eq_choice env ctx con seen nil ((l',A')::choice') = false
 
-and eq_name_name env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
+and eq_name_name env ctx con seen (A as A.TpName(a,nil,es)) (A' as A.TpName(a',nil,es')) =
     case mem_seen env seen a a'
      of NONE => eq_tp' env ctx con ((ctx,con,(A,A'))::seen)
                        (TU.expd env A) (TU.expd env A')
-      | SOME(CTX,CON, (A.TpName(_,ES), A.TpName(_,ES'))) =>
+      | SOME(CTX,CON, (A.TpName(_,nil,ES), A.TpName(_,nil,ES'))) =>
         let val (FCTX,sigma) = gen_fresh CTX
             val FCON = R.apply_prop sigma CON
             val FES = R.apply_list sigma ES

@@ -161,7 +161,7 @@ fun load env (file::filenames) =
 
 fun init_pot env f =
   (case A.lookup_expdec env f
-    of SOME(_,_,(_,pot,_)) => R.evaluate pot
+    of SOME(_,_,_,(_,pot,_)) => R.evaluate pot
     |  NONE => raise ErrorMsg.Error) 
 
 (* measure cost = true if 'cost' is measured *)
@@ -174,7 +174,7 @@ fun run' env (A.Exec(f,ext)::decls) =
     let val () = if !Flags.verbosity >= 1
                  then TextIO.print (PP.pp_decl env (A.Exec(f,ext)) ^ "\n")
                  else ()
-        val SOME([],([],P,x)) = A.lookup_expdef env f
+        val SOME([],[],([],P,x)) = A.lookup_expdef env f
         val texec_before = Time.toMicroseconds (Time.now ())
         val v = Eval.evaluate env P x
         val texec_after = Time.toMicroseconds (Time.now ())

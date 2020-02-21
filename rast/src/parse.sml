@@ -366,23 +366,23 @@ and r_arg (S $ Args(args, r1) $ Tok(T.IDENT(id), r2)) = S $ Args(args @ [id], jo
 and r_decl S = r_decl_1 S
 and r_decl_1 (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.EQ,_) $ Tp(tp,r2)) =
     (* 'type' <id> <var_seq> = <type> *)
-    S $ Decl(A.TpDef(id,vars l,phis l,tp,PS.ext(join r1 r2)))
-  | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Indices(l1,_) $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),_) $ Indices(l2, r2)) =
+    S $ Decl(A.TpDef(id,nil,vars l,phis l,tp,PS.ext(join r1 r2)))
+  | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Indices(es1,_) $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),_) $ Indices(es2, r2)) =
     (* 'eqtype' <id> <idx_seq> = <id> <idx_seq> *)
-    S $ Decl(A.TpEq([],R.True,A.TpName(id1,l1),A.TpName(id2,l2),PS.ext(join r1 r2)))
+    S $ Decl(A.TpEq([],R.True,A.TpName(id1,nil,es1),A.TpName(id2,nil,es2),PS.ext(join r1 r2)))
   | r_decl_1 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.TURNSTILE,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <ctx> |- <id> : <type> *)
-    S $ Decl(A.ExpDec(id,vars l,phis l,(ctx,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
+    S $ Decl(A.ExpDec(id,nil,vars l,phis l,(ctx,R.Int(0),(c,tp)), PS.ext(join r1 r2)))
   | r_decl_1 S = r_decl_2 S
 
 and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ Vars(l,_) $ Tok(T.COLON,_) $ Context(ctx,_) $ Tok(T.BAR,_) $ AExp(pot,r) $ Tok(T.MINUS,_) $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <var_seq> : <ctx> '|{' <arith> '}-' <id> : <type> *)
-    S $ Decl(A.ExpDec(id,vars l,phis l,(ctx,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
+    S $ Decl(A.ExpDec(id,nil,vars l,phis l,(ctx,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
   | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ Vars(l,r)
                 $ Args(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
     (* 'proc' <id> '<-' <id> <var_seq> <id_seq> = <exp> *)
     (case (phis l)
-     of R.True => S $ Decl(A.ExpDef(id,vars l,(xs, exp, x),PS.ext(join r1 r2)))
+     of R.True => S $ Decl(A.ExpDef(id,nil,vars l,(xs, exp, x),PS.ext(join r1 r2)))
       | _ => parse_error (r, "constraint found in process definition"))
   | r_decl_2 (S $ Tok(T.EXEC,r1) $ Tok(T.IDENT(id),r2)) =
     (* 'exec' <id> *)
@@ -551,7 +551,7 @@ and r_type_2 (S $ Tok(T.BAR,r1) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPo
   | r_type_2 (S $ Tok(T.QUESTION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsNat(id,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
   | r_type_2 S = r_type_3 S
-and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Indices(l,r2)) = S $ Tp(A.TpName(id,l),join r1 r2)
+and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Indices(es,r2)) = S $ Tp(A.TpName(id,nil,es),join r1 r2)
   | r_type_3 (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
   | r_type_3 (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
   | r_type_3 (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
@@ -640,7 +640,7 @@ and p_con_semi ST = case first ST of
 (* reduce <exp>, where <exp> has no continuation (atomic expressions) *)
 and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.Close(id),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Args(xs,r2)) =
-    S $ Exp(m_exp(A.ExpName(x,f,es,xs),join r1 r2),join r1 r2)
+    S $ Exp(m_exp(A.ExpName(x,f,nil,es,xs),join r1 r2),join r1 r2)
   | r_exp_atomic (S $ Tok(T.IDENT(x),r1) $ Tok(T.LRARROW,_) $ Tok(T.IDENT(y),r2)) =
     S $ Exp(m_exp(A.Id(x,y), join r1 r2), join r1 r2)
   | r_exp_atomic (S $ Tok(T.CASE,r1) $ Tok(T.IDENT(id),_) $ Tok(T.LPAREN,_) $ Branches(branches) $ Tok(T.RPAREN,r2)) =
@@ -665,7 +665,7 @@ and r_action_1 (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $
   | r_action_1 (S $ Tok(T.IDENT(y),r1) $ Tok(T.LARROW,_) $ Tok(T.RECV,_) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Recv(x,y,K),join r1 r2)), join r1 r3)
   | r_action_1 (S $ Tok(T.IDENT(x),r1) $ Tok(T.LARROW,_) $ Tok(T.IDENT(f),_) $ Indices(es,_) $ Args(xs,r2) $ Tok(T.SEMICOLON,r3)) =
-    S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,es,xs),K), join r1 r2)), join r1 r3)
+    S $ Action((fn K => m_exp(A.Spawn(A.ExpName(x,f,nil,es,xs),K), join r1 r2)), join r1 r3)
   | r_action_1 (S $ Tok(T.LBRACE,r1) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,_) $ Tok(T.LARROW,_)
                 $ Tok(T.RECV, _) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.RecvNat(x,v,K),join r1 r2)), join r1 r3)

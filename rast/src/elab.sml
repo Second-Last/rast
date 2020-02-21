@@ -121,9 +121,9 @@ end
 
 fun apply_fst f (A,env) = (f A, env)
 
-fun exists (A.TpDef(a,vs,con,A,ext)) nil = false
-  | exists (A.TpDef(a,vs,con,A,ext)) (A.TpDef(a',vs',con',A',ext')::env) =
-    a = a' orelse exists (A.TpDef(a,vs,con,A,ext)) env
+fun exists (A.TpDef(a,alphas,vs,con,A,ext)) nil = false
+  | exists (A.TpDef(a,alphas,vs,con,A,ext)) (A.TpDef(a',alphas',vs',con',A',ext')::env) =
+    a = a' orelse exists (A.TpDef(a,alphas,vs,con,A,ext)) env
 
 fun combine nil env = env
   | combine (decl::env1) env2 =
@@ -135,10 +135,10 @@ fun combine nil env = env
  * a new definition "type a = A'" with A' == A and
  * also definitions for all internal names in A'
  *)
-fun tp_naming (A.TpDef(a,vs,con,A,ext)) =
+fun tp_naming (A.TpDef(a,alphas,vs,con,A,ext)) =
   let val (A',env) = tp_name_subtp vs con A []
   in
-    A.TpDef(a,vs,con,A',ext)::env
+    A.TpDef(a,alphas,vs,con,A',ext)::env
   end
 
 (* tp_name_subtp ctx con A env = (A', env')
@@ -174,6 +174,7 @@ and tp_name_subtp ctx con (A.Plus(choices)) env = apply_fst A.Plus (tp_name_subc
   | tp_name_subtp ctx con (A.Next(t,A')) env = apply_fst (fn A => (A.Next(t,A))) (tp_name_subtp' ctx con A' env)
   | tp_name_subtp ctx con (A.Box(A')) env = apply_fst A.Box (tp_name_subtp' ctx con A' env)
   | tp_name_subtp ctx con (A.Dia(A')) env = apply_fst A.Dia (tp_name_subtp' ctx con A' env)
+  | tp_name_subtp ctx con (A.TpVar(alpha)) env = (A.TpVar(alpha), env)
 
 and tp_name_subchoices ctx con nil env = (nil, env)
   | tp_name_subchoices ctx con ((l,A)::choices) env =
@@ -185,15 +186,17 @@ and tp_name_subchoices ctx con nil env = (nil, env)
 
 (* tp_name_subtp' ctx con A env = (A', env')
  * like tp_name_subtp except A may be a type name
+ * Still need a new internal name above a type variables
+ * for correct substitution, so they are not singled out here
  *)
-and tp_name_subtp' ctx con (A as A.TpName(_,_)) env = (A, env)
+and tp_name_subtp' ctx con (A as A.TpName(_,_,_)) env = (A, env)
   | tp_name_subtp' ctx con (A.One) env = (A.One, env)
   | tp_name_subtp' ctx con A env =
     let val (A', env') = tp_name_subtp ctx con A env
         val new_tpname = fresh_name ()
-        val decl = A.TpDef(new_tpname,ctx,con,A',NONE)
+        val decl = A.TpDef(new_tpname,nil,ctx,con,A',NONE) (* !!! *)
     in
-      (A.TpName(new_tpname, List.map (fn v => R.Var(v)) ctx), decl::env')
+      (A.TpName(new_tpname, nil, List.map (fn v => R.Var(v)) ctx), decl::env') (* !!! *)
     end
 
 (***************************)
@@ -221,7 +224,7 @@ fun subst_chans (yt::D) (x::xs)  = (subst_chan yt x)::(subst_chans D xs)
  * are checked for the validity of the types used.
  *)
 fun elab_tps env nil = nil
-  | elab_tps env ((decl as A.TpDef(a,vs,con,A,ext))::decls) =
+  | elab_tps env ((decl as A.TpDef(a,alphas,vs,con,A,ext))::decls) =
     let
         val () = if !Flags.verbosity >= 1
                   then TextIO.print (postponed decl ^ PP.pp_decl env decl ^ "\n")
@@ -236,7 +239,7 @@ fun elab_tps env nil = nil
     in
          tp_defs @ elab_tps env decls
     end
-  | elab_tps env ((decl as A.TpEq([],con,A as A.TpName(a,es),A' as A.TpName(a',es'),ext))::decls) =
+  | elab_tps env ((decl as A.TpEq([],con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'),ext))::decls) =
     (* variables are implicitly quantified; collect here *)
     (* because we have not yet elaborated type definitions
      * we cannot check the equality here; wait for the second pass
@@ -255,7 +258,7 @@ fun elab_tps env nil = nil
     in
         decl'::elab_tps env decls
     end
-  | elab_tps env ((decl as A.ExpDec(f,vs,con,(D,pot,(z,C)),ext))::decls) =
+  | elab_tps env ((decl as A.ExpDec(f,alphas,vs,con,(D,pot,(z,C)),ext))::decls) =
     (* do not print process declaration so they are printed close to their use *)
     (* check for duplicates and validity *)
     let
@@ -295,11 +298,11 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.TpDef _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
-  | elab_exps env ((decl as A.TpEq(ctx,con,A as A.TpName(a,es),A' as A.TpName(a',es'), ext))::decls) =
+  | elab_exps env ((decl as A.TpEq(ctx,con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'), ext))::decls) =
     (* already checked validity during first pass; now check type equality *)
     let
-        val B = A.expd_tp env (a,es)
-        val B' = A.expd_tp env (a',es')
+        val B = A.expd_tp env (a,As,es)
+        val B' = A.expd_tp env (a',As',es')
         val () = if TEQ.eq_tp env ctx con B B'
                  then ()
                  else ERROR ext ("type " ^ PP.pp_tp env A ^ " not equal " ^ PP.pp_tp env A')
@@ -309,11 +312,11 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.ExpDec _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
-  | elab_exps env ((decl as A.ExpDef(f,vs,(xs,P,x),ext))::decls) =
+  | elab_exps env ((decl as A.ExpDef(f,alphas,vs,(xs,P,x),ext))::decls) =
     (* type check the process now *)
     (case A.lookup_expdec env f
       of NONE => ERROR ext ("process " ^ f ^ " undeclared")
-       | SOME(vs',con',(D',pot',zC')) =>
+       | SOME(alphas',vs',con',(D',pot',zC')) =>
          (* check validity, duplicates, corresponds with the declaration *)
          let
              val () = if dups (x::xs) then ERROR ext ("duplicate variable in process definition") else ()
@@ -339,12 +342,12 @@ and elab_exps env nil = nil
                        of Flags.Implicit =>                  (* if syntax implicit *)
                           if !Flags.verbosity >= 2           (* and verbose *)
                           then ( TextIO.print ("% after reconstruction with cost model " ^ pp_costs () ^ "\n")
-                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,(xs,P',x),ext)) ^ "\n") )
+                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,alphas,vs,(xs,P',x),ext)) ^ "\n") )
                           else ()
                         | Flags.Explicit => (* maybe only if there is a cost model... *)
                           if !Flags.verbosity >= 2
                           then ( TextIO.print ("% with cost model " ^ pp_costs () ^ "\n")
-                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,vs,(xs,P',x),ext)) ^ "\n") )
+                               ; TextIO.print (PP.pp_decl env (A.ExpDef(f,alphas,vs,(xs,P',x),ext)) ^ "\n") )
                           else ()
              (* is necessary for implicit syntax, since reconstruction is approximate *)
              val tc_init = Time.toMicroseconds (Time.now ())
@@ -362,13 +365,13 @@ and elab_exps env nil = nil
              (* val P' = A.strip_exts P' *)
              (* no longer needed, we believe *)
          in
-             A.ExpDef(f,vs,(xs,P',x),ext)::elab_exps' env decls
+             A.ExpDef(f,alphas,vs,(xs,P',x),ext)::elab_exps' env decls
          end)
   | elab_exps env ((decl as A.Exec(f,ext))::decls) =
     (case A.lookup_expdef env f
-      of SOME([],([],P,x)) => A.Exec(f,ext)::elab_exps' env decls
+      of SOME([],[],([],P,x)) => A.Exec(f,ext)::elab_exps' env decls
          (* cannot run processes with non-empty context *)
-       | SOME(vs,(ys,P,x)) => ERROR ext ("process " ^ f ^ " with non-empty context")
+       | SOME(alphas,vs,(ys,P,x)) => ERROR ext ("process " ^ f ^ " with non-empty context")
        | NONE => ERROR ext ("process " ^ f ^ " undefined"))
   | elab_exps env ((decl as A.Pragma(p,line,ext))::decls) =
     ERROR ext ("unexpected pragma:\n" ^ PP.pp_decl env decl ^ "\n"
@@ -410,15 +413,15 @@ fun is_expdec env f = case A.lookup_expdec env f of NONE => false | SOME _ => tr
 fun is_expdef env f = case A.lookup_expdef env f of NONE => false | SOME _ => true
 
 fun check_redecl env nil = ()
-  | check_redecl env (A.TpDef(a,_,_,_,ext)::decls) =
+  | check_redecl env (A.TpDef(a,_,_,_,_,ext)::decls) =
     if is_tpdef env a orelse is_tpdef decls a
     then ERROR ext ("type name " ^ a ^ " defined more than once")
     else check_redecl env decls
-  | check_redecl env (A.ExpDec(f,_,_,_,ext)::decls) =
+  | check_redecl env (A.ExpDec(f,_,_,_,_,ext)::decls) =
     if is_expdec env f orelse is_expdec decls f
     then ERROR ext ("process name " ^ f ^ " declared more than once")
     else check_redecl env decls
-  | check_redecl env (A.ExpDef(f,_,_,ext)::decls) =
+  | check_redecl env (A.ExpDef(f,_,_,_,ext)::decls) =
     if is_expdef env f orelse is_expdef decls f
     then ERROR ext ("process name " ^ f ^ " defined more than once")
     else check_redecl env decls

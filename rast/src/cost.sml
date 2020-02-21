@@ -35,7 +35,7 @@ structure A = Ast
 (* insert a tick/delay with each receive operation *)
 fun cost_recv f (A.Id(x,y)) = A.Id(x,y)
   | cost_recv f (A.Spawn(P,Q)) = A.Spawn(cost_recv f P, cost_recv f Q)
-  | cost_recv f (A.ExpName(x,g,es,xs)) = A.ExpName(x,g,es,xs)
+  | cost_recv f (A.ExpName(x,g,As,es,xs)) = A.ExpName(x,g,As,es,xs)
 
   | cost_recv f (A.Lab(x,k,P)) = A.Lab(x,k, cost_recv f P)
   | cost_recv f (A.Case(x,branches)) = A.Case(x,cost_recv_branches f branches)
@@ -73,7 +73,7 @@ datatype Sequence = Before | After
 (* insert a tick/delay with each send operation *)
 fun cost_send sf (A.Id(x,y)) = A.Id(x,y)
   | cost_send sf (A.Spawn(P,Q)) = A.Spawn(cost_send sf P, cost_send sf Q)
-  | cost_send sf (A.ExpName(x,f,es,xs)) = A.ExpName(x,f,es,xs)
+  | cost_send sf (A.ExpName(x,f,As,es,xs)) = A.ExpName(x,f,As,es,xs)
 
   | cost_send (After,f) (A.Lab(x,k,P)) = A.Lab(x,k, f(cost_send (After,f) P))
   | cost_send (Before,f) (A.Lab(x,k,P)) = f(A.Lab(x,k, cost_send (Before,f) P))

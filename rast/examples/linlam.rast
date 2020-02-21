@@ -30,6 +30,26 @@ proc v <- eval e =
                   case v1 ( lam => send v1 e ;
                                    v <- eval v1 ) )
 
+decl norm_lam : (e : exp -o exp) |- (n : exp -o exp)
+proc n <- norm_lam e =
+  x <- recv n ;  % x : exp, f : exp, e : exp -o exp
+  send e x ;     % f : exp, e : exp
+  n <- norm e
+
+decl norm : (e : exp) |- (n : exp)
+proc n <- norm e =
+  case e ( lam => % e : exp -o exp
+                  n' <- norm_lam e
+                  n <- lambda n'
+         | app => e1 <- recv e ; % e = e2
+                  n1 <- norm e1 ;
+                  case n1 ( lam => send n1 e ;  % n1 : exp -o exp
+                                   n <- norm n1
+                          | app => n11 <- recv n1 ;  % n1 = n12
+                                   n1' <- apply n11 n1 ;
+                                   n2 <- norm e ;
+                                   n <- apply n1' n2 ) )
+
 (* id = \x. x *)
 decl id : . |- (e : exp)
 proc e <- id =

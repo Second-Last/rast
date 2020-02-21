@@ -39,12 +39,12 @@ val ERROR = ErrorMsg.ERROR
 (************************)
 
 (* expd env a{es} = [es/vs]A for a type a{vs} = A *)
-fun expd env (short as A.TpName(a,es)) =
-    let val long = A.expd_tp env (a,es)
+fun expd env (short as A.TpName(a,As,es)) =
+    let val long = A.expd_tp env (a,As,es)
         val () = PP.Abbrev.register short long
     in long end
 
-fun expand env (A as A.TpName(a,es)) = expand env (expd env A)
+fun expand env (A as A.TpName(a,As,es)) = expand env (expd env A)
   | expand env A = A
 
 
@@ -55,12 +55,12 @@ fun expand env (A as A.TpName(a,es)) = expand env (expd env A)
 (* needed for BoxR and DiaL rules *)
 fun eventually_box env (A.Box(A)) = true
   | eventually_box env (A.Next(_,A)) = eventually_box env A
-  | eventually_box env (A as A.TpName(a,es)) = eventually_box env (expd env A)
+  | eventually_box env (A as A.TpName(a,As,es)) = eventually_box env (expd env A)
   | eventually_box _ _ = false
 
 fun eventually_dia env (A.Dia(A)) = true
   | eventually_dia env (A.Next(_,A)) = eventually_dia env A
-  | eventually_dia env (A as A.TpName(a,es)) = eventually_dia env (expd env A)
+  | eventually_dia env (A as A.TpName(a,As,es)) = eventually_dia env (expd env A)
   | eventually_dia _ _ = false
 
 (***********************)
@@ -74,7 +74,7 @@ fun decrementL env ctx con (A.Next(t,A)) t' ext =
     then decrementL env ctx con A (R.minus (t',t)) ext
     else ERROR ext ("cannot decide: " ^ C.pp_unrel con t t')
   | decrementL env ctx con (A.Box(A)) t' ext = A.Box(A)
-  | decrementL env ctx con (A as A.TpName(a,es)) t' ext = decrementL env ctx con (expd env A) t' ext
+  | decrementL env ctx con (A as A.TpName(a,As,es)) t' ext = decrementL env ctx con (expd env A) t' ext
   | decrementL env ctx con A t' ext =
     if C.entails ctx con (R.Eq(t',R.Int(0)))
     then A
@@ -91,7 +91,7 @@ fun decrementR env ctx con (A.Next(t,A)) t' ext =
     then decrementR env ctx con A (R.minus (t',t)) ext
     else ERROR ext ("cannot decide: " ^ C.pp_unrel con t' t)
   | decrementR env ctx con (A.Dia(A)) t' ext = A.Dia(A)
-  | decrementR env ctx con (A as A.TpName(a,es)) t' ext = decrementR env ctx con (expd env A) t' ext
+  | decrementR env ctx con (A as A.TpName(a,As,es)) t' ext = decrementR env ctx con (expd env A) t' ext
   | decrementR env ctx con A t' ext =
     if C.entails ctx con (R.Eq(t',R.Int(0)))
     then A

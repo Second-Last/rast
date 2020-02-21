@@ -122,9 +122,6 @@ val expd_tp : env -> tpname * tp list * Arith.arith list -> tp  (* must exist *)
 val expd_expdec : env -> expname * tp list * Arith.arith list -> (Arith.prop * (context * pot * chan_tp)) option
 val expd_expdef : env -> expname * tp list * Arith.arith list -> exp option
 
-(* Operational Semantics *)
-val strip_exts : exp -> exp     (* remove all marks to support pattern matching *)
-
 (* Printing *)
 (* for internal and debugging purposes only *)
 (* see pprint.sml for external printing *)
@@ -134,6 +131,7 @@ sig
     val pp_idx : Arith.arith list -> string
     val pp_prop : Arith.prop -> string
     val pp_con : Arith.prop -> string
+    val pp_alphas : tp_ctx -> string
     val pp_tp : tp -> string
     val pp_exp : exp -> string
     val pp_decl : decl -> string
@@ -403,7 +401,7 @@ fun pp_tp (One) = "1"
   | pp_tp (ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp A
   | pp_tp (ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp A
   | pp_tp (TpVar(alpha)) = alpha
-  | pp_tp (TpName(a,As,es)) = a ^ pp_tps ^ pp_idx es
+  | pp_tp (TpName(a,As,es)) = a ^ pp_tps As ^ pp_idx es
 and pp_choice nil = ""
   | pp_choice ((l,A)::nil) = l ^ " : " ^ pp_tp A
   | pp_choice ((l,A)::choices) =
@@ -454,7 +452,7 @@ fun pp_context nil = "."
 
 fun pp_decl (TpDef(a,alphas,vs,R.True,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ " = " ^ pp_tp A
   | pp_decl (TpDef(a,alphas,vs,con,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
-  | pp_decl (TpEq(ctx,con,TpName(a,l),TpName(a',l'),_)) = "eqtype " ^ a ^ pp_idx l ^ " = " ^ a' ^ pp_idx l'
+  | pp_decl (TpEq(ctx,con,TpName(a,As,es),TpName(a',As',es'),_)) = "eqtype " ^ a ^ pp_tps As ^ pp_idx es ^ " = " ^ a' ^ pp_tps As' ^ pp_idx es'
   | pp_decl (ExpDec(f,alphas,vs,con,(D,pot,zC),_)) = "decl " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
   | pp_decl (ExpDef(f,alphas,vs,(xs,P,x),_)) = "proc " ^ x ^ " <- " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ " " ^ pp_chanlist xs ^ " = " ^ pp_exp P
   | pp_decl (Exec(f,_)) = "exec " ^ f

@@ -38,7 +38,7 @@ val ERROR = ErrorMsg.ERROR
 fun skip env (A.Next(_,A')) = skip env A'
   | skip env (A.Dia(A')) = skip env A'
   | skip env (A.Box(A')) = skip env A'
-  | skip env (A as A.TpName(a,es)) = skip env (TU.expd env A)
+  | skip env (A as A.TpName(a,As,es)) = skip env (TU.expd env A)
   | skip env A = A
 
 fun skipW env A =
@@ -64,7 +64,7 @@ fun addLs_pay env D nil P = P
   | addLs_pay env D (x::xs) P =
     addLs_pay env D xs (addL_pay env (x, TCU.lookup_context env x D NONE) P)
 
-fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,es,xs),Q)) =
+fun add_call env D (PQ as A.Spawn(P as A.ExpName(x,f,As,es,xs),Q)) =
     addLs_pay env D xs PQ
   | add_call env D (A.Spawn(A.Marked(marked_P),Q)) =
     add_call env D (A.Spawn(Mark.data marked_P,Q))
@@ -102,7 +102,7 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
         val Q' = recon env D' Q (z,C) ext
         val PQ' = add_call env D (A.Spawn(P,Q'))
     in PQ' end
-  | recon'  env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+  | recon'  env D (P as A.ExpName(x,f,As,es,xs)) (z,C) ext =
     addR_pay env (addLs_pay env D xs P) (z,skip env C)
 
   (* begin cases for each action matching their type *)
@@ -251,8 +251,8 @@ and recon_branchesR env D nil (z,nil) ext = nil
  * constraints we might insert work{0}.
  *)
 fun last_insert env pot (P as A.Id(x,y)) = A.Work(pot,P)
-  | last_insert env pot (P as A.ExpName(x,f,es,xs)) =
-      (case A.expd_expdec env (f, es)
+  | last_insert env pot (P as A.ExpName(x,f,As,es,xs)) =
+      (case A.expd_expdec env (f,As,es)
         of SOME(_,(_,potf,_)) => A.Work(R.minus(pot,potf),P))
   | last_insert env pot (P as A.Close(x)) = A.Work(pot,P)
 
@@ -262,7 +262,7 @@ fun insert_work env pot (P as A.Id(z,x)) =
     let val potP = TCU.syn_pot env P NONE
         val potQ = R.minus(pot,potP)
     in A.Spawn(P, insert_work env potQ Q) end
-  | insert_work env pot (P as A.ExpName(x,f,es,xs)) =
+  | insert_work env pot (P as A.ExpName(x,f,As,es,xs)) =
     last_insert env pot P
   | insert_work env pot (A.Lab(x,k,P)) =
     A.Lab(x,k, insert_work env pot P)

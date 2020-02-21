@@ -69,7 +69,10 @@ fun closed_tp ctx (A.Plus(choice)) ext = closed_choice ctx choice ext
   | closed_tp ctx (A.Next(t,A)) ext = ( closed ctx t ext ; closed_tp ctx A ext )
   | closed_tp ctx (A.Dia(A)) ext = closed_tp ctx A ext
   | closed_tp ctx (A.Box(A)) ext = closed_tp ctx A ext
-  | closed_tp ctx (A.TpName(a,es)) ext = List.app (fn e => closed ctx e ext) es
+  | closed_tp ctx (A.TpVar(alpha)) ext = () (* !!! *)
+  | closed_tp ctx (A.TpName(a,As,es)) ext =
+    ( List.app (fn A => closed_tp ctx A ext) As
+    ; List.app (fn e => closed ctx e ext) es )
   (* A.Dot should be impossible here *)
 and closed_choice ctx nil ext = ()
   | closed_choice ctx ((l,Al)::choices) ext =
@@ -79,7 +82,9 @@ fun closed_exp ctx (A.Id _) ext = ()
   | closed_exp ctx (A.Spawn(P,Q)) ext =
     ( closed_exp ctx P ext
     ; closed_exp ctx Q ext )
-  | closed_exp ctx (A.ExpName(x,f,es,xs)) ext = List.app (fn e => closed ctx e ext) es
+  | closed_exp ctx (A.ExpName(x,f,As,es,xs)) ext =
+    ( List.app (fn A => closed_tp ctx A ext) As
+    ; List.app (fn e => closed ctx e ext) es )
 
   | closed_exp ctx (A.Lab(x,k,P)) ext = closed_exp ctx P ext
   | closed_exp ctx (A.Case(x,branches)) ext = closed_branches ctx branches ext
@@ -147,14 +152,15 @@ fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con c
   | valid_explicit env ctx con (A.Dia(A)) ext = valid_explicit env ctx con A ext
   | valid_explicit env ctx con (A.Box(A)) ext = valid_explicit env ctx con A ext
 
-  | valid_explicit env ctx con (A.TpName(a,es)) ext =
+  | valid_explicit env ctx con (A.TpName(a,As,es)) ext =
     (* allow forward references since 'env' is the full environment *)
     (case A.lookup_tp env a
       of NONE => ERROR ext ("type name " ^ a ^ " undefined")
-       | SOME(vs,con',_) =>
+       | SOME(alphas,vs,con',_) =>
          if not (List.length vs = List.length es)
-         then ERROR ext ("type " ^ a ^ " defined with " ^ Int.toString (List.length vs)
-                         ^ " indices, but used with " ^ Int.toString (List.length es))
+         then E.error_index_number "type name" (List.length vs, List.length es) ext
+         else if not (List.length alphas = List.length As)
+         then E.error_tparam_number "type name" (List.length alphas, List.length As) ext
          else case List.find (fn e => not (C.entails ctx con (R.Ge(e, R.Int(0))))) es
                of SOME(e) => ERROR ext ("type index cannot shown to be positive\n"
                                         ^ C.pp_jfail con (R.Ge(e, R.Int(0))))
@@ -231,7 +237,7 @@ fun valid_implicit env _ (A.Plus(choice)) ext = valid_implicit_choice env Zero c
   | valid_implicit env polarity (A.Dia(A)) ext = valid_implicit env polarity A ext
   | valid_implicit env polarity (A.Box(A)) ext = valid_implicit env polarity A ext
 
-  | valid_implicit env _ (A.TpName(a,es)) ext = ()
+  | valid_implicit env _ (A.TpName(a,As,es)) ext = () (* !!! *)
 
 and valid_implicit_choice env pol nil ext = ()
   | valid_implicit_choice env pol ((l,Al)::choices) ext =
@@ -250,7 +256,8 @@ fun valid env ctx con A ext =
  * this can lead to an infinite loop in type-checking
  *)
 fun contractive env (A as A.Next(_,A')) = contractive env A'
-  | contractive env (A as A.TpName(a,es)) = false
+  | contractive env (A as A.TpVar(alpha)) = false (* !!! *)
+  | contractive env (A as A.TpName(a,As,es)) = false
   | contractive env A = true
 
 end  (* structure TpValid *)

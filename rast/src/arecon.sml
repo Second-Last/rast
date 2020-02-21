@@ -25,7 +25,7 @@ structure TCU = TypeCheckUtil
 val ERROR = ErrorMsg.ERROR
 
 (* skipping over non-structural types, stopping at structural types *)
-fun skip env (A as A.TpName(a,es)) = skip env (TU.expd env A)
+fun skip env (A as A.TpName(a,As,es)) = skip env (TU.expd env A)
   | skip env (A.Exists(_,A')) = skip env A'
   | skip env (A.Forall(_,A')) = skip env A'
   | skip env (A.PayPot(_,A')) = skip env A'
@@ -37,9 +37,9 @@ fun skip env (A as A.TpName(a,es)) = skip env (TU.expd env A)
 
 fun lookup_skip env x D ext = skip env (TCU.lookup_context env x D ext)
 
-fun check_declared env (f,es) ext =
+fun check_declared env (f,As,es) ext =
     (case A.lookup_expdec env f
-      of SOME(vs,con,(D,pot,C)) =>
+      of SOME(alphas,vs,con,(D,pot,C)) =>
          if List.length es = List.length vs
          then ()
          else E.error_index_number "call" (List.length vs, List.length es) ext
@@ -174,19 +174,19 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
         val () = case D' of nil => ()
                           | _ => E.error_channels_open "forward" D' ext
     in P end
-  | recon' env D (A.Spawn(P as A.ExpName(x,f,es,xs),Q)) (zC as (z,C)) ext =
+  | recon' env D (A.Spawn(P as A.ExpName(x,f,As,es,xs),Q)) (zC as (z,C)) ext =
     let val () = if x = z
                  then E.error_channel_mismatch "spawn" ("fresh <id>", x) ext
                  else ()
         val D' = TCU.syn_call env D P ext
     in A.Spawn(P, recon env D' Q zC ext) end
-  | recon' env D (P as A.ExpName(x,f,es,xs)) (z,C) ext =
+  | recon' env D (P as A.ExpName(x,f,As,es,xs)) (z,C) ext =
     let val () = if x = z then ()
                  else E.error_channel_mismatch "tail call" (z,x) ext
         val D' = TCU.remove_chans xs D ext
         val () = case D' of nil => ()
                           | _ => E.error_channels_open "tail call" D' ext
-        val () = check_declared env (f,es) ext
+        val () = check_declared env (f,As,es) ext
     in P end
 
   (* begin cases for each action matching their type *)

@@ -80,10 +80,11 @@ fun ext_tp env (A.One) = A.One
   | ext_tp env (A.Forall(phi,A)) = A.Forall(phi,ext_tp env A)
   | ext_tp env (A.ExistsNat(v,A)) = A.ExistsNat(v,ext_tp env A)
   | ext_tp env (A.ForallNat(v,A)) = A.ForallNat(v,ext_tp env A)
-  | ext_tp env (A as A.TpName(a,es)) =
+  | ext_tp env (A.TpVar(alpha)) = A.TpVar(alpha)
+  | ext_tp env (A as A.TpName(a,As,es)) =
     if is_internal a
-    then ext_tp env (A.expd_tp env (a,es))   (* must be defined to be mentioned *)
-    else A
+    then ext_tp env (A.expd_tp env (a,As,es))   (* must be defined to be mentioned *)
+    else A.TpName(a, List.map (ext_tp env) As, es)
 
 and ext_choices env nil = nil
   | ext_choices env ((l,A)::choices) =
@@ -112,7 +113,7 @@ struct
   val abbrev_table : ((A.tp * A.tp) list) ref = ref nil
 
   fun reset () = abbrev_table := nil
-  fun register (short as A.TpName(a,es)) long =
+  fun register (short as A.TpName(a,As,es)) long =
       if is_internal a then ()  (* this type would be externalized anyway; don't register *)
       else ( abbrev_table := (short,long)::(!abbrev_table) )
     | register short long = (* this clause may not have a use case *)
@@ -219,6 +220,10 @@ fun pp_potany e = "{" ^ pp_arith e ^ "}"
 fun pp_time (R.Int(1)) = ""
   | pp_time e = "{" ^ pp_arith e ^ "}"
 
+(* pp_alphas alphas = "[a1]...[an]" *)
+fun pp_alphas nil = ""
+  | pp_alphas (alpha::alphas) = "[" ^ alpha ^ "]" ^ pp_alphas alphas
+
 (*******************************)
 (* Multiline Printing of Types *)
 (*******************************)
@@ -270,7 +275,8 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.Forall(phi,A)) = "!" ^ pp_con phi ^ ". " ^ pp_tp (i+len(pp_con(phi))+3) A
   | pp_tp i (A.ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
-  | pp_tp i (A.TpName(a,l)) = a ^ pp_idx l
+  | pp_tp i (A.TpVar(alpha)) = alpha
+  | pp_tp i (A.TpName(a,As,es)) = a ^ pp_tps i As ^ pp_idx es
 and pp_tp_indent i A = spaces i ^ pp_tp i A
 and pp_tp_after i s A = s ^ pp_tp (i+len(s)) A
 and pp_tp_paren true i A = "(" ^ pp_tp i A ^ ")"
@@ -283,8 +289,11 @@ and pp_choice i nil = ""
     pp_tp_after i (l ^ " : ") A ^ ",\n"
     ^ pp_choice_indent i choices
 and pp_choice_indent i choices = spaces i ^ pp_choice i choices
+and pp_tps i nil = ""
+  | pp_tps i (A::As) = "[" ^ pp_tp (i+1) A ^ "]" ^ pp_tps i As (* maybe fix i? *)
 
 val pp_tp = fn env => fn A => pp_tp 0 (ext_tp env A)
+val pp_tps = fn env => fn As => pp_tps 0 (List.map (ext_tp env) As)
 
 (* pp_tp_compact env A = "A", without newlines
  * this first checks if A can be abbreviated, then
@@ -336,7 +345,7 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = x <- f{..} ys *)
   | pp_exp env i (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Imposs) = "impossible"
-  | pp_exp env i (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " " ^ pp_chanlist xs
+  | pp_exp env i (A.ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps env As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp env i (A.Marked(marked_exp)) = pp_exp env i (Mark.data marked_exp)
 and pp_exp_indent env i P = spaces i ^ pp_exp env i P
 and pp_exp_after env i s P = s ^ pp_exp env (i+len(s)) P
@@ -374,24 +383,24 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
   | pp_exp_prefix env (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ; ..."
   | pp_exp_prefix env (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Imposs) = "impossible"
-  | pp_exp_prefix env (A.ExpName(x,f,es,xs)) = x ^ " <- " ^ f ^ pp_idx es ^ " " ^ pp_chanlist xs
+  | pp_exp_prefix env (A.ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps env As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp_prefix env (A.Marked(marked_exp)) = pp_exp_prefix env (Mark.data marked_exp)
 
 (****************)
 (* Declarations *)
 (****************)
 
-fun pp_decl env (A.TpDef(a,vs,R.True,A,_)) =
-    pp_tp_after 0 ("type " ^ a ^ P.pp_vars vs ^ " = ") (ext_tp env A)
-  | pp_decl env (A.TpDef(a,vs,con,A,_)) =
-    pp_tp_after 0 ("type " ^ a ^ P.pp_vars vs ^ P.pp_con con ^ " = ") (ext_tp env A)
-  | pp_decl env (A.TpEq(ctx,con,A.TpName(a,es),A.TpName(a',es'),_)) =
-    "eqtype " ^ a ^ pp_idx es ^ " = " ^ a' ^ pp_idx es'
-  | pp_decl env (A.ExpDec(f,vs,con,(D,pot,zC),_)) =
-    "decl " ^ f ^ P.pp_vars vs ^ P.pp_con con ^ " : "
+fun pp_decl env (A.TpDef(a,alphas,vs,R.True,A,_)) =
+    pp_tp_after 0 ("type " ^ a ^ P.pp_alphas alphas ^ P.pp_vars vs ^ " = ") (ext_tp env A)
+  | pp_decl env (A.TpDef(a,alphas,vs,con,A,_)) =
+    pp_tp_after 0 ("type " ^ a ^ P.pp_alphas alphas ^ P.pp_vars vs ^ P.pp_con con ^ " = ") (ext_tp env A)
+  | pp_decl env (A.TpEq(ctx,con,A.TpName(a,As,es),A.TpName(a',As',es'),_)) =
+    "eqtype " ^ a ^ pp_tps env As ^ pp_idx es ^ " = " ^ a' ^ pp_tps env As' ^ pp_idx es'
+  | pp_decl env (A.ExpDec(f,alphas,vs,con,(D,pot,zC),_)) =
+    "decl " ^ f ^ P.pp_alphas alphas ^ P.pp_vars vs ^ P.pp_con con ^ " : "
     ^ pp_context_compact env D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp_compact env zC
-  | pp_decl env (A.ExpDef(f,vs,(xs,P,x),_)) =
-    "proc " ^ x ^ " <- " ^ f ^ P.pp_vars vs ^ " " ^ pp_chanlist xs ^ " = \n"
+  | pp_decl env (A.ExpDef(f,alphas,vs,(xs,P,x),_)) =
+    "proc " ^ x ^ " <- " ^ f ^ P.pp_alphas alphas ^ P.pp_vars vs ^ " " ^ pp_chanlist xs ^ " = \n"
     ^ pp_exp_after env 0 ("  ") P
   | pp_decl env (A.Exec(f,_)) = "exec " ^ f
   | pp_decl env (A.Pragma(p,line,_)) = p ^ line

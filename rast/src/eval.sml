@@ -88,9 +88,9 @@ fun split nil nil eta1_rev eta = (List.rev eta1_rev, eta)
 fun select ((l, _, P)::branches) k =
     if l = k then P else select branches k
 
-fun body env f es =
+fun body env f As es =
     ( case A.lookup_expdef env f
-       of SOME(ctx, (ys', P, x')) =>
+       of SOME(alphas, ctx, (ys', P, x')) => (* !!! *)
           let val sigma = R.zip ctx es
               val P' = A.apply_exp sigma P
           in (ys', P', x') end )
@@ -105,7 +105,7 @@ and eval' env eta (A.Id(x,y)) z = (* x = z *)
   | eval' env eta (A.Spawn(P, Q)) z =
     let val eta' = eval_call env eta P
     in eval env eta' Q z end
-  | eval' env eta (P as A.ExpName(x,f,es,ys)) z = (* x = z *)
+  | eval' env eta (P as A.ExpName(x,f,As,es,ys)) z = (* x = z *)
     let val [(x',v)] = eval_call env eta P (* x' = x = z *)
     in v end
 
@@ -169,9 +169,9 @@ and eval' env eta (A.Id(x,y)) z = (* x = z *)
     eval' env eta (Mark.data marked_P) z
     
 and eval_call env eta P = eval_call' env eta P
-and eval_call' env eta (A.ExpName(x,f,es,ys)) =
+and eval_call' env eta (A.ExpName(x,f,As,es,ys)) =
     (* lookup f, evaluate body with x,ys substituted *)
-    let val (ys', P, x') = body env f es
+    let val (ys', P, x') = body env f As es
         val (eta1', eta2) = split ys ys' nil eta
         val v = eval env eta1' P x'
     in (x,v)::eta2 end

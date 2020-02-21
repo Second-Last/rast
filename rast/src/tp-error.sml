@@ -16,6 +16,7 @@ sig
     val error_label_missing_branch : Ast.label * Ast.ext -> 'a
 
     val error_channel_number : string -> int * int -> Ast.ext -> 'a
+    val error_tparam_number : string -> int * int -> Ast.ext -> 'a
     val error_index_number : string -> int * int -> Ast.ext -> 'a
                                                                  
     val error_channel_mismatch : string -> Ast.chan * Ast.chan -> Ast.ext -> 'a
@@ -53,6 +54,11 @@ fun error_label_missing_branch (l, ext) =
 
 fun error_channel_number msg (n,k) ext =
     ERROR ext ("incorrect number of channels in " ^ msg ^ ":\n"
+               ^ "expected " ^ Int.toString n ^ "\n"
+               ^ "found    " ^ Int.toString k)
+
+fun error_tparam_number msg (n,k) ext =
+    ERROR ext ("incorrect number of type parameters in " ^ msg ^ ":\n"
                ^ "expected " ^ Int.toString n ^ "\n"
                ^ "found    " ^ Int.toString k)
 

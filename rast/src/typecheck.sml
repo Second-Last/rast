@@ -128,8 +128,8 @@ and fwd trace env ctx con D pot (A.Id(x,y)) (zC as (z,C)) ext =
                  else ()
     in () end
 
-and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) (zC as (z,C)) ext =
-    let val (con',(D',pot',(z',B))) = TCU.expd_expdec_check env (f,es) ext
+and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,As,es,xs),Q)) (zC as (z,C)) ext =
+    let val (con',(D',pot',(z',B))) = TCU.expd_expdec_check env (f,As,es) ext
         val () = if List.length D' = List.length xs then ()
                  else E.error_channel_number "spawn" (List.length D', List.length xs) ext
         val cutD = gen_context env xs D ext
@@ -157,11 +157,11 @@ and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,es,xs),Q)) (zC as (z,C)
   | spawn trace env ctx con D pot (A.Spawn(A.Marked(marked_P),Q)) zC ext =
     spawn trace env ctx con D pot (A.Spawn(Mark.data marked_P,Q)) zC (Mark.ext marked_P)
 
-and expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
+and expname trace env ctx con D pot (A.ExpName(x,f,As,es,xs)) (z,C) ext =
     let val () = if x <> z
                  then E.error_channel_mismatch "tail call" (z,x) ext
                  else ()
-        val (con',(D',pot',(z',C'))) = TCU.expd_expdec_check env (f,es) ext
+        val (con',(D',pot',(z',C'))) = TCU.expd_expdec_check env (f,As,es) ext
         val () = if List.length D' = List.length xs then ()
                  else E.error_channel_number "tail call" (List.length D', List.length xs) ext
         val cutD = gen_context env xs D ext
@@ -411,8 +411,8 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     fwd trace env ctx con D pot (A.Id(x,y)) zC ext
   | check_exp trace env ctx con D pot (A.Spawn(P,Q)) zC ext =
     spawn trace env ctx con D pot (A.Spawn(P,Q)) zC ext
-  | check_exp trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext =
-    expname trace env ctx con D pot (A.ExpName(x,f,es,xs)) (z,C) ext
+  | check_exp trace env ctx con D pot (A.ExpName(x,f,As,es,xs)) (z,C) ext =
+    expname trace env ctx con D pot (A.ExpName(x,f,As,es,xs)) (z,C) ext
     
   (* structural types +{...}, &{...}, 1 *)
   | check_exp trace env ctx con D pot (A.Lab(x,k,P)) (z,C) ext =
