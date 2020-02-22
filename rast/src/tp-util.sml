@@ -38,7 +38,7 @@ val ERROR = ErrorMsg.ERROR
 (* Expanding type names *)
 (************************)
 
-(* expd env a{es} = [es/vs]A for a type a{vs} = A *)
+(* expd env a[As]{es} = [es/vs][As/alphas]A for a type a[alphas]{vs} = A *)
 fun expd env (short as A.TpName(a,As,es)) =
     let val long = A.expd_tp env (a,As,es)
         val () = PP.Abbrev.register short long

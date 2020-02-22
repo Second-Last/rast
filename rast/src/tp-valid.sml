@@ -23,10 +23,10 @@ sig
     (* validity of types *)
     val closed : Arith.ctx -> Arith.arith -> Ast.ext -> unit     (* may raise ErrorMsg.Error *)
     val closed_prop : Arith.ctx -> Arith.prop -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
-    val closed_tp : Arith.ctx -> Ast.tp -> Ast.ext -> unit       (* may raise ErrorMsg.Error *)
-    val closed_exp : Arith.ctx -> Ast.exp -> Ast.ext -> unit     (* may raise ErrorMsg.Error *)
+    val closed_tp : Ast.tp_ctx -> Arith.ctx -> Ast.tp -> Ast.ext -> unit       (* may raise ErrorMsg.Error *)
+    val closed_exp : Ast.tp_ctx -> Arith.ctx -> Ast.exp -> Ast.ext -> unit     (* may raise ErrorMsg.Error *)
 
-    val valid : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
+    val valid : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.ext -> unit (* may raise ErrorMsg.Error *)
 
     (* properties of types *)
     val contractive : Ast.env -> Ast.tp -> bool
@@ -55,66 +55,67 @@ fun closed_prop ctx phi ext =
     if R.closed_prop ctx phi then ()
     else ERROR ext ("proposition " ^ PP.pp_prop phi ^ " not closed")
 
-fun closed_tp ctx (A.Plus(choice)) ext = closed_choice ctx choice ext
-  | closed_tp ctx (A.With(choice)) ext = closed_choice ctx choice ext
-  | closed_tp ctx (A.Tensor(A,B)) ext = ( closed_tp ctx A ext ; closed_tp ctx B ext )
-  | closed_tp ctx (A.Lolli(A,B)) ext = ( closed_tp ctx A ext ; closed_tp ctx B ext )
-  | closed_tp ctx (A.One) ext = ()
-  | closed_tp ctx (A.Exists(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp ctx A ext )
-  | closed_tp ctx (A.Forall(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp ctx A ext )
-  | closed_tp ctx (A.ExistsNat(v,A)) ext = closed_tp (v::ctx) A ext
-  | closed_tp ctx (A.ForallNat(v,A)) ext = closed_tp (v::ctx) A ext
-  | closed_tp ctx (A.PayPot(p,A)) ext = ( closed ctx p ext ; closed_tp ctx A ext )
-  | closed_tp ctx (A.GetPot(p,A)) ext = ( closed ctx p ext ; closed_tp ctx A ext )
-  | closed_tp ctx (A.Next(t,A)) ext = ( closed ctx t ext ; closed_tp ctx A ext )
-  | closed_tp ctx (A.Dia(A)) ext = closed_tp ctx A ext
-  | closed_tp ctx (A.Box(A)) ext = closed_tp ctx A ext
-  | closed_tp ctx (A.TpVar(alpha)) ext = () (* !!! *)
-  | closed_tp ctx (A.TpName(a,As,es)) ext =
-    ( List.app (fn A => closed_tp ctx A ext) As
+fun closed_tp tpctx ctx (A.Plus(choice)) ext = closed_choice tpctx ctx choice ext
+  | closed_tp tpctx ctx (A.With(choice)) ext = closed_choice tpctx ctx choice ext
+  | closed_tp tpctx ctx (A.Tensor(A,B)) ext = ( closed_tp tpctx ctx A ext ; closed_tp tpctx ctx B ext )
+  | closed_tp tpctx ctx (A.Lolli(A,B)) ext = ( closed_tp tpctx ctx A ext ; closed_tp tpctx ctx B ext )
+  | closed_tp tpctx ctx (A.One) ext = ()
+  | closed_tp tpctx ctx (A.Exists(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp tpctx ctx A ext )
+  | closed_tp tpctx ctx (A.Forall(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp tpctx ctx A ext )
+  | closed_tp tpctx ctx (A.ExistsNat(v,A)) ext = closed_tp tpctx (v::ctx) A ext
+  | closed_tp tpctx ctx (A.ForallNat(v,A)) ext = closed_tp tpctx (v::ctx) A ext
+  | closed_tp tpctx ctx (A.PayPot(p,A)) ext = ( closed ctx p ext ; closed_tp tpctx ctx A ext )
+  | closed_tp tpctx ctx (A.GetPot(p,A)) ext = ( closed ctx p ext ; closed_tp tpctx ctx A ext )
+  | closed_tp tpctx ctx (A.Next(t,A)) ext = ( closed ctx t ext ; closed_tp tpctx ctx A ext )
+  | closed_tp tpctx ctx (A.Dia(A)) ext = closed_tp tpctx ctx A ext
+  | closed_tp tpctx ctx (A.Box(A)) ext = closed_tp tpctx ctx A ext
+  | closed_tp tpctx ctx (A.TpVar(alpha)) ext =
+    if List.exists (fn alpha' => alpha = alpha') tpctx then ()
+    else ERROR ext ("free type variable " ^ alpha)
+  | closed_tp tpctx ctx (A.TpName(a,As,es)) ext =
+    ( List.app (fn A => closed_tp tpctx ctx A ext) As
     ; List.app (fn e => closed ctx e ext) es )
-  (* A.Dot should be impossible here *)
-and closed_choice ctx nil ext = ()
-  | closed_choice ctx ((l,Al)::choices) ext =
-    ( closed_tp ctx Al ext ; closed_choice ctx choices ext )
+and closed_choice tpctx ctx nil ext = ()
+  | closed_choice tpctx ctx ((l,Al)::choices) ext =
+    ( closed_tp tpctx ctx Al ext ; closed_choice tpctx ctx choices ext )
 
-fun closed_exp ctx (A.Id _) ext = ()
-  | closed_exp ctx (A.Spawn(P,Q)) ext =
-    ( closed_exp ctx P ext
-    ; closed_exp ctx Q ext )
-  | closed_exp ctx (A.ExpName(x,f,As,es,xs)) ext =
-    ( List.app (fn A => closed_tp ctx A ext) As
+fun closed_exp tpctx ctx (A.Id _) ext = ()
+  | closed_exp tpctx ctx (A.Spawn(P,Q)) ext =
+    ( closed_exp tpctx ctx P ext
+    ; closed_exp tpctx ctx Q ext )
+  | closed_exp tpctx ctx (A.ExpName(x,f,As,es,xs)) ext =
+    ( List.app (fn A => closed_tp tpctx ctx A ext) As
     ; List.app (fn e => closed ctx e ext) es )
 
-  | closed_exp ctx (A.Lab(x,k,P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.Case(x,branches)) ext = closed_branches ctx branches ext
+  | closed_exp tpctx ctx (A.Lab(x,k,P)) ext = closed_exp tpctx ctx P ext
+  | closed_exp tpctx ctx (A.Case(x,branches)) ext = closed_branches tpctx ctx branches ext
 
-  | closed_exp ctx (A.Send(x,w,P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.Recv(x,y,Q)) ext = closed_exp ctx Q ext
+  | closed_exp tpctx ctx (A.Send(x,w,P)) ext = closed_exp tpctx ctx P ext
+  | closed_exp tpctx ctx (A.Recv(x,y,Q)) ext = closed_exp tpctx ctx Q ext
 
-  | closed_exp ctx (A.Close _) ext = ()
-  | closed_exp ctx (A.Wait(x,Q)) ext = closed_exp ctx Q ext
+  | closed_exp tpctx ctx (A.Close _) ext = ()
+  | closed_exp tpctx ctx (A.Wait(x,Q)) ext = closed_exp tpctx ctx Q ext
                                       
-  | closed_exp ctx (A.Assert(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.Assume(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.SendNat(x,e,P)) ext = (closed ctx e ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.RecvNat(x,v,P)) ext = closed_exp (v::ctx) P ext
-  | closed_exp ctx (A.Imposs) ext = ()
+  | closed_exp tpctx ctx (A.Assert(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.Assume(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.SendNat(x,e,P)) ext = (closed ctx e ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.RecvNat(x,v,P)) ext = closed_exp tpctx (v::ctx) P ext
+  | closed_exp tpctx ctx (A.Imposs) ext = ()
 
-  | closed_exp ctx (A.Work(p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.Pay(x,p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.Get(x,p,P)) ext = ( closed ctx p ext ; closed_exp ctx P ext )
+  | closed_exp tpctx ctx (A.Work(p,P)) ext = ( closed ctx p ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.Pay(x,p,P)) ext = ( closed ctx p ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.Get(x,p,P)) ext = ( closed ctx p ext ; closed_exp tpctx ctx P ext )
 
-  | closed_exp ctx (A.Delay(t,P)) ext = (closed ctx t ext ; closed_exp ctx P ext )
-  | closed_exp ctx (A.When(x,P)) ext = closed_exp ctx P ext
-  | closed_exp ctx (A.Now(x,P)) ext = closed_exp ctx P ext
+  | closed_exp tpctx ctx (A.Delay(t,P)) ext = (closed ctx t ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.When(x,P)) ext = closed_exp tpctx ctx P ext
+  | closed_exp tpctx ctx (A.Now(x,P)) ext = closed_exp tpctx ctx P ext
 
-  | closed_exp ctx (A.Marked(marked_P)) ext = closed_exp ctx (Mark.data marked_P) (Mark.ext marked_P)
+  | closed_exp tpctx ctx (A.Marked(marked_P)) ext = closed_exp tpctx ctx (Mark.data marked_P) (Mark.ext marked_P)
 
-and closed_branches ctx nil ext = ()
-  | closed_branches ctx ((l,ext',P)::branches) ext =
-    ( closed_exp ctx P ext'
-    ; closed_branches ctx branches ext )
+and closed_branches tpctx ctx nil ext = ()
+  | closed_branches tpctx ctx ((l,ext',P)::branches) ext =
+    ( closed_exp tpctx ctx P ext'
+    ; closed_branches tpctx ctx branches ext )
 
 (* valid_explicit env ctx con A ext = ()
  * raises ErrorMsg.Error if not a valid type
@@ -154,21 +155,21 @@ fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con c
 
   | valid_explicit env ctx con (A.TpName(a,As,es)) ext =
     (* allow forward references since 'env' is the full environment *)
-    (case A.lookup_tp env a
-      of NONE => ERROR ext ("type name " ^ a ^ " undefined")
-       | SOME(alphas,vs,con',_) =>
-         if not (List.length vs = List.length es)
-         then E.error_index_number "type name" (List.length vs, List.length es) ext
-         else if not (List.length alphas = List.length As)
-         then E.error_tparam_number "type name" (List.length alphas, List.length As) ext
-         else case List.find (fn e => not (C.entails ctx con (R.Ge(e, R.Int(0))))) es
-               of SOME(e) => ERROR ext ("type index cannot shown to be positive\n"
-                                        ^ C.pp_jfail con (R.Ge(e, R.Int(0))))
-                | NONE => if not (C.entails ctx con (R.apply_prop (R.zip vs es) con'))
-                          then ERROR ext ("type constraint " ^ PP.pp_prop (R.apply_prop (R.zip vs es) con')
-                                          ^ " not satisfied")
-                          else ())
-  (* A.Dot impossible *)
+    ( case A.lookup_tp env a
+       of NONE => ERROR ext ("type name " ^ a ^ " undefined")
+        | SOME(alphas,vs,con',_) =>
+          if not (List.length vs = List.length es)
+          then E.error_index_number "type name" (List.length vs, List.length es) ext
+          else if not (List.length alphas = List.length As)
+          then E.error_tparam_number "type name" (List.length alphas, List.length As) ext
+          else case List.find (fn e => not (C.entails ctx con (R.Ge(e, R.Int(0))))) es
+                of SOME(e) => ERROR ext ("type index cannot shown to be positive\n"
+                                         ^ C.pp_jfail con (R.Ge(e, R.Int(0))))
+                 | NONE => if not (C.entails ctx con (R.apply_prop (R.zip vs es) con'))
+                           then ERROR ext ("type constraint " ^ PP.pp_prop (R.apply_prop (R.zip vs es) con')
+                                           ^ " not satisfied")
+                           else ()
+    ; List.app (fn A => valid_explicit env ctx con A ext) As )
 and valid_choice env ctx con nil ext = ()
   | valid_choice env ctx con ((l,Al)::choices) ext =
     ( valid_explicit env ctx con Al ext
@@ -244,7 +245,7 @@ and valid_implicit_choice env pol nil ext = ()
     ( valid_implicit env pol Al ext
     ; valid_implicit_choice env pol choices ext )
 
-fun valid env ctx con A ext =
+fun valid env tpctx ctx con A ext = (* tpctx currently unused *)
     ( valid_explicit env ctx con A ext
     ; case !Flags.syntax
        of Flags.Implicit => ( valid_implicit env Top A ext
@@ -256,7 +257,7 @@ fun valid env ctx con A ext =
  * this can lead to an infinite loop in type-checking
  *)
 fun contractive env (A as A.Next(_,A')) = contractive env A'
-  | contractive env (A as A.TpVar(alpha)) = false (* !!! *)
+  | contractive env (A as A.TpVar(alpha)) = false
   | contractive env (A as A.TpName(a,As,es)) = false
   | contractive env A = true
 

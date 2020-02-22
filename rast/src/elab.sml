@@ -62,18 +62,17 @@ fun postponed (A.Exec _) = "% "
 fun valid_con env ctx con ext =
     ( TV.closed_prop ctx con ext )
 
-(* valid left types are either empty (A.Dot)
- * or closed and valid *)
-fun validL env ctx con [] ext = ()
-  | validL env ctx con ((x,A)::D) ext =
-    ( TV.closed_tp ctx A ext
-    ; TV.valid env ctx con A ext
-    ; validL env ctx con D ext )
+(* valid left types are closed and valid *)
+fun validL env tpctx ctx con [] ext = ()
+  | validL env tpctx ctx con ((x,A)::D) ext =
+    ( TV.closed_tp tpctx ctx A ext
+    ; TV.valid env tpctx ctx con A ext
+    ; validL env tpctx ctx con D ext )
 
 (* valid right types are closed and valid *)
-fun validR env ctx con A ext =
-    ( TV.closed_tp ctx A ext
-    ; TV.valid env ctx con A ext )
+fun validR env tpctx ctx con A ext =
+    ( TV.closed_tp tpctx ctx A ext
+    ; TV.valid env tpctx ctx con A ext )
 
 fun pp_costs () =
     "--work=" ^ Flags.pp_cost (!Flags.work) ^ " "
@@ -203,13 +202,20 @@ and tp_name_subtp' ctx con (A as A.TpName(_,_,_)) env = (A, env)
 (* Elaboration, First Pass *)
 (***************************)
 
-(* subst es (vs,con,(A,pot,C)) = [es/vs](con,(A,pot,C)) *)
-(* requires |es| = |vs| *)
-fun subst es (vs,con,(D,pot,(z,C))) =
+fun id_tp_subst alphas = List.map A.TpVar alphas
+
+(* subst As es (alphas,vs,con,(A,pot,C)) = [As/alphas][es/vs](con,(A,pot,C)) *)
+(* requires |es| = |vs|, |As| = |alphas|  *)
+fun subst As es (alphas,vs,con,(D,pot,(z,C))) =
     let
+        val theta = ListPair.zipEq (alphas, As)
         val sg = R.zip vs es
+        val con' = R.apply_prop sg con
+        val D' = A.subst_context theta (A.apply_context sg D)
+        val pot' = R.apply sg pot
+        val C' = A.subst_tp theta (A.apply_tp sg C)
     in
-        (R.apply_prop sg con, (A.apply_context sg D, R.apply sg pot, (z,A.apply_tp sg C)))
+        (con', (D', pot', (z,C')))
     end
 
 fun subst_chan (y,t) x = (x,t)
@@ -232,7 +238,7 @@ fun elab_tps env nil = nil
         val () = if dups vs then ERROR ext ("duplicate index variable in type definition") else ()
         val () = if Arith.closed_prop vs con then ()
                  else ERROR ext ("constraint " ^ PP.pp_prop con ^ " not closed")
-        val () = validR env vs con A ext
+        val () = validR env alphas vs con A ext
         val () = if TV.contractive env A then () (* do not abbreviate type! *)
                  else ERROR ext ("type " ^ PP.pp_tp env A ^ " not contractive")
         val tp_defs = tp_naming decl
@@ -245,6 +251,7 @@ fun elab_tps env nil = nil
      * we cannot check the equality here; wait for the second pass
      *)
     (* in current syntax, no explicit quantifiers and con = True *)
+    (* also no free type variables allowed *)
     let
         val () = if !Flags.verbosity >= 1
                  then TextIO.print (postponed decl ^ PP.pp_decl env decl ^ "\n")
@@ -252,8 +259,8 @@ fun elab_tps env nil = nil
         val ctx0 = R.free_prop con nil (* always nil, in current syntax *)
         val ctx1 = R.free_varlist es ctx0
         val ctx2 = R.free_varlist es' ctx1
-        val () = TV.valid env ctx2 con A ext
-        val () = TV.valid env ctx2 con A' ext
+        val () = TV.valid env [] ctx2 con A ext
+        val () = TV.valid env [] ctx2 con A' ext
         val decl' = A.TpEq(ctx2,con,A,A',ext)
     in
         decl'::elab_tps env decls
@@ -266,8 +273,8 @@ fun elab_tps env nil = nil
         val () = if dups chs then ERROR ext ("duplicate variable in process declaration") else ()
         val () = if dups vs then ERROR ext ("duplicate index variable in process declaration") else ()
         val () = valid_con env vs con ext
-        val () = validL env vs con D ext
-        val () = validR env vs con C ext
+        val () = validL env alphas vs con D ext
+        val () = validR env alphas vs con C ext
         val () = TV.closed vs pot ext
     in
         decl::elab_tps env decls
@@ -327,10 +334,10 @@ and elab_exps env nil = nil
              val () = if List.length xs = List.length D' then ()
                       else ERROR ext ("process defined with " ^ Int.toString (List.length xs) ^ " arguments and "
                                       ^ "declared with " ^ Int.toString (List.length D'))
+             val () = TV.closed_exp alphas vs P ext
              (* substitution in the declaration *)
-             val (con, (D,pot,zC)) = subst (R.create_idx vs) (vs',con',(D',pot',zC'))
+             val (con, (D,pot,zC)) = subst (id_tp_subst alphas) (R.create_idx vs) (alphas', vs',con',(D',pot',zC'))
              val (D,zC) = (subst_chans D xs, subst_chan zC x)
-             val () = TV.closed_exp vs P ext
              (* cost model now applied during reconstruction *)
              val trecon_init = Time.toMicroseconds (Time.now ())
              (* reconstruction will insert assert, assume, pay, get, work *)

@@ -109,6 +109,13 @@ val apply_exp : Arith.subst -> exp -> exp             (* [sigma]P *)
 val apply_chan_tp : Arith.subst -> chan_tp -> chan_tp (* [sigma](x:A) *)
 val apply_context : Arith.subst -> context -> context (* [sigma]Delta *)
 
+(* Type substitution *)
+type tp_subst = (tpvarname * tp) list              (* theta = (A1/alpha1,...,An/alphan) *)
+val subst_tp : tp_subst -> tp -> tp                (* [theta]A *)
+val subst_exp : tp_subst -> exp -> exp             (* [theta]P *)
+val subst_chan_tp : tp_subst -> chan_tp -> chan_tp (* [theta](x:A) *)
+val subst_context : tp_subst -> context -> context (* [theta]Delta *)
+
 (* Environment lookup *)
 val lookup_tp : env -> tpname -> (tp_ctx * Arith.ctx * Arith.prop * tp) option
 val lookup_expdec : env -> expname -> (tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp)) option
@@ -247,6 +254,7 @@ type env = decl list
 (* Substitution *)
 (****************)
 
+(* substitution sigma for index variables *)
 fun apply_tp sg (One) = One
   | apply_tp sg (Plus(choices)) = Plus(apply_choices sg choices)
   | apply_tp sg (With(choices)) = With(apply_choices sg choices)
@@ -299,6 +307,55 @@ and apply_exp_bind sg (x,v,P) =
     in (x,v',apply_exp ((v,R.Var(v'))::sg) P) end
 and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P)) branches
 
+(* substitution theta for type variables *)
+type tp_subst = (tpvarname * tp) list
+                
+fun subst_tp theta (One) = One
+  | subst_tp theta (Plus(choices)) = Plus(subst_choices theta choices)
+  | subst_tp theta (With(choices)) = With(subst_choices theta choices)
+  | subst_tp theta (Tensor(A,B)) = Tensor(subst_tp theta A, subst_tp theta B)
+  | subst_tp theta (Lolli(A,B)) = Lolli(subst_tp theta A, subst_tp theta B)
+  | subst_tp theta (Next(t,A)) = Next(t, subst_tp theta A)
+  | subst_tp theta (Box(A)) = Box(subst_tp theta A)
+  | subst_tp theta (Dia(A)) = Dia(subst_tp theta A)
+  | subst_tp theta (GetPot(p,A)) = GetPot(p,subst_tp theta A)
+  | subst_tp theta (PayPot(p,A)) = PayPot(p,subst_tp theta A)
+  | subst_tp theta (Exists(phi,A)) = Exists(phi, subst_tp theta A)
+  | subst_tp theta (Forall(phi,A)) = Forall(phi, subst_tp theta A)
+  | subst_tp theta (ExistsNat(v,A)) = ExistsNat(v,subst_tp theta A)
+  | subst_tp theta (ForallNat(v,A)) = ForallNat(v, subst_tp theta A)
+  | subst_tp theta (TpVar(alpha)) = TpVar(alpha)
+  | subst_tp theta (TpName(a,As,es)) = TpName(a, List.map (subst_tp theta) As, es)
+
+and subst_choices theta choices = List.map (fn (l,Al) => (l, subst_tp theta Al)) choices
+
+fun subst_chan_tp theta (x,A) = (x,subst_tp theta A)
+fun subst_context theta D = List.map (fn xA => subst_chan_tp theta xA) D
+
+fun subst_exp theta (Spawn(P,Q)) = Spawn(subst_exp theta P, subst_exp theta Q)
+  | subst_exp theta (Id(x,y)) = Id(x,y)
+  | subst_exp theta (Lab(x,k,P)) = Lab(x,k, subst_exp theta P)
+  | subst_exp theta (Case(x,branches)) = Case(x,subst_branches theta branches)
+  | subst_exp theta (Send(x,w,P)) = Send(x,w, subst_exp theta P)
+  | subst_exp theta (Recv(x,y,Q)) = Recv(x,y, subst_exp theta Q)
+  | subst_exp theta (Close(x)) = Close(x)
+  | subst_exp theta (Wait(x,Q)) = Wait(x,subst_exp theta Q)
+  | subst_exp theta (Delay(t,Q)) = Delay(t, subst_exp theta Q)
+  | subst_exp theta (When(x,Q)) = When(x,subst_exp theta Q)
+  | subst_exp theta (Now(x,Q)) = Now(x,subst_exp theta Q)
+  | subst_exp theta (Work(p,P)) = Work(p, subst_exp theta P)
+  | subst_exp theta (Pay(x,p,P)) = Pay(x,p,subst_exp theta P)
+  | subst_exp theta (Get(x,p,P)) = Get(x,p,subst_exp theta P)
+  | subst_exp theta (Assert(x,phi,P)) = Assert(x,phi,subst_exp theta P)
+  | subst_exp theta (SendNat(x,e,P)) = SendNat(x,e,subst_exp theta P)
+  | subst_exp theta (RecvNat(x,v,P)) = RecvNat(x,v,subst_exp theta P)
+  | subst_exp theta (Assume(x,phi,P)) = Assume(x,phi,subst_exp theta P)
+  | subst_exp theta (Imposs) = Imposs
+  | subst_exp theta (ExpName(x,f,As,es,xs)) = ExpName(x,f, List.map (subst_tp theta) As, es, xs)
+  | subst_exp theta (Marked(marked_P)) =
+    Marked(Mark.mark' (subst_exp theta (Mark.data marked_P), Mark.ext marked_P))
+and subst_branches theta branches = List.map (fn (l,ext,P) => (l,ext,subst_exp theta P)) branches
+
 (**********************)
 (* Environment Lookup *)
 (**********************)
@@ -339,19 +396,28 @@ fun lookup_branch ((l:label,_,P)::branches) k =
  *)
 fun expd_tp env (a,As,es) =
     case lookup_tp env a
-     of SOME(alphas,vs,con,A) => apply_tp (R.zip vs es) A (* cannot return NONE *) (* !!! *)
+     of SOME(alphas,vs,con,A) => subst_tp (ListPair.zipEq (alphas, As))
+                                          (apply_tp (R.zip vs es) A)
+        (* cannot return NONE *)
 
 fun expd_expdec env (f,As,es) =
     (case lookup_expdec env f
       of SOME(alphas,vs,con,(D,pot,(z,C))) =>
-         let val sg = R.zip vs es (* requires |vs| = |es| *)
-         in SOME(R.apply_prop sg con, (apply_context sg D, R.apply sg pot, (z,apply_tp sg C))) (* !!! *)
+         let val theta = ListPair.zipEq (alphas, As) (* requires |alphas| = |As| *)
+             val sg = R.zip vs es (* requires |vs| = |es| *)
+             val con' = R.apply_prop sg con
+             val D' = subst_context theta (apply_context sg D)
+             val pot' = R.apply sg pot
+             val C' = subst_tp theta (apply_tp sg C)
+         in SOME(con', (D', pot', (z,C')))
          end
        | NONE => NONE)
 
 fun expd_expdef env (f,As,es) =
   (case lookup_expdef env f of
-    SOME(alphas,vs,(xs,P,x)) => SOME(apply_exp (R.zip vs es) P) (* requires |vs| = |es| *) (* !!! *)
+       SOME(alphas,vs,(xs,P,x)) => SOME(subst_exp (ListPair.zipEq (alphas, As))
+                                                  (apply_exp (R.zip vs es) P))
+        (* requires |vs| = |es| and |alphas| = |As| *)
   | NONE => NONE)
 
 (************)
