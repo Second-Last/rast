@@ -292,7 +292,8 @@ fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
   | apply_exp sg (ExpName(x,f,As,es,xs)) = ExpName(x,f, List.map (apply_tp sg) As, R.apply_list sg es, xs)
-  | apply_exp sg (Marked(marked_P)) = Marked(Mark.mark' (Mark.data marked_P, Mark.ext marked_P))
+  | apply_exp sg (Marked(marked_P)) =
+    Marked(Mark.mark' (apply_exp sg (Mark.data marked_P), Mark.ext marked_P))
 and apply_exp_bind sg (x,v,P) =
     let val v' = R.fresh_var sg v
     in (x,v',apply_exp ((v,R.Var(v'))::sg) P) end

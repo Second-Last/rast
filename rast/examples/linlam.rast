@@ -22,6 +22,10 @@ decl lambda : (f : exp -o exp) |- (v : val)
 proc v <- lambda f =
   v.lam ; v <-> f
 
+decl lambda' : (f : exp -o exp) |- (e : exp)
+proc e <- lambda' f =
+  e.lam ; e <-> f
+
 decl eval : (e : exp) |- (v : val)
 proc v <- eval e =
   case e ( lam => v <- lambda e
@@ -39,8 +43,8 @@ proc n <- norm_lam e =
 decl norm : (e : exp) |- (n : exp)
 proc n <- norm e =
   case e ( lam => % e : exp -o exp
-                  n' <- norm_lam e
-                  n <- lambda n'
+                  n' <- norm_lam e ;
+                  n <- lambda' n'
          | app => e1 <- recv e ; % e = e2
                   n1 <- norm e1 ;
                   case n1 ( lam => send n1 e ;  % n1 : exp -o exp
