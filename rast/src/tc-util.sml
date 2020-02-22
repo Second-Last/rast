@@ -86,9 +86,9 @@ fun zip_check f vs es ext =
                                  ^ "found " ^ Int.toString (List.length es))
     in R.zip vs es end
 
-(* expd_expdec_check env f{es} ext = [es/vs](con, (A, p, C))
- * if vs ; con ; A |{p}- f : C
- * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
+(* expd_expdec_check env f[As]{es} ext = [As/alphas][es/vs](con, (A, p, C))
+ * if alphas ; vs ; con ; A |{p}- f : C
+ * raises ErrorMsg.Error if f undeclared or |es| <> |vs| or |As| <> |alphas}
  *)
 fun expd_expdec_check env (f,As,es) ext =
     (case A.lookup_expdec env f
@@ -97,9 +97,13 @@ fun expd_expdec_check env (f,As,es) ext =
                       else E.error_tparam_number "call" (List.length alphas, List.length As) ext
              val () = if List.length es = List.length vs then ()
                       else E.error_index_number "call" (List.length vs, List.length es) ext
+             val theta = ListPair.zipEq (alphas, As)
              val sg = R.zip vs es
-         (* !!! *)
-         in (R.apply_prop sg con, (A.apply_context sg D, R.apply sg pot, A.apply_chan_tp sg zC)) end
+             val con' = R.apply_prop sg con
+             val D' = A.subst_context theta (A.apply_context sg D)
+             val pot' = R.apply sg pot
+             val zC' = A.subst_chan_tp theta (A.apply_chan_tp sg zC)
+         in (con', (D', pot', zC')) end
        | NONE => E.error_undeclared (f, ext)
     )
 

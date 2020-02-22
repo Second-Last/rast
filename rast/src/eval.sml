@@ -90,7 +90,7 @@ fun select ((l, _, P)::branches) k =
 
 fun body env f As es =
     ( case A.lookup_expdef env f
-       of SOME(alphas, ctx, (ys', P, x')) => (* !!! *)
+       of SOME(alphas, ctx, (ys', P, x')) =>
           let val theta = ListPair.zipEq (alphas, As)
               val sigma = R.zip ctx es
               val P' = A.subst_exp theta (A.apply_exp sigma P)

@@ -135,7 +135,7 @@ fun combine nil env = env
  * also definitions for all internal names in A'
  *)
 fun tp_naming (A.TpDef(a,alphas,vs,con,A,ext)) =
-  let val (A',env) = tp_name_subtp vs con A []
+  let val (A',env) = tp_name_subtp alphas vs con A []
   in
     A.TpDef(a,alphas,vs,con,A',ext)::env
   end
@@ -145,57 +145,59 @@ fun tp_naming (A.TpDef(a,alphas,vs,con,A,ext)) =
  * A' == A uses internal names whose definitions are
  * added to env to yield env'
  *)
-and tp_name_subtp ctx con (A.Plus(choices)) env = apply_fst A.Plus (tp_name_subchoices ctx con choices env)
-  | tp_name_subtp ctx con (A.With(choices)) env = apply_fst A.With (tp_name_subchoices ctx con choices env)
-  | tp_name_subtp ctx con (A.Tensor(A',B')) env =
-      let val (nameB, envB) = tp_name_subtp' ctx con B' env
-          val (nameA, envA) = tp_name_subtp' ctx con A' env
+and tp_name_subtp tpctx ctx con (A.Plus(choices)) env =
+    apply_fst A.Plus (tp_name_subchoices tpctx ctx con choices env)
+  | tp_name_subtp tpctx ctx con (A.With(choices)) env =
+    apply_fst A.With (tp_name_subchoices tpctx ctx con choices env)
+  | tp_name_subtp tpctx ctx con (A.Tensor(A',B')) env =
+      let val (nameB, envB) = tp_name_subtp' tpctx ctx con B' env
+          val (nameA, envA) = tp_name_subtp' tpctx ctx con A' env
       in
       (A.Tensor(nameA, nameB), (combine envA envB))
       end
-  | tp_name_subtp ctx con (A.Lolli(A',B')) env =
-      let val (nameB, envB) = tp_name_subtp' ctx con B' env
-          val (nameA, envA) = tp_name_subtp' ctx con A' env
+  | tp_name_subtp tpctx ctx con (A.Lolli(A',B')) env =
+      let val (nameB, envB) = tp_name_subtp' tpctx ctx con B' env
+          val (nameA, envA) = tp_name_subtp' tpctx ctx con A' env
       in
       (A.Lolli(nameA, nameB), (combine envA envB))
       end
-  | tp_name_subtp ctx con (A.One) env = (A.One, env)
-  | tp_name_subtp ctx con (A.Exists(phi,A')) env =
-    apply_fst (fn A => (A.Exists(phi,A))) (tp_name_subtp' ctx (R.And(con,phi)) A' env)
-  | tp_name_subtp ctx con (A.Forall(phi,A')) env =
-    apply_fst (fn A => (A.Forall(phi,A))) (tp_name_subtp' ctx (R.And(con,phi)) A' env)
-  | tp_name_subtp ctx con (A.ExistsNat(v,A')) env =
-    apply_fst (fn A => (A.ExistsNat(v,A))) (tp_name_subtp' (v::ctx) con A' env)
-  | tp_name_subtp ctx con (A.ForallNat(v,A')) env =
-    apply_fst (fn A => (A.ForallNat(v,A))) (tp_name_subtp' (v::ctx) con A' env)
-  | tp_name_subtp ctx con (A.PayPot(p,A')) env = apply_fst (fn A => (A.PayPot(p,A))) (tp_name_subtp' ctx con A' env)
-  | tp_name_subtp ctx con (A.GetPot(p,A')) env = apply_fst (fn A => (A.GetPot(p,A))) (tp_name_subtp' ctx con A' env)
-  | tp_name_subtp ctx con (A.Next(t,A')) env = apply_fst (fn A => (A.Next(t,A))) (tp_name_subtp' ctx con A' env)
-  | tp_name_subtp ctx con (A.Box(A')) env = apply_fst A.Box (tp_name_subtp' ctx con A' env)
-  | tp_name_subtp ctx con (A.Dia(A')) env = apply_fst A.Dia (tp_name_subtp' ctx con A' env)
-  | tp_name_subtp ctx con (A.TpVar(alpha)) env = (A.TpVar(alpha), env)
+  | tp_name_subtp tpctx ctx con (A.One) env = (A.One, env)
+  | tp_name_subtp tpctx ctx con (A.Exists(phi,A')) env =
+    apply_fst (fn A => (A.Exists(phi,A))) (tp_name_subtp' tpctx ctx (R.And(con,phi)) A' env)
+  | tp_name_subtp tpctx ctx con (A.Forall(phi,A')) env =
+    apply_fst (fn A => (A.Forall(phi,A))) (tp_name_subtp' tpctx ctx (R.And(con,phi)) A' env)
+  | tp_name_subtp tpctx ctx con (A.ExistsNat(v,A')) env =
+    apply_fst (fn A => (A.ExistsNat(v,A))) (tp_name_subtp' tpctx (v::ctx) con A' env)
+  | tp_name_subtp tpctx ctx con (A.ForallNat(v,A')) env =
+    apply_fst (fn A => (A.ForallNat(v,A))) (tp_name_subtp' tpctx (v::ctx) con A' env)
+  | tp_name_subtp tpctx ctx con (A.PayPot(p,A')) env = apply_fst (fn A => (A.PayPot(p,A))) (tp_name_subtp' tpctx ctx con A' env)
+  | tp_name_subtp tpctx ctx con (A.GetPot(p,A')) env = apply_fst (fn A => (A.GetPot(p,A))) (tp_name_subtp' tpctx ctx con A' env)
+  | tp_name_subtp tpctx ctx con (A.Next(t,A')) env = apply_fst (fn A => (A.Next(t,A))) (tp_name_subtp' tpctx ctx con A' env)
+  | tp_name_subtp tpctx ctx con (A.Box(A')) env = apply_fst A.Box (tp_name_subtp' tpctx ctx con A' env)
+  | tp_name_subtp tpctx ctx con (A.Dia(A')) env = apply_fst A.Dia (tp_name_subtp' tpctx ctx con A' env)
+  | tp_name_subtp tpctx ctx con (A.TpVar(alpha)) env = (A.TpVar(alpha), env)
 
-and tp_name_subchoices ctx con nil env = (nil, env)
-  | tp_name_subchoices ctx con ((l,A)::choices) env =
-    let val (A',env') = tp_name_subtp' ctx con A env
-        val (choices', env'') = tp_name_subchoices ctx con choices env'
+and tp_name_subchoices tpctx ctx con nil env = (nil, env)
+  | tp_name_subchoices tpctx ctx con ((l,A)::choices) env =
+    let val (A',env') = tp_name_subtp' tpctx ctx con A env
+        val (choices', env'') = tp_name_subchoices tpctx ctx con choices env'
     in
       ((l,A')::choices', env'')
     end
 
-(* tp_name_subtp' ctx con A env = (A', env')
+(* tp_name_subtp' tpctx ctx con A env = (A', env')
  * like tp_name_subtp except A may be a type name
  * Still need a new internal name above a type variables
  * for correct substitution, so they are not singled out here
  *)
-and tp_name_subtp' ctx con (A as A.TpName(_,_,_)) env = (A, env)
-  | tp_name_subtp' ctx con (A.One) env = (A.One, env)
-  | tp_name_subtp' ctx con A env =
-    let val (A', env') = tp_name_subtp ctx con A env
+and tp_name_subtp' tpctx ctx con (A as A.TpName(_,_,_)) env = (A, env)
+  | tp_name_subtp' tpctx ctx con (A.One) env = (A.One, env)
+  | tp_name_subtp' tpctx ctx con A env =
+    let val (A', env') = tp_name_subtp tpctx ctx con A env
         val new_tpname = fresh_name ()
-        val decl = A.TpDef(new_tpname,nil,ctx,con,A',NONE) (* !!! *)
+        val decl = A.TpDef(new_tpname,tpctx,ctx,con,A',NONE) (* we take here all type variables *)
     in
-      (A.TpName(new_tpname, nil, List.map (fn v => R.Var(v)) ctx), decl::env') (* !!! *)
+      (A.TpName(new_tpname, List.map A.TpVar tpctx, List.map R.Var ctx), decl::env')
     end
 
 (***************************)

@@ -238,7 +238,8 @@ fun valid_implicit env _ (A.Plus(choice)) ext = valid_implicit_choice env Zero c
   | valid_implicit env polarity (A.Dia(A)) ext = valid_implicit env polarity A ext
   | valid_implicit env polarity (A.Box(A)) ext = valid_implicit env polarity A ext
 
-  | valid_implicit env _ (A.TpName(a,As,es)) ext = () (* !!! *)
+  | valid_implicit env _ (A.TpName(a,As,es)) ext =
+    List.app (fn A => valid_implicit env Top A ext) As (* is Top polarity correct ??? *)
 
 and valid_implicit_choice env pol nil ext = ()
   | valid_implicit_choice env pol ((l,Al)::choices) ext =

@@ -244,7 +244,6 @@ and recon_branchesR env D nil (z,nil) ext = nil
     (l',ext',recon_getR env D P (z,C) ext)
     ::(recon_branchesR env D branches (z,choices) ext)
 
-
 (* insert_work env pot P = P'
  * checks if there is remaining potential that must be spent
  * and insert work{p} it if necessary.  Since we do not track
