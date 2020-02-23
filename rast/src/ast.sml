@@ -8,7 +8,7 @@ sig
 
 type label = string             (* l,k for internal and external choice *)
 type tpname = string            (* a, for types defined with a = A *)
-type tpvarname = string         (* A, for type parameters *)
+type tpvarname = string         (* alpha, for type parameters *)
 type expname = string           (* f, for processes defined with x <- f ... = P *)
 type ext = Mark.ext option      (* optional extent (source region info) *)
 

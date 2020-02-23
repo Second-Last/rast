@@ -156,7 +156,10 @@ in the external or internal choice type
          | ! <id>. <type>       % Universal type
          | ( <type> )           % Parentheses
 
-<idx_seq> ::=  | <idx> <idx_seq>
+<type_seq> ::=  | [ <type> ] type_seq
+<idx_seq> ::=  | { <arith> } idx_seq
+<arg_seq> ::= <type_seq> <idx_seq>
+
 <id_seq> ::=  | <id> <id_seq>
 
 <choices> ::= <label> : <type>
@@ -165,8 +168,8 @@ in the external or internal choice type
 <turnstile> ::= |-              % zero potential
               | | <idx> -       % with potential <idx>
 
-<exp> ::= <id> <- <id> <idx_seq> <id_seq> ; <exp>     % spawn
-        | <id> <- <id> <idx_seq> <id_seq>             % tail call
+<exp> ::= <id> <- <id> <arg_seq> <id_seq> ; <exp>     % spawn
+        | <id> <- <id> <arg_seq> <id_seq>             % tail call
         | <id> <-> <id>                               % forward
         | <id>.<label> ; <exp>                        % send label 
         | case <id> ( <branches> )                    % branch on label received
@@ -201,12 +204,17 @@ in the external or internal choice type
            | { <var> } <var_seq>
            | { <var> | <prop> } <var_seq>
 
+<tpvar_seq> ::=
+             |  [ <id> ] <tpvar_seq>
+
+<parm_seq> ::= <tpvar_seq> <var_seq>
+
 <ctx> ::= . | ( <id> : <type> )+
 
-<decl> ::= type <id> <var_seq> = <type>
-         | eqtype <id> <idx_seq> = <id> <idx_seq>
-         | decl <id> <var_seq> : <ctx> <turnstile> ( <id> : <type> )
-         | proc <id> <- <id> <var_seq> <id_seq> = <exp>
+<decl> ::= type <id> <parm_seq> = <type>
+         | eqtype <id> <arg_seq> = <id> <arg_seq>
+         | decl <id> <parm_seq> : <ctx> <turnstile> ( <id> : <type> )
+         | proc <id> <- <id> <parm_seq> <id_seq> = <exp>
          | exec <id>
 
 <outcome> ::= error
