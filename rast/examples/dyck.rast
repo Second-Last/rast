@@ -1,0 +1,34 @@
+#options --syntax=implicit
+#test success
+
+% Dyck language of matching "parentheses" (left/right)
+
+type S = +{ left : D[S], end : 1 }
+type D[A] = +{ left : D[D[A]], right : A }
+
+% end
+decl ex0 : . |- (c : S)
+proc c <- ex0 =
+  c.end ; close c
+
+decl ex1 : . |- (c : S)
+proc c <- ex1 =
+  c.left ; c.right ; c.end ; close c
+
+decl ex2 : . |- (c : S)
+proc c <- ex2 =
+  c.left ; c.left ; c.right ; c.left ; c.right ; c.right ; c.left ; c.right ;
+  c.end ; close c
+
+(* next two fail to type-check as expected *)
+(*
+decl ex3 : . |- (c : S)
+proc c <- ex3 =
+  c.left ; c.end ; close c
+*)
+
+(*
+decl ex4 : . |- (c : S)
+proc c <- ex4 =
+  c.left ; c.left ; c.right ; c.right ; c.right ; c.end ; close c
+*)
