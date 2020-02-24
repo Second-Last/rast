@@ -3,9 +3,6 @@
 
 %%% Lists, indexed by their size.  See list-work.rast for
 %%% analysis of work using potentials
-%%% Since polymorphism isn't currently
-%%% supported, we just have lists of natural numbers
-%%% but all code is parametric in this choice
 %%%
 %%% Examples:
 %%%
