@@ -1,7 +1,7 @@
 #options --syntax=implicit
 #test success
 
-% Dyck language of matching "parentheses" (left/right)
+%%% Dyck language of matching "parentheses" (left/right)
 
 type S = +{ left : D[S], end : 1 }
 type D[A] = +{ left : D[D[A]], right : A }
@@ -11,10 +11,12 @@ decl ex0 : . |- (c : S)
 proc c <- ex0 =
   c.end ; close c
 
+% < > end
 decl ex1 : . |- (c : S)
 proc c <- ex1 =
   c.left ; c.right ; c.end ; close c
 
+% < < > < > > < > end
 decl ex2 : . |- (c : S)
 proc c <- ex2 =
   c.left ; c.left ; c.right ; c.left ; c.right ; c.right ; c.left ; c.right ;
@@ -22,13 +24,212 @@ proc c <- ex2 =
 
 (* next two fail to type-check as expected *)
 (*
+% < end
 decl ex3 : . |- (c : S)
 proc c <- ex3 =
   c.left ; c.end ; close c
 *)
 
 (*
+% < < > > > end
 decl ex4 : . |- (c : S)
 proc c <- ex4 =
   c.left ; c.left ; c.right ; c.right ; c.right ; c.end ; close c
 *)
+
+%%% Cropped Dyck language
+
+type T = +{ left : C[T], end : 1 }
+type C[A] = +{ left : C[C[A]], right : A, end : 1 }
+
+% end
+decl Tex0 : . |- (c : T)
+proc c <- Tex0 =
+  c.end ; close c
+
+% < > end
+decl Tex1 : . |- (c : T)
+proc c <- Tex1 =
+  c.left ; c.right ; c.end ; close c
+
+% < < > < > > < > end
+decl Tex2 : . |- (c : T)
+proc c <- Tex2 =
+  c.left ; c.left ; c.right ; c.left ; c.right ; c.right ; c.left ; c.right ;
+  c.end ; close c
+
+% < end
+decl Tex3 : . |- (c : T)
+proc c <- Tex3 =
+  c.left ; c.end ; close c
+
+(* next fails to type-check as expected *)
+
+(*
+% < < > > > end
+decl Tex4 : . |- (c : T)
+proc c <- Tex4 =
+  c.left ; c.left ; c.right ; c.right ; c.right ; c.end ; close c
+*)
+
+%%% The L3 language [Korenjak66]
+%%% <^n a >^n a | <^n b >^n b (n > 0) (where left = <, right = >)
+
+type U = +{left : L[R[+{a:1}]][R[+{b:1}]]}
+type L[Ka][Kb] = +{left : L[R[Ka]][R[Kb]], a : Ka, b : Kb}
+type R[K] = +{right : K}
+
+% < a > a
+decl Uex0 : . |- (c : U)
+proc c <- Uex0 = c.left ; c.a ; c.right ; c.a ; close c
+
+% b b
+decl Uex1 : . |- (c : U)
+proc c <- Uex1 = c.left ; c.b ; c.right ; c.b ; close c
+
+(*
+% a a
+decl Uex2 : . |- (c : U)
+proc c <- Uex2 = c.a ; c.a ; close c
+*)
+
+% < < a > > a
+decl Uex4 : . |- (c : U)
+proc c <- Uex4 = c.left ; c.left ; c.a ; c.right ; c.right ; c.a ; close c
+
+% < < a > > a
+decl Uex5 : . |- (c : U)
+proc c <- Uex5 = c.left ; c.left ; c.b ; c.right ; c.right ; c.b ; close c
+
+(*
+% < < a > > b
+decl Uex6 : . |- (c : U)
+proc c <- Uex5 = c.left ; c.left ; c.a ; c.right ; c.right ; c.b ; close c
+*)
+
+%%% Serializing binary trees [Thiemann & Vasconcelos]
+
+type Tree[A] = +{leaf : 1, node : Tree[A] * A * Tree[A]}
+
+decl leaf[A] : . |- (t : Tree[A])
+proc t <- leaf[A] = t.leaf ; close t
+
+decl node[A] : (l : Tree[A]) (x : A) (r : Tree[A]) |- (t : Tree[A])
+proc t <- node[A] l x r =
+  t.node ; send t l ; send t x ; t <-> r
+
+type Serial[A][K] = +{s_leaf : K, s_node : A * Serial[A][Serial[A][K]]}
+
+decl serialize[A][K] : (t : Tree[A]) (k : K) |- (s : Serial[A][K])
+proc s <- serialize[A][K] t k =
+  case t ( leaf => s.s_leaf ; wait t ; s <-> k
+         | node => s.s_node ;
+                   l <- recv t ;
+                   x <- recv t ; % t = r
+                   send s x ;    % s : Serial[A][Serial[A][K]]
+                   s2 <- serialize[A][K] t k ;  % s2 : Serial[A][K]
+                   s <- serialize[A][Serial[A][K]] l s2 )
+
+decl deserialize[A][K] : (s : Serial[A][K]) |- (tk : Tree[A] * K)
+proc tk <- deserialize[A][K] s =
+  case s ( s_leaf => t <- leaf[A] ;
+                     send tk t ; tk <-> s
+         | s_node => x <- recv s ;
+                     tk1 <- deserialize[A][Serial[A][K]] s ;
+                     l <- recv tk1 ;
+                     tk2 <- deserialize[A][K] tk1 ;
+                     r <- recv tk2 ;
+                     t <- node[A] l x r ;
+                     send tk t ;
+                     tk <-> tk2 )
+
+type nat = +{z : 1, s : nat}
+
+decl nat0 : . |- (n : nat)
+proc n <- nat0 = n.z ; close n
+decl nat1 : . |- (n : nat)
+proc n <- nat1 = n.s ; n.z ; close n
+decl nat2 : . |- (n : nat)
+proc n <- nat2 = n.s ; n.s ; n.z ; close n
+decl nat3 : . |- (n : nat)
+proc n <- nat3 = n.s ; n.s ; n.s ; n.z ; close n
+
+decl tree0123 : . |- (t : Tree[nat])
+proc t <- tree0123 =
+  el <- leaf[nat] ; n0 <- nat0 ; er <- leaf[nat] ;
+  t0 <- node[nat] el n0 er ;
+  n1 <- nat1 ;
+  er <- leaf[nat] ;
+  t01 <- node[nat] t0 n1 er ;
+  n2 <- nat2 ;
+  el <- leaf[nat] ; n3 <- nat3 ; er <- leaf[nat] ;
+  t3 <- node[nat] el n3 er ;
+  t0123 <- node[nat] t01 n2 t3 ;
+  t <-> t0123
+
+exec tree0123
+
+decl unit : . |- (u : 1)
+proc u <- unit = close u
+
+decl serial0123 : . |- (s : Serial[nat][1])
+proc s <- serial0123 =
+  t <- tree0123 ;
+  u <- unit ;
+  s <- serialize[nat][1] t u
+
+exec serial0123
+
+decl retree0123 : . |- (t : Tree[nat])
+proc t <- retree0123 =
+  s <- serial0123 ;
+  tk <- deserialize[nat][1] s ;
+  t0 <- recv tk ; wait tk ;
+  t <-> t0
+
+exec retree0123
+
+%%% Perfect binary trees 2^(h+1)-1 nodes for height h
+%%% thought of here as a list, even thought it has some
+%%% balanced tree structure in the elements
+
+decl pair[A][B] : (x : A) (y : B) |- (p : A * B)
+proc p <- pair[A][B] x y = send p x ; p <-> y
+
+type Perfect[A] = +{ nil : 1, cons : A * Perfect[A * A] }
+
+decl perfect012 : . |- (p : Perfect[nat])
+proc p <- perfect012 =
+  n0 <- nat0 ;
+  p.cons ; send p n0 ;
+  n1 <- nat1 ;
+  n2 <- nat2 ;
+  n12 <- pair[nat][nat] n1 n2 ;
+  p.cons ; send p n12 ;
+  p.nil ; close p
+
+exec perfect012
+
+%%% DeBruijn representation of lambda terms
+
+type Inc[A] = +{zero : 1, succ : A}
+type Tm[V] = +{var : V, lam : Tm[Inc[V]], app : Tm[V] * Tm[V]}
+
+%%% \x. x x
+
+decl var0[V] : . |- (e : Tm[Inc[V]])
+proc e <- var0[V] = e.var ; e.zero ; close e
+
+decl omega[V] : . |- (e : Tm[V])
+proc e <- omega[V] =
+  e.lam ; e.app ;
+  v0 <- var0[V] ;
+  send e v0 ;
+  v0 <- var0[V] ;
+  e <-> v0
+
+decl omega1 : . |- (e : Tm[1])
+proc e <- omega1 =
+  e <- omega[1]
+
+exec omega1
