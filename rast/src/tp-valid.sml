@@ -153,6 +153,9 @@ fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con c
   | valid_explicit env ctx con (A.Dia(A)) ext = valid_explicit env ctx con A ext
   | valid_explicit env ctx con (A.Box(A)) ext = valid_explicit env ctx con A ext
 
+  | valid_explicit env ctx con (A.TpVar(alpha)) ext =
+    (* already checked that it is closed *)
+    ()
   | valid_explicit env ctx con (A.TpName(a,As,es)) ext =
     (* allow forward references since 'env' is the full environment *)
     ( case A.lookup_tp env a
@@ -237,6 +240,8 @@ fun valid_implicit env _ (A.Plus(choice)) ext = valid_implicit_choice env Zero c
   | valid_implicit env polarity (A.Next(t,A)) ext = valid_implicit env polarity A ext
   | valid_implicit env polarity (A.Dia(A)) ext = valid_implicit env polarity A ext
   | valid_implicit env polarity (A.Box(A)) ext = valid_implicit env polarity A ext
+
+  | valid_implicit env polarity (A.TpVar(alpha)) ext = () (* is this correct ??? *)
 
   | valid_implicit env _ (A.TpName(a,As,es)) ext =
     List.app (fn A => valid_implicit env Top A ext) As (* is Top polarity correct ??? *)

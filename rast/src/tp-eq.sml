@@ -49,8 +49,9 @@ fun eq_idx ctx con nil nil = true
 
 (* Structural equality *)
 
-(* mem_env env a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As,es')) if exists in env *)
-fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,nil,ES),A' as A.TpName(B',nil,ES'),_)::env) a a' =
+(* mem_env env a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in env *)
+(* still need to generalize for type arguments *)
+fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,AS,ES),A' as A.TpName(B',AS',ES'),_)::env) a a' =
     if B = a andalso B' = a'
     then SOME(CTX,CON,(A,A'))
     else if B = a' andalso B' = a
@@ -59,8 +60,8 @@ fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,nil,ES),A' as A.TpName(B',nil,ES'),_
   | mem_env (_::env) a a' = mem_env env a a'
   | mem_env nil a a' = NONE
 
-(* mem_env env seen a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As,es')) if exists in seen *)
-fun mem_seen env ((E as (CTX,CON,(A as A.TpName(B,nil,ES), A' as A.TpName(B',nil,ES'))))::seen) a a' =
+(* mem_env env seen a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in seen *)
+fun mem_seen env ((E as (CTX,CON,(A as A.TpName(B,AS,ES), A' as A.TpName(B',AS',ES'))))::seen) a a' =
     if B = a andalso B' = a'
     then SOME(CTX,CON,(A,A'))
     else if B = a' andalso B' = a
@@ -126,9 +127,11 @@ fun aggregate_nexts env ctx con (A as A.Next(t,A')) =
 
 (* main entry point *)
 fun eq_tp' env ctx con seen A A' =
-    eq_tp env ctx con seen
-          (aggregate_nexts env ctx con A)
-          (aggregate_nexts env ctx con A')
+    ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
+    ; eq_tp env ctx con seen
+            (aggregate_nexts env ctx con A)
+            (aggregate_nexts env ctx con A')
+    )
 
 and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
     eq_choice env ctx con seen choice choice'
@@ -174,6 +177,7 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
   | eq_tp env ctx con seen (A.TpVar(alpha)) (A.TpVar(alpha')) =
     alpha = alpha'
 
+  (* case prior to polymorphism untouched *)
   | eq_tp env ctx con seen (A as A.TpName(a,nil,es)) (A' as A.TpName(a',nil,es')) =
     if a = a'
     (* reflexivity *)
@@ -182,12 +186,26 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
            | Flags.Subsume => eq_name_name env ctx con seen A A' (* only coinductive equality *)
            | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
-  | eq_tp env ctx con seen (A as A.TpName(a,nil,es)) A' =
+
+  (* new case for polymorphism *)
+  | eq_tp env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+    if a = a'
+    (* reflexivity *)
+    then eq_tp_list env ctx con seen As As' (* only reflexivity here *)
+    else eq_name_name env ctx con seen A A' (* coinductive type equality *)
+
+  | eq_tp env ctx con seen (A as A.TpName(a,As,es)) A' =
     eq_tp' env ctx con seen (TU.expd env A) A'
-  | eq_tp env ctx con seen A (A' as A.TpName(a',nil,es')) =
+  | eq_tp env ctx con seen A (A' as A.TpName(a',As',es')) =
     eq_tp' env ctx con seen A (TU.expd env A')
 
   | eq_tp env ctx con seen A A' = false
+
+(* eq_tp_list env ctx con seen As As' assumes |As| = |As'| *)
+and eq_tp_list env ctx con seen nil nil = true
+  | eq_tp_list env ctx con seen (A::As) (A'::As') =
+    eq_tp' env ctx con seen A A'
+    andalso eq_tp_list env ctx con seen As As' (* could we learn from 'seen' on A, A' for As, As'? *)
 
 and eq_tp_bind env ctx con seen (v,A) (v',A') =
     let val sigma = R.zip ctx (R.create_idx ctx)
@@ -203,20 +221,22 @@ and eq_choice env ctx con seen nil nil = true
   | eq_choice env ctx con seen ((l,A)::choice) nil = false
   | eq_choice env ctx con seen nil ((l',A')::choice') = false
 
-and eq_name_name env ctx con seen (A as A.TpName(a,nil,es)) (A' as A.TpName(a',nil,es')) =
+and eq_name_name env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
     case mem_seen env seen a a'
      of NONE => eq_tp' env ctx con ((ctx,con,(A,A'))::seen)
                        (TU.expd env A) (TU.expd env A')
-      | SOME(CTX,CON, (A.TpName(_,nil,ES), A.TpName(_,nil,ES'))) =>
-        let val (FCTX,sigma) = gen_fresh CTX
-            val FCON = R.apply_prop sigma CON
-            val FES = R.apply_list sigma ES
-            val FES' = R.apply_list sigma ES'
-            val phi = gen_prop_eq FCTX FCON FES es FES' es'
-            val result = C.entails ctx con phi (* could be trusting non-linear *)
-        in
-            result
-        end
+      | SOME(CTX,CON, (A.TpName(_,AS,ES), A.TpName(_,AS',ES'))) =>
+        eq_tp_list env ctx con seen As AS (* no binders, so no change in type context allowed *)
+        andalso eq_tp_list env ctx con seen As' AS'
+        andalso let val (FCTX,sigma) = gen_fresh CTX
+                    val FCON = R.apply_prop sigma CON
+                    val FES = R.apply_list sigma ES
+                    val FES' = R.apply_list sigma ES'
+                    val phi = gen_prop_eq FCTX FCON FES es FES' es'
+                    val result = C.entails ctx con phi (* could be trusting non-linear *)
+                in
+                    result
+                end
 
 (* interface *)
 (* start algorithm with seen = nil *)

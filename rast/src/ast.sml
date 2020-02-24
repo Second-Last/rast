@@ -324,7 +324,12 @@ fun subst_tp theta (One) = One
   | subst_tp theta (Forall(phi,A)) = Forall(phi, subst_tp theta A)
   | subst_tp theta (ExistsNat(v,A)) = ExistsNat(v,subst_tp theta A)
   | subst_tp theta (ForallNat(v,A)) = ForallNat(v, subst_tp theta A)
-  | subst_tp theta (TpVar(alpha)) = TpVar(alpha)
+  | subst_tp theta (TpVar(alpha)) =
+    ( case List.find (fn (alpha',A') => alpha = alpha') theta
+       of SOME(_,A) => A
+        (* for now, substitutions should be total *)
+        (* | NONE => TpVar(alpha) *) 
+    )
   | subst_tp theta (TpName(a,As,es)) = TpName(a, List.map (subst_tp theta) As, es)
 
 and subst_choices theta choices = List.map (fn (l,Al) => (l, subst_tp theta Al)) choices
