@@ -1,0 +1,7 @@
+#test success
+
+type A[x] = +{ a : A[x] }
+type B[x] = +{ a : B[x] }
+
+decl id : (d : A[1]) |- (c : B[1])
+proc c <- id d = c <-> d

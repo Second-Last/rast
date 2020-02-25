@@ -1,0 +1,14 @@
+#test success
+
+% A[B[1]] = n^k l^2k l l s#
+type A[x] = +{ n : A[A[x]], l : +{l : x} }
+type B[y] = +{ s : B[B[y]] }
+
+% C[E[1]] : n CCE1 n CCCE1 l DCCE1 l CCE1 l l CE1 ll E1 s s s s s ...
+% n^k l^2k l l s#
+type C[x] = +{ n : C[C[x]], l : D[x] }
+type D[z] = +{ l : z }
+type E[y] = +{ s : E[y] }
+
+decl id : (d : A[B[1]]) |- (c : C[E[1]])
+proc c <- id d = c <-> d
