@@ -1,0 +1,7 @@
+#test error
+
+type T[x] = +{ a : T[x], b : 1 }
+type S[x] = +{ a : S[S[x]], b : 1 }
+
+decl id : (d : T[1]) |- (c : S[1])
+proc c <- id d = c <-> d

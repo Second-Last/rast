@@ -1,0 +1,7 @@
+#test success
+
+type T[x] = +{ a : T[x] }
+type S[x] = +{ a : S[S[x]] }
+
+decl id[x] : (d : T[x]) |- (c : S[x])
+proc c <- id[x] d = c <-> d
