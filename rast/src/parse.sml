@@ -331,7 +331,7 @@ and p_eq_type ST = case first ST of
     T.EQ => ST |> shift >> p_type
   | t => error_expected (here ST, T.EQ, t)
 
-(* <id> <idx_seq> '=' <id> <idx_seq> *)
+(* <id> <arg_seq> '=' <id> <arg_seq> *)
 and p_eqtype ST = ST |> p_id_arg_seq >> p_terminal T.EQ >> p_id_arg_seq
 
 (* ':' ( <ctx> | '.' ) <turnstile> '(' <id> ':' <type> ')' *)
