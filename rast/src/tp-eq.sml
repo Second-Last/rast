@@ -33,6 +33,48 @@ structure PP = PPrint
 structure TU = TypeUtil
 structure C = Constraints
 
+(************************)
+(* Analysis of Variance *)
+(************************)
+
+(* tpdef env a = (a, alphas, B) if a[alphas]{...} = B in env *)
+fun tp_def env a =
+    case A.lookup_tp env a
+     of SOME(alphas, vs, con, B) => (a, alphas, B)
+        (* NONE should be impossible *)
+
+fun invariant env seen alpha (A.Plus(choices)) = invariant_choices env seen alpha choices
+  | invariant env seen alpha (A.With(choices)) = invariant_choices env seen alpha choices
+  | invariant env seen alpha (A.Tensor(A,B)) = invariant env seen alpha A andalso invariant env seen alpha B
+  | invariant env seen alpha (A.Lolli(A,B)) = invariant env seen alpha A andalso invariant env seen alpha B
+  | invariant env seen alpha (A.One) = true
+  | invariant env seen alpha (A.Exists(phi,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.Forall(phi,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.ExistsNat(v,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.ForallNat(v,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.PayPot(p,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.GetPot(p,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.Next(t,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.Dia(A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.Box(A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.TpVar(beta)) = (alpha <> beta)
+  | invariant env seen alpha (A.TpName(a,As,es)) =
+    invariant_list env seen alpha (tp_def env a) As
+and invariant_choices env seen alpha nil = true
+  | invariant_choices env seen alpha ((l,Al)::choices) =
+    invariant env seen alpha Al andalso invariant_choices env seen alpha choices
+and invariant_list env seen alpha (a, nil, B) nil = true
+  | invariant_list env seen alpha (a, beta::betas, B) (A::As) =
+    ( List.exists (fn (a',beta') => (a,beta) = (a',beta')) seen
+      orelse invariant env ((a,beta)::seen) beta B )
+    andalso invariant_list env seen alpha (a, betas, B) As
+
+val invariant = fn env => fn seen => fn alpha => fn A =>
+    let val () = TextIO.print ("%inv " ^ alpha ^ " in " ^ A.Print.pp_tp A)
+        val r = invariant env seen alpha A
+        val () = TextIO.print (" == " ^ (if r then "true" else "false") ^ "\n")
+    in r end
+
 (*****************)
 (* Type equality *)
 (*****************)
@@ -191,7 +233,7 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
   | eq_tp env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
     if a = a'
     (* reflexivity *)
-    then eq_tp_list env ctx con seen As As' (* only reflexivity here *)
+    then eq_tp_list env ctx con seen (tp_def env a) As As' (* only reflexivity here *)
     else eq_name_name env ctx con seen A A' (* coinductive type equality *)
 
   | eq_tp env ctx con seen (A as A.TpName(a,As,es)) A' =
@@ -201,11 +243,14 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
 
   | eq_tp env ctx con seen A A' = false
 
-(* eq_tp_list env ctx con seen As As' assumes |As| = |As'| *)
-and eq_tp_list env ctx con seen nil nil = true
-  | eq_tp_list env ctx con seen (A::As) (A'::As') =
-    eq_tp' env ctx con seen A A'
-    andalso eq_tp_list env ctx con seen As As' (* could we learn from 'seen' on A, A' for As, As'? *)
+(* eq_tp_list env ctx con seen (a, alphas, B) As As'
+ * requires |alphas| = |As| = |As'| and a[alphas]{...} = B
+ *)
+and eq_tp_list env ctx con seen (a, nil, B) nil nil = true
+  | eq_tp_list env ctx con seen (a, alpha::alphas, B) (A::As) (A'::As') =
+    (eq_tp' env ctx con seen A A'               (* A = A' *)
+     orelse invariant env [(a,alpha)] alpha B)  (* or a[..,alpha,...] = B does not depend on alpha *)
+    andalso eq_tp_list env ctx con seen (a, alphas, B) As As'
 
 and eq_tp_bind env ctx con seen (v,A) (v',A') =
     let val sigma = R.zip ctx (R.create_idx ctx)
@@ -226,8 +271,8 @@ and eq_name_name env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As
      of NONE => eq_tp' env ctx con ((ctx,con,(A,A'))::seen)
                        (TU.expd env A) (TU.expd env A')
       | SOME(CTX,CON, (A.TpName(_,AS,ES), A.TpName(_,AS',ES'))) =>
-        eq_tp_list env ctx con seen As AS (* no binders, so no change in type context allowed *)
-        andalso eq_tp_list env ctx con seen As' AS'
+        eq_tp_list env ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
+        andalso eq_tp_list env ctx con seen (tp_def env a') As' AS'
         andalso let val (FCTX,sigma) = gen_fresh CTX
                     val FCON = R.apply_prop sigma CON
                     val FES = R.apply_list sigma ES
