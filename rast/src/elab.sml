@@ -141,31 +141,65 @@ and resolve_choices tpctx nil = nil
   | resolve_choices tpctx ((l,A)::choices) =
     (l, resolve tpctx A)::resolve_choices tpctx choices
 
-fun resolve_exp tpctx (A as A.Id(x,y)) = A
-  | resolve_exp tpctx (A.Spawn(P,Q)) = A.Spawn (resolve_exp tpctx P, resolve_exp tpctx Q)
-  | resolve_exp tpctx (A.ExpName(x,f,As,es,ys)) =
-    A.ExpName(x,f,List.map (fn A => resolve tpctx A) As,es,ys)
-  | resolve_exp tpctx (A.Lab(x,k,P)) = A.Lab(x,k,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Case(x,branches)) = A.Case(x,resolve_branches tpctx branches)
-  | resolve_exp tpctx (A.Send(x,w,P)) = A.Send(x,w,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Recv(x,y,P)) = A.Recv(x,y,resolve_exp tpctx P)
-  | resolve_exp tpctx (A as A.Close(x)) = A
-  | resolve_exp tpctx (A.Wait(x,P)) = A.Wait(x,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Assert(x,phi,P)) = A.Assert(x,phi,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Assume(x,phi,P)) = A.Assume(x,phi,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.SendNat(x,e,P)) = A.SendNat(x,e,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.RecvNat(x,v,P)) = A.RecvNat(x,v,resolve_exp tpctx P)
-  | resolve_exp tpctx (A as A.Imposs) = A
-  | resolve_exp tpctx (A.Work(p,P)) = A.Work(p,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Pay(x,p,P)) = A.Pay(x,p,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Get(x,p,P)) = A.Get(x,p,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Delay(t,P)) = A.Delay(t,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Now(x,P)) = A.Now(x,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.When(x,P)) = A.When(x,resolve_exp tpctx P)
-  | resolve_exp tpctx (A.Marked(marked_P)) =
-    A.Marked(Mark.mark' (resolve_exp tpctx (Mark.data marked_P), Mark.ext marked_P))
-and resolve_branches tpctx branches =
-    List.map (fn (l,ext,P) => (l,ext,resolve_exp tpctx P)) branches
+fun valid_args env tpctx vs (A.Plus(choices)) ext = valid_args_choices env tpctx vs choices ext
+  | valid_args env tpctx vs (A.With(choices)) ext = valid_args_choices env tpctx vs choices ext
+  | valid_args env tpctx vs (A.Tensor(A,B)) ext = ( valid_args env tpctx vs A ext ; valid_args env tpctx vs B ext )
+  | valid_args env tpctx vs (A.Lolli(A,B)) ext = ( valid_args env tpctx vs A ext ; valid_args env tpctx vs B ext )
+  | valid_args env tpctx vs (A.One) ext = ()
+  | valid_args env tpctx vs (A.Exists(phi,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.Forall(phi,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.ExistsNat(v,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.ForallNat(v,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.PayPot(p,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.GetPot(p,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.Next(t,A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.Dia(A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.Box(A)) ext = valid_args env tpctx vs A ext
+  | valid_args env tpctx vs (A.TpVar(alpha)) ext = ()
+  | valid_args env tpctx vs (A.TpName(a,As,es)) ext =
+    ( case A.lookup_tp env a
+       of SOME(alphas', vs', con', _) =>
+          ( if List.length alphas' = List.length As then ()
+            else E.error_tparam_number ("parameterized type " ^ a) (List.length alphas', List.length As) ext
+          ; if List.length vs' = List.length es then ()
+            else E.error_index_number ("indexed type" ^ a) (List.length vs', List.length es) ext )
+        | NONE => ERROR ext ("type " ^ a ^ " undefined")
+    ; List.app (fn A => valid_args env tpctx vs A ext) As )
+and valid_args_choices env tpctx vs nil ext = ()
+  | valid_args_choices env tpctx vs ((l,A)::choices) ext =
+    ( valid_args env tpctx vs A ext ; valid_args_choices env tpctx vs choices ext )
+
+fun resolve_args env tpctx vs A ext =
+    let val A' = resolve tpctx A
+        val () = valid_args env tpctx vs A' ext
+    in A' end
+
+fun resolve_exp env tpctx vs (A as A.Id(x,y)) ext = A
+  | resolve_exp env tpctx vs (A.Spawn(P,Q)) ext = A.Spawn (resolve_exp env tpctx vs P ext, resolve_exp env tpctx vs Q ext)
+  | resolve_exp env tpctx vs (A.ExpName(x,f,As,es,ys)) ext =
+    A.ExpName(x,f,List.map (fn A => resolve_args env tpctx vs A ext) As,es,ys)
+  | resolve_exp env tpctx vs (A.Lab(x,k,P)) ext = A.Lab(x,k,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Case(x,branches)) ext = A.Case(x,resolve_branches env tpctx vs branches ext)
+  | resolve_exp env tpctx vs (A.Send(x,w,P)) ext = A.Send(x,w,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Recv(x,y,P)) ext = A.Recv(x,y,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A as A.Close(x)) ext = A
+  | resolve_exp env tpctx vs (A.Wait(x,P)) ext = A.Wait(x,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Assert(x,phi,P)) ext = A.Assert(x,phi,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Assume(x,phi,P)) ext = A.Assume(x,phi,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.SendNat(x,e,P)) ext = A.SendNat(x,e,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.RecvNat(x,v,P)) ext = A.RecvNat(x,v,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A as A.Imposs) ext = A
+  | resolve_exp env tpctx vs (A.Work(p,P)) ext = A.Work(p,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Pay(x,p,P)) ext = A.Pay(x,p,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Get(x,p,P)) ext = A.Get(x,p,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Delay(t,P)) ext = A.Delay(t,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Now(x,P)) ext = A.Now(x,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.When(x,P)) ext = A.When(x,resolve_exp env tpctx vs P ext)
+  | resolve_exp env tpctx vs (A.Marked(marked_P)) ext =
+    A.Marked(Mark.mark' (resolve_exp env tpctx vs (Mark.data marked_P) (Mark.ext marked_P),
+                         Mark.ext marked_P))
+and resolve_branches env tpctx vs branches ext =
+    List.map (fn (l,ext',P) => (l,ext,resolve_exp env tpctx vs P ext')) branches
 
 (***************************)
 (* Creating Internal Names *)
@@ -407,7 +441,7 @@ and elab_exps env nil = nil
                       else E.error_index_number "process definition" (List.length vs', List.length vs) ext
              val () = if List.length xs = List.length D' then ()
                       else E.error_channel_number "Process definition" (List.length D', List.length xs) ext
-             val P' = resolve_exp alphas P
+             val P' = resolve_exp env alphas vs P ext
              val () = TV.closed_exp alphas vs P' ext
              (* substitution in the declaration *)
              val (con, (D,pot,zC)) = subst (id_tp_subst alphas) (R.create_idx vs) (alphas', vs',con',(D',pot',zC'))

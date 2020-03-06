@@ -69,11 +69,13 @@ and invariant_list env seen alpha (a, nil, B) nil = true
       orelse invariant env ((a,beta)::seen) beta B )
     andalso invariant_list env seen alpha (a, betas, B) As
 
+(*
 val invariant = fn env => fn seen => fn alpha => fn A =>
     let val () = TextIO.print ("%inv " ^ alpha ^ " in " ^ A.Print.pp_tp A)
         val r = invariant env seen alpha A
         val () = TextIO.print (" == " ^ (if r then "true" else "false") ^ "\n")
     in r end
+*)
 
 (*****************)
 (* Type equality *)

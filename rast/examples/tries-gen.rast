@@ -1,0 +1,148 @@
+(* Generalized tries, adapted to session types from *
+ * Hinze's "Generalizing generalized tries"         *)
+(* Henry DeYoung, March 2nd, 2020 *)
+
+
+(* Option type *)
+type Maybe[A] = +{ none: 1 , some: A }
+
+(* Polymorphic lists *)
+type List[A] = +{ nil : 1 , cons: A * List[A] }
+
+decl nil[A] : . |- (l : List[A])
+proc l <- nil[A] =
+  l.nil ; close l
+
+decl cons[A] : (x : A) (xs : List[A]) |- (l : List[A])
+proc l <- cons[A] x xs =
+  l.cons ; send l x ; l <-> xs
+
+decl snoc[A] : (a : List[A] -o List[A]) (x : A) |- (a' : List[A] -o List[A])
+proc a' <- snoc[A] a x =
+  l' <- recv a' ;
+  l <- cons[A] x l' ;
+  send a l ;
+  a' <-> a
+  
+
+
+(* Tries as (total) maps from List[A] to C *)
+
+type Trie[A][C] = &{ lookup_nil : C ,
+                     lookup_cons : A -o Trie[A][C] }
+
+decl lookup_list[A][C] : (l : List[A]) (t : Trie[A][C]) |- (v : C)
+proc v <- lookup_list[A][C] l t =
+  case l ( nil => t.lookup_nil ;
+                  wait l ;
+                  v <-> t
+         | cons => t.lookup_cons;
+                   x <- recv l ;
+                   send t x ;
+                   v <- lookup_list[A][C] l t )
+
+(* Reify a function on lists as a trie *)
+decl fn_to_trie[A][C] : (a : List[A] -o List[A]) (f : List[A] -o C) |- (t : Trie[A][C])
+proc t <- fn_to_trie[A][C] a f =
+  case t ( lookup_nil => l <- nil[A] ;
+                         send a l ;
+                         send f a ;
+                         t <-> f
+         | lookup_cons => x <- recv t ;
+                          a' <- snoc[A] a x ;
+                          t <- fn_to_trie[A][C] a' f )
+
+
+
+(* Tries as (total) maps from List[A] to C, *
+ * using reversed search order              *)
+
+type RTrie[A][C] = &{ lookup_nil : C ,
+                      lookup_cons : RTrie[A][A -o C] }
+
+decl lookup_list_r[A][C] : (l : List[A]) (t : RTrie[A][C]) |- (v : C)
+proc v <- lookup_list_r[A][C] l t =
+  case l ( nil => t.lookup_nil ;
+                  wait l ;
+                  v <-> t
+         | cons => t.lookup_cons ;
+                   x <- recv l ;
+                   v' <- lookup_list_r[A][A -o C] l t;
+                   send v' x ;
+                   v <-> v' )
+
+(* Helper process *)
+decl f_cons[A][C] : (f : List[A] -o C) |- (g : List[A] -o (A -o C))
+proc g <- f_cons[A][C] f =
+  xs <- recv g ;
+  x <- recv g ;
+  l <- cons[A] x xs ;
+  send f l ;
+  g <-> f
+
+(* Function as a trie *)
+decl fn_to_rtrie[A][C] : (f : List[A] -o C) |- (t : RTrie[A][C])
+proc t <- fn_to_rtrie[A][C] f =
+  case t ( lookup_nil => l <- nil[A] ;
+                         send f l ;
+                         t <-> f
+         | lookup_cons => g <- f_cons[A][C] f ;
+                          t <- fn_to_rtrie[A][A -o C] g )
+
+
+
+(* Binary trees, polymorphic in the types of data stored *
+ * at internal nodes and leaves                          *)
+type Tree[A][B] = +{ leaf : B , node : Tree[A][B] * A * Tree[A][B] }
+
+decl leaf[A][B] : (y : B) |- (b : Tree[A][B])
+proc b <- leaf[A][B] y =
+  b.leaf ; b <-> y
+  
+decl node[A][B] : (l : Tree[A][B]) (x : A) (r : Tree[A][B]) |- (b : Tree[A][B])
+proc b <- node[A][B] l x r =
+  b.node ; send b l ; send b x ; b <-> r
+
+
+(* Tree-indexed tries as (total) maps from Tree[A][B] to C *)
+type TTrie[A][B][C] = &{ lookup_leaf : B -o C ,
+                         lookup_node : TTrie[A][B][A -o TTrie[A][B][C]] }
+
+decl lookup_tree[A][B][C] : (b : Tree[A][B]) (t : TTrie[A][B][C]) |- (v : C)
+proc v <- lookup_tree[A][B][C] b t =
+  case b ( leaf => t.lookup_leaf ;
+                   send t b ;
+                   v <-> t
+         | node => t.lookup_node ;  % b : Tree[A][B] * A * Tree[A][B] ,
+                                    % t : TTrie[A][B][A -o TTrie[A][B][C]]
+                   l <- recv b ;    % l : Tree[A][B] , b : A * Tree[A][B]
+                   t' <- lookup_tree[A][B][A -o TTrie[A][B][C]] l t ;
+                   x <- recv b ;
+                   send t' x ;      % t' : TTrie[A][B][C]
+                   v <- lookup_tree[A][B][C] b t' )
+
+(* Helper process *)
+decl f_node_leftmid[A][B][C] : (f : Tree[A][B] -o C) |- (g : Tree[A][B] -o (A -o TTrie[A][B][C]))
+proc g <- f_node_leftmid[A][B][C] f =
+  l <- recv g ;
+  x <- recv g ;
+  f' <- f_node_right[A][B][C] l x f ;  % f' : Tree[A][B] -o C
+  g <- fn_to_ttrie[A][B][C] f'
+
+(* Helper process *)
+decl f_node_right[A][B][C] : (l : Tree[A][B]) (x : A) (f : Tree[A][B] -o C) |- (g : Tree[A][B] -o C)
+proc g <- f_node_right[A][B][C] l x f =
+  r <- recv g ;
+  b <- node[A][B] l x r ;
+  send f b ;
+  g <-> f
+
+(* Function as trie *)
+decl fn_to_ttrie[A][B][C] : (f : Tree[A][B] -o C) |- (t : TTrie[A][B][C])
+proc t <- fn_to_ttrie[A][B][C] f =
+  case t ( lookup_leaf => b' <- recv t ;       % -fp
+                          b <- leaf[A][B] b' ; % was: b <- leaf[A][B] -fp
+                          send f b ;
+                          t <-> f
+         | lookup_node => g <- f_node_leftmid[A][B][C] f ;  % g : Tree[A][B] -o (A -o TTrie[A][B][C])
+                          t <- fn_to_ttrie[A][B][A -o TTrie[A][B][C]] g )

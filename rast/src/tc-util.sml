@@ -45,7 +45,8 @@ sig
     val update_tp : Ast.chan_tp -> Ast.context -> Ast.context
     val lookup_context : Ast.env -> Ast.chan -> Ast.context -> Ast.ext -> Ast.tp
 
-    val expd_expdec_check : Ast.env -> (Ast.expname * Ast.tp list * Arith.arith list) -> Ast.ext
+    val expd_expdec_check : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop
+                            -> (Ast.expname * Ast.tp list * Arith.arith list) -> Ast.ext
                             -> Arith.prop * (Ast.context * Ast.pot * Ast.chan_tp)
     (* may raise ErrorMsg.error *)
 
@@ -60,6 +61,7 @@ structure A = Ast
 structure PP = PPrint
 structure E = TpError
 structure TU = TypeUtil
+structure TV = TypeValid
 structure TEQ = TypeEquality
 structure C = Constraints
 val ERROR = ErrorMsg.ERROR
@@ -86,33 +88,52 @@ fun zip_check f vs es ext =
                                  ^ "found " ^ Int.toString (List.length es))
     in R.zip vs es end
 
-(* expd_expdec_check env f[As]{es} ext = [As/alphas][es/vs](con, (A, p, C))
- * if alphas ; vs ; con ; A |{p}- f : C
+(* expd_expdec_check env tpctx ctx con f[As]{es} ext = [As/alphas][es/vs](con, (A, p, C))
+ * if alphas ; vs ; con ; As |{p}- f : C
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs| or |As| <> |alphas}
  *)
-fun expd_expdec_check env (f,As,es) ext =
-    (case A.lookup_expdec env f
-      of SOME(alphas,vs,con,(D,pot,zC)) =>
-         let val () = if List.length As = List.length alphas then ()
-                      else E.error_tparam_number "call" (List.length alphas, List.length As) ext
-             val () = if List.length es = List.length vs then ()
-                      else E.error_index_number "call" (List.length vs, List.length es) ext
-             val theta = ListPair.zipEq (alphas, As)
-             val sg = R.zip vs es
-             val con' = R.apply_prop sg con
-             val D' = A.subst_context theta (A.apply_context sg D)
-             val pot' = R.apply sg pot
-             val zC' = A.subst_chan_tp theta (A.apply_chan_tp sg zC)
-         in (con', (D', pot', zC')) end
-       | NONE => E.error_undeclared (f, ext)
+fun expd_expdec_check env tpctx ctx con (f,As,es) ext =
+    ( List.app (fn A => TV.valid env tpctx ctx con A ext) As
+    ; case A.lookup_expdec env f
+       of SOME(alphas,vs,con,(D,pot,zC)) =>
+          let val () = if List.length As = List.length alphas then ()
+                       else E.error_tparam_number "call" (List.length alphas, List.length As) ext
+              val () = if List.length es = List.length vs then ()
+                       else E.error_index_number "call" (List.length vs, List.length es) ext
+              val theta = ListPair.zipEq (alphas, As)
+              val sg = R.zip vs es
+              val con' = R.apply_prop sg con
+              val D' = A.subst_context theta (A.apply_context sg D)
+              val pot' = R.apply sg pot
+              val zC' = A.subst_chan_tp theta (A.apply_chan_tp sg zC)
+          in (con', (D', pot', zC')) end
+        | NONE => E.error_undeclared (f, ext)
     )
+
+fun expd_expdec_approx env (f,As,es) ext =
+    ( case A.lookup_expdec env f
+       of SOME(alphas,vs,con,(D,pot,zC)) =>
+          let val () = if List.length As = List.length alphas then ()
+                       else E.error_tparam_number "call" (List.length alphas, List.length As) ext
+              val () = if List.length es = List.length vs then ()
+                       else E.error_index_number "call" (List.length vs, List.length es) ext
+              val theta = ListPair.zipEq (alphas, As)
+              val sg = R.zip vs es
+              val con' = R.apply_prop sg con
+              val D' = A.subst_context theta (A.apply_context sg D)
+              val pot' = R.apply sg pot
+              val zC' = A.subst_chan_tp theta (A.apply_chan_tp sg zC)
+          in (con', (D', pot', zC')) end
+        | NONE => E.error_undeclared (f, ext)
+    )
+
 
 (* syn_call env D (x <- f{es} <- ys) ext = (x : [es/vs]A) (D-ys)
  * if vs ; con ; D' |{p}- f : A
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
 fun syn_call env D (P as A.ExpName(x,f,As,es,ys)) ext =
-    let val (con', (D', pot', (x',A))) = expd_expdec_check env (f,As,es) ext
+    let val (con', (D', pot', (x',A))) = expd_expdec_approx env (f,As,es) ext
         val contD = remove_chans ys D ext
         val () = if List.exists (fn (y,_) => x = y) contD
                  then E.error_channel_mismatch "call" ("fresh <id>", x) ext
@@ -126,7 +147,7 @@ fun syn_call env D (P as A.ExpName(x,f,As,es,ys)) ext =
  * raises ErrorMsg.Error if f undeclared or |es| <> |vs|
  *)
 fun syn_pot env (P as A.ExpName(x,f,As,es,ys)) ext =
-    let val (con', (D', pot', (x',A'))) = expd_expdec_check env (f,As,es) ext
+    let val (con', (D', pot', (x',A'))) = expd_expdec_approx env (f,As,es) ext
     in pot' end
   | syn_pot env (A.Marked(marked_P)) ext =
     syn_pot env (Mark.data marked_P) (Mark.ext marked_P)

@@ -129,7 +129,7 @@ and fwd trace env ctx con D pot (A.Id(x,y)) (zC as (z,C)) ext =
     in () end
 
 and spawn trace env ctx con D pot (A.Spawn(A.ExpName(x,f,As,es,xs),Q)) (zC as (z,C)) ext =
-    let val (con',(D',pot',(z',B))) = TCU.expd_expdec_check env (f,As,es) ext
+    let val (con',(D',pot',(z',B))) = TCU.expd_expdec_check env [] ctx con (f,As,es) ext  (* fix empty type context? *)
         val () = if List.length D' = List.length xs then ()
                  else E.error_channel_number "spawn" (List.length D', List.length xs) ext
         val cutD = gen_context env xs D ext
@@ -161,7 +161,7 @@ and expname trace env ctx con D pot (A.ExpName(x,f,As,es,xs)) (z,C) ext =
     let val () = if x <> z
                  then E.error_channel_mismatch "tail call" (z,x) ext
                  else ()
-        val (con',(D',pot',(z',C'))) = TCU.expd_expdec_check env (f,As,es) ext
+        val (con',(D',pot',(z',C'))) = TCU.expd_expdec_check env [] ctx con (f,As,es) ext (* fix!!! *)
         val () = if List.length D' = List.length xs then ()
                  else E.error_channel_number "tail call" (List.length D', List.length xs) ext
         val cutD = gen_context env xs D ext
