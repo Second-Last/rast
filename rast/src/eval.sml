@@ -94,7 +94,8 @@ fun body env f As es =
           let val theta = ListPair.zipEq (alphas, As)
               val sigma = R.zip ctx es
               val P' = A.subst_exp theta (A.apply_exp sigma P)
-          in (ys', P', x') end )
+          in (ys', P', x') end
+        | NONE => raise Fail (f ^ " undefined!!!\n") )
 
 (* eval env eta P z = v, where v the value of [eta]P
  * Requires eta : D and z : C where D |- P :: (z : C)
