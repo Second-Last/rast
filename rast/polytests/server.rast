@@ -1,0 +1,26 @@
+type S[a][b][x][y] = &{nextA : a -o S[a][b][R[a][x]][y],
+                       nextB : b -o S[a][b][x][R[b][y]],
+                       done : x * y * 1}
+
+type R[a][x] = &{push : a -o R[a][R[a][x]],
+                 pop : x}
+
+decl server[a][b][x][y] : (ma : R[a][x]) (mb : R[b][y]) |- (s : S[a][b][x][y])
+
+proc s <- server[a][b][x][y] ma mb =
+  case s (
+    nextA => ra <- recv s ;   % (ra : A) (ma : R[A][x]) ....
+             ma.push ;        % (ra : A) (ma : A -o R[A][R[A][x]]) ....
+             send ma ra ;     % (ma : R[A][R[A][x]]) (mb : R[B][y]) |- s : S[R[A][x]][y]
+             s <- server[a][b][R[a][x]][y] ma mb
+  | nextB => rb <- recv s ;
+             mb.push ;
+             send mb rb ;
+             s <- server[a][b][x][R[b][y]] ma mb
+  | done =>                     % (ma : R[A][x]) (mb : R[B][y]) |- s : x * y * 1
+            ma.pop ;            % (ma : x) (mb : R[B][y]) |- s : x * y * 1
+            send s ma ;         % (mb : R[B][y]) |- s : y * 1
+            mb.pop ;            % (mb : y) |- s : y * 1
+            send s mb ;         % . |- s : 1
+            close s
+)
