@@ -1,0 +1,183 @@
+type S[a][b][x][y] = &{nextA : a -o S[a][b][R[a][x]][y],
+                       nextB : b -o S[a][b][x][R[b][y]],
+                       done : list[a] * list[b] * 1}
+
+type R[a][x] = &{push : a -o R[a][R[a][x]],
+                 popall : list[a]}
+
+decl server[a][b][x][y] : (ma : R[a][x]) (mb : R[b][y]) |- (s : S[a][b][x][y])
+
+proc s <- server[a][b][x][y] ma mb =
+  case s (
+    nextA => ra <- recv s ;   % (ra : a) (ma : R[a][x]) ....
+             ma.push ;        % (ra : a) (ma : a -o R[a][R[a][x]]) ....
+             send ma ra ;     % (ma : R[a][R[a][x]]) (mb : R[b][y]) |- s : S[R[a][x]][y]
+             s <- server[a][b][R[a][x]][y] ma mb
+  | nextB => rb <- recv s ;
+             mb.push ;
+             send mb rb ;
+             s <- server[a][b][x][R[b][y]] ma mb
+  | done =>                     % (ma : R[a][x]) (mb : R[b][y]) |- s : list[a] * list[b] * 1
+            ma.popall ;         % (ma : list[a]) (mb : R[b][y]) |- s : list[a] * list[b] * 1
+            send s ma ;         % (mb : R[B][y]) |- s : list[b] * 1
+            mb.popall ;         % (mb : list[b]) |- s : list[b] * 1
+            send s mb ;         % . |- s : 1
+            close s
+  )
+
+type list[a] = +{cons : a * list[a], nil : 1}
+
+decl cons[a] : (x : a) (tl : list[a]) |- (l : list[a])
+decl nil[a] : . |- (l : list[a])
+
+proc l <- cons[a] x tl =
+  l.cons ;
+  send l x ;
+  l <-> tl
+
+proc l <- nil[a] =
+  l.nil ;
+  close l
+
+type mapper[a] = &{next : a -o a * mapper[a],
+                   done : 1}
+
+decl machine[a][x] : (map : mapper[a]) (l : list[a]) |- (m : R[a][x])
+
+proc m <- machine[a][x] map l =
+  case m (
+    push => r <- recv m ;
+            map.next ;
+            send map r ;
+            r <- recv map ;
+            l <- cons[a] r l ;    % (l : list[a]) |- (m : R[a][R[a][x]])
+            m <- machine[a][R[a][x]] map l
+  | popall => map.done ; wait map ; m <-> l
+  )
+
+decl clientAB[a][b][x][y] : (l1 : list[a]) (l2 : list[b]) (s : S[a][b][x][y]) |- (d : list[a] * list[b])
+decl clientBA[a][b][x][y] : (l2 : list[b]) (l1 : list[a]) (s : S[a][b][x][y]) |- (d : list[a] * list[b])
+decl clientA[a][b][x][y] : (l1 : list[a]) (s : S[a][b][x][y]) |- (d : list[a] * list[b])
+decl clientB[a][b][x][y] : (l2 : list[b]) (s : S[a][b][x][y]) |- (d : list[a] * list[b])
+
+proc d <- clientAB[a][b][x][y] l1 l2 s =
+  case l1 (
+    cons => x <- recv l1 ;
+            s.nextA ;
+            send s x ;
+            d <- clientBA[a][b][R[a][x]][y] l2 l1 s
+  | nil => wait l1 ;
+           d <- clientB[a][b][x][y] l2 s
+  )
+
+proc d <- clientBA[a][b][x][y] l2 l1 s =
+  case l2 (
+    cons => x <- recv l2 ;
+            s.nextB ;
+            send s x ;
+            d <- clientAB[a][b][x][R[b][y]] l1 l2 s
+  | nil => wait l2 ;
+           d <- clientA[a][b][x][y] l1 s
+  )
+
+proc d <- clientA[a][b][x][y] l1 s =
+  case l1 (
+    cons => x <- recv l1 ;
+            s.nextA ;
+            send s x ;
+            d <- clientA[a][b][R[a][x]][y] l1 s
+  | nil => wait l1 ;
+           s.done ;
+           l1 <- recv s ;
+           send d l1 ;
+           l2 <- recv s ;
+           wait s ;
+           d <-> l2
+  )
+
+proc d <- clientB[a][b][x][y] l2 s =
+  case l2 (
+    cons => x <- recv l2 ;
+            s.nextB ;
+            send s x ;
+            d <- clientB[a][b][x][R[b][y]] l2 s
+  | nil => wait l2 ;
+           s.done ;
+           l1 <- recv s ;
+           send d l1 ;
+           l2 <- recv s ;
+           wait s ;
+           d <-> l2
+  )
+
+type nat = +{s : nat, z : 1}
+
+decl zero : . |- (n : nat)
+decl one : . |- (n : nat)
+decl two : . |- (n : nat)
+
+proc n <- zero = n.z ; close n
+proc n <- one = n.s ; n <- zero
+proc n <- two = n.s ; n <- one
+
+decl makelist1 : . |- (l : list[nat])
+decl makelist2 : . |- (l : list[nat])
+
+proc l <- makelist1 =
+  l.cons ;
+  n <- zero ;
+  send l n ;
+  l.cons ;
+  n <- one ;
+  send l n ;
+  l.nil ;
+  close l
+
+proc l <- makelist2 =
+  l.cons ;
+  n <- two ;
+  send l n ;
+  l.nil ;
+  close l
+
+decl id : (m : nat) |- (n : nat)
+decl succ : (m : nat) |- (n : nat)
+
+proc n <- id m = n <-> m
+proc n <- succ m = n.s ; n <-> m
+
+decl idmap : . |- (m : mapper[nat])
+decl succmap : . |- (m : mapper[nat])
+
+proc m <- idmap =
+  case m (
+    next => x <- recv m ;
+            send m x ;
+            m <- idmap
+  | done => close m
+  )
+
+proc m <- succmap =
+  case m (
+    next => x <- recv m ;
+            y <- succ x ;
+            send m y ;
+            m <- idmap
+  | done => close m
+  )
+
+decl main : . |- (d : list[nat] * list[nat])
+
+proc d <- main =
+  la <- nil[nat] ;
+  lb <- nil[nat] ;
+  mapa <- idmap ;
+  mapb <- succmap ;
+  ma <- machine[nat][1] mapa la ;
+  mb <- machine[nat][1] mapb lb ;
+  s <- server[nat][nat][1][1] ma mb ;
+  l1 <- makelist1 ;
+  l2 <- makelist2 ;
+  d <- clientAB[nat][nat][1][1] l1 l2 s
+
+exec main
