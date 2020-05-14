@@ -1,0 +1,26 @@
+type stack[a][x] = &{push : a -o stack[a][stack[a][x]],
+                     pop : +{none : 1,
+                             some : a * x}}
+
+decl empty[a][x] : . |- (s : stack[a][x])
+decl elem[a][x] : (e : a) (t : stack[a][x]) |- (s : stack[a][stack[a][x]])
+
+proc s <- empty[a][x] =
+  case s (
+    push => e <- recv s ;
+            t <- empty[a][x] ;
+            s <- elem[a][x] e t
+  | pop => s.none ;
+           close s
+  )
+  
+proc s <- elem[a][x] e t =
+  case s (
+    push => f <- recv s ;
+            t.push ;
+            send t e;
+            s <- elem[a][stack[a][x]] f t
+  | pop => s.some ;
+           send s e ;
+           s <-> t
+  )
