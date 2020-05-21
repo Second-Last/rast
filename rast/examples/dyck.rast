@@ -135,8 +135,8 @@ proc tk <- deserialize[A][K] s =
   case s ( s_leaf => t <- leaf[A] ;
                      send tk t ; tk <-> s
          | s_node => x <- recv s ;
-                     tk1 <- deserialize[A][Serial[A][K]] s ;
-                     l <- recv tk1 ;
+                     tk1 <- deserialize[A][Serial[A][K]] s ;  % (tk1 : Tree[A] * Serial[A][K])
+                     l <- recv tk1 ;    % (l : Tree[A]) (tk1 : Serial[A][K]) |- (tk : Tree[A] * K)
                      tk2 <- deserialize[A][K] tk1 ;
                      r <- recv tk2 ;
                      t <- node[A] l x r ;
