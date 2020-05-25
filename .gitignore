@@ -1,5 +1,7 @@
-rast
-rast-test
-ss
-ss-test
+rast/src/rast
+rast/src/rast-test
+rast/src/TAGS
+ss/src/ss
+ss/src/ss-test
+ss/src/TAGS
 .cm
