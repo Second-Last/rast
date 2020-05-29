@@ -111,9 +111,6 @@ which are both right associative and have the same precedence,
 which is higher than the all prefix operators (`()` `[]` `<>`
 `|>` `<|` `?{..}.` `!{..}.` `?v.` `!v.`)
 
-Note: the order of branches must match the order of the alternatives
-in the external or internal choice type
-
 ### Comment syntax
 
 ```text

@@ -12,7 +12,6 @@ sig
     val error_implicit : Ast.exp * Ast.ext -> 'a
     val error_label_missing_alt : Ast.label * Ast.ext -> 'a
     val error_label_invalid : Ast.env * Ast.tp * Ast.ext -> 'a
-    (* val error_label_mismatch : Ast.label * Ast.label * Ast.ext -> 'a *)
     val error_label_missing_branch : Ast.label * Ast.ext -> 'a
 
     val error_channel_number : string -> int * int -> Ast.ext -> 'a
@@ -43,12 +42,6 @@ fun error_label_missing_alt (l, ext) =
 
 fun error_label_invalid env (l, A, ext) =
     ERROR ext ("label " ^ l ^ " not a valid alternative in type " ^ PP.pp_tp_compact env A)
-
-(*
-fun error_label_mismatch (l, l', ext) =
-    ERROR ext ("label " ^ l ^ " is different from " ^ l' ^ "\n"
-               ^ "[Hint: the order of branches must follow the order of the alternatives the type]")
-*)
 
 fun error_label_missing_branch (l, ext) =
     ERROR ext ("label " ^ l ^ " does not appear among the branches")
