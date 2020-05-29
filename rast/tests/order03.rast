@@ -1,0 +1,8 @@
+#test success
+
+type bin{n} = +{b0 : ?{n > 0}. ?k. ?{n = 2*k}. bin{k},
+                b1 : ?{n > 0}. ?k. ?{n = 2*k+1}. bin{k},
+                e : ?{n = 0}. 1}
+
+decl close0 : (x : bin{0}) |- (y : 1)
+proc y <- close0 x = case x (e => wait x ; close y)

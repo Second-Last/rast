@@ -1,0 +1,13 @@
+#test success
+
+type bin{n} = +{b0 : ?{n > 0}. ?k. ?{n = 2*k}. bin{k},
+                b1 : ?k. ?{n = 2*k+1}. bin{k},
+                e : ?{n = 0}. 1}
+
+type bin'{n} = +{b0 : ?{n > 0}. ?k. ?{n = 2*k}. bin{k},
+                 e : ?{n = 0}. 1,
+                 b1 : ?k. ?{n = 2*k+1}. bin{k}}
+
+
+decl fwd{n} : (x : bin{n}) |- (y : bin'{n})
+proc y <- fwd{n} x = y <-> x

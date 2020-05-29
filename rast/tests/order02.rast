@@ -1,0 +1,6 @@
+#test success
+
+type nat{n} = +{z : ?{n = 0}. 1, s : ?{n > 0}. nat{n-1}}
+
+decl dec{n} : (x : nat{n+1}) |- (y : nat{n})
+proc y <- dec{n} x = case x (s => y <-> x)

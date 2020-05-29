@@ -50,7 +50,7 @@ fun exists_chan x ((y,A)::D) = if x = y then true else exists_chan x D
   | exists_chan x [] = false
 
 fun gen_context env xs D ext = List.map (fn x => (x,TCU.lookup_context env x D ext)) xs
-                               
+
 (*************************************)
 (* Type checking process expressions *)
 (*************************************)
@@ -198,13 +198,13 @@ and withL trace env ctx con D (A as A.With(choices)) pot (A.Lab(x,k,P)) zC ext (
  * for provider of external choice &{...}
  *)
 and check_branchesR trace env ctx con D pot nil (z,nil) ext = ()
-  | check_branchesR trace env ctx con D pot ((l,ext',P)::branches) (z,(l',C)::choices) ext =
-    (* require exact order *)
-    ( if trace then TextIO.print ("| " ^ l ^ " => \n") else ()
-    ; if l = l' then () else E.error_label_mismatch (l, l', ext')
-    ; check_exp' trace env ctx con D pot P (z,C) ext
-    ; check_branchesR trace env ctx con D pot branches (z,choices) ext )
-  | check_branchesR trace env ctx con D pot ((l,ext',P)::_) (z,nil) ext = E.error_label_missing_alt (l, ext')
+  | check_branchesR trace env ctx con D pot ((l,ext',P)::branches) (z,choices) ext =
+    (* no longer require exact order *)
+    let val () = if trace then TextIO.print ("| " ^ l ^ " => \n") else ()
+        val (C, choices') = TCU.get_choice l choices ext'
+        val () = check_exp' trace env ctx con D pot P (z,C) ext
+        val () = check_branchesR trace env ctx con D pot branches (z,choices') ext
+    in () end
   | check_branchesR trace env ctx con D pot nil (z,(l',C)::_) ext = E.error_label_missing_branch (l', ext)
 
 and withR trace env ctx con D pot (A.Case(x,branches)) (z,A.With(choices)) ext (* z = x *) =
@@ -216,14 +216,14 @@ and withR trace env ctx con D pot (A.Case(x,branches)) (z,A.With(choices)) ext (
  * for client of internal choice +{...}
  *)
 and check_branchesL trace env ctx con D (x,nil) pot nil zC ext = ()
-  | check_branchesL trace env ctx con D (x,(l,A)::choices) pot ((l',ext',P)::branches) zC ext =
-    (* require exact order *)
-    ( if trace then TextIO.print ("| " ^ l' ^ " => \n") else ()
-    ; if l = l' then () else E.error_label_mismatch (l, l', ext')
-    ; check_exp' trace env ctx con (TCU.update_tp (x,A) D) pot P zC ext
-    ; check_branchesL trace env ctx con D (x,choices) pot branches zC ext )
+  | check_branchesL trace env ctx con D (x,choices) pot ((l',ext',P)::branches) zC ext =
+    (* no longer require exact order *)
+    let val () = if trace then TextIO.print ("| " ^ l' ^ " => \n") else ()
+        val (A,choices') = TCU.get_choice l' choices ext'
+        val () = check_exp' trace env ctx con (TCU.update_tp (x,A) D) pot P zC ext
+        val () = check_branchesL trace env ctx con D (x,choices') pot branches zC ext
+    in () end
   | check_branchesL trace env ctx con D (x,(l,A)::_) pot nil zC ext = E.error_label_missing_branch (l, ext)
-  | check_branchesL trace env ctx con D (x,nil) pot ((l',ext',P)::_) zC ext = E.error_label_missing_alt (l', ext')
 
 and plusL trace env ctx con D (A.Plus(choices)) pot (A.Case(x,branches)) zC ext (* z != x *) =
     check_branchesL trace env ctx con D (x,choices) pot branches zC ext

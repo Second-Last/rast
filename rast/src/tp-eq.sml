@@ -194,12 +194,13 @@ and eq_tp_bind env ctx con seen (v,A) (v',A') =
         val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
     in eq_tp' env (w::ctx) con seen wA wA' end
 
-and eq_choice env ctx con seen nil nil = true
-  | eq_choice env ctx con seen ((l,A)::choice) ((l',A')::choice') = (* order must be equal *)
-    l = l' andalso eq_tp' env ctx con seen A A'
-    andalso eq_choice env ctx con seen choice choice'
-  | eq_choice env ctx con seen ((l,A)::choice) nil = false
-  | eq_choice env ctx con seen nil ((l',A')::choice') = false
+and eq_choice env ctx con seen ((l,A)::choices) choices' =
+    (case A.lookup_choice_rest choices' l
+      of NONE => false
+       | SOME(A',choices'') => eq_tp' env ctx con seen A A'
+                               andalso eq_choice env ctx con seen choices choices'')
+  | eq_choice env ctx con seen nil ((l',A')::choices') = false
+  | eq_choice env ctx con seen nil nil = true
 
 and eq_name_name env ctx con seen (A as A.TpName(a,es)) (A' as A.TpName(a',es')) =
     case mem_seen env seen a a'

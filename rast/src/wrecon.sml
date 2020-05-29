@@ -233,16 +233,21 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
   (* all other cases are impossible, since we assume approximate typing *)
 
 and recon_branchesL env D (x,nil) nil (z,C) ext = nil
-  | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) (z,C) ext =
+  | recon_branchesL env D (x,choices) ((l',ext',P)::branches) (z,C) ext =
     (* after quantifer reconstruction, branches must match choices exactly *)
-    (l',ext',recon_getL env (TCU.update_tp (x,A) D) (x,A) P (z,C) ext)
-    ::(recon_branchesL env D (x,choices) branches (z,C) ext)
+    let val (A,choices') = TCU.get_choice l' choices ext'
+    in (l',ext',recon_getL env (TCU.update_tp (x,A) D) (x,A) P (z,C) ext)
+       :: recon_branchesL env D (x,choices') branches (z,C) ext
+    end
 
 and recon_branchesR env D nil (z,nil) ext = nil
-  | recon_branchesR env D ((l,ext',P)::branches) (z,(l',C)::choices) ext =
+  | recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext =
     (* after quantifer reconstruction, branches must match choices exactly *)
-    (l',ext',recon_getR env D P (z,C) ext)
-    ::(recon_branchesR env D branches (z,choices) ext)
+    let val (C,choices') = TCU.get_choice l choices ext'
+    in 
+        (l,ext',recon_getR env D P (z,C) ext)
+        :: recon_branchesR env D branches (z,choices') ext
+    end
 
 
 (* insert_work env pot P = P'

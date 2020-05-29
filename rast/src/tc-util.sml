@@ -6,6 +6,8 @@
 signature TYPE_CHECK_UTIL =
 sig
 
+    val get_choice : Ast.label -> Ast.choices -> Ast.ext -> Ast.tp * Ast.choices (* may raise ErrorMsg.error *)
+
     (* operations on approximately typed expressions (see arecon.sml) *)
     (* synthesizing the expected types *)
     val syn_call : Ast.env -> Ast.context -> Ast.exp -> Ast.ext -> Ast.context (* may raise ErrorMsg.error *)
@@ -63,6 +65,13 @@ structure TU = TypeUtil
 structure TEQ = TypeEquality
 structure C = Constraints
 val ERROR = ErrorMsg.ERROR
+
+fun cons2 (l,A) (B, choices) = (B, (l,A)::choices)
+
+fun get_choice l nil ext = E.error_label_missing_alt (l, ext)
+  | get_choice l ((l',A)::choices) ext =
+    if l = l' then (A, choices)
+    else cons2 (l',A) (get_choice l choices ext)
 
 fun lookup_context env x ((y,A)::D') ext = if x = y then TU.expand env A else lookup_context env x D' ext
   | lookup_context env x nil ext = ERROR ext ("channel " ^ x ^ " not present in context")

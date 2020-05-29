@@ -81,16 +81,10 @@ and withR env D (A.Case(x,branches)) (z,A.With(choices)) ext = (* x = z *)
 
 (* branchesR for case handling external choice *)
 (* tolerate missing branches *)
-and recon_branchesR env D nil (z,nil) ext = nil
-  | recon_branchesR env D ((l,ext',P)::branches) (z,(l',C)::choices) ext =
-    if l = l'
-    then (l',ext',recon env D P (z,C) ext)::(recon_branchesR env D branches (z,choices) ext)
-    else recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext (* alternative l' missing; ignore *)
-  | recon_branchesR env D ((l,ext',P)::_) (z,nil) ext =
-    (* l not part of the type *)
-    E.error_label_missing_alt (l, ext')
-  | recon_branchesR env D nil (z, (l',C)::choices) ext = (* alternative l' missing; ignore *)
-    recon_branchesR env D nil (z, choices) ext
+and recon_branchesR env D nil (z,choices) ext = nil  (* ignore remaining choices *)
+  | recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext =
+    let val (C,choices') = TCU.get_choice l choices ext'
+    in (l,ext',recon env D P (z,C) ext)::(recon_branchesR env D branches (z,choices') ext) end
 
 and plusL env D (A.Plus(choices)) (A.Case(x,branches)) zC ext = (* z <> x *)
     A.Case(x,recon_branchesL env D (x,choices) branches zC ext)
@@ -99,16 +93,10 @@ and plusL env D (A.Plus(choices)) (A.Case(x,branches)) zC ext = (* z <> x *)
 
 (* branchesL for case handling internal choice *)
 (* tolerate missing branches *)
-and recon_branchesL env D (x,nil) nil zC ext = nil
-  | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) zC ext =
-    if l = l'
-    then (l',ext',recon env (TCU.update_tp (x,A) D) P zC ext)::(recon_branchesL env D (x,choices) branches zC ext)
-    else recon_branchesL env D (x,choices) ((l',ext',P)::branches) zC ext (* alternative l missing; ignore *)
-  | recon_branchesL env D (x,(l,A)::choices) nil zC ext = (* alternative l missing; ignore *)
-    recon_branchesL env D (x,choices) nil zC ext
-  | recon_branchesL env D (x,nil) ((l', ext', P)::_) (z,C) ext =
-    (* l' not part of the type *)
-    E.error_label_missing_alt (l',ext')
+and recon_branchesL env D (x,choice) nil zC ext = nil (* ignore remaining choices *)
+  | recon_branchesL env D (x,choices) ((l',ext',P)::branches) zC ext =
+    let val (A,choices') = TCU.get_choice l' choices ext'
+    in (l',ext',recon env (TCU.update_tp (x,A) D) P zC ext)::(recon_branchesL env D (x,choices') branches zC ext) end
 
 and tensorR env D (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext = (* x = z *)
     (* do not check type equality here, just remove w *)
