@@ -1,0 +1,39 @@
+
+type D[x] = +{ L : D[D[x]],
+               R : x }
+
+type S = +{ L : D[S],
+            $ : 1}
+
+(*
+
+w : S => < w > : S
+w1 : S, w2 : S => w1 w2 : S
+
+decl concat : (w1 : S), (w2 : S) |- (w : S)
+decl wrap : (w : S) |- (w' : S)
+decl copy : (w : S) |- (w' : D[S])
+decl copy'[x] : (w : D[x]) |- (w' : D[D[x]])
+
+w' <- copy w =
+  case w (
+    L => w'.L ;       % (w : D[S]) |- (w' : D[D[S]])
+         w' <- copy'[S] w
+  | $ => w'.R ;
+         wait w ;
+         w'.$ ;
+         close w'
+  )
+
+w' <- copy'[x] w =
+  case w (
+    L => w'.L ;     % (w : D[D[x]]) |- (w' : D[D[D[x]]])
+         w' <- copy[D[x]] w
+  | R => w'.R ;     % (w : x) |- (w' : D[x]) / x = S or x = D[y] for some y
+  )
+
+proc w' <- wrap w =
+  w'.L ;        % (w : S) |- (w' : D[S])
+  w' <- copy w
+
+*)

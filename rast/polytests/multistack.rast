@@ -1,0 +1,50 @@
+type nat = +{s : nat, z : 1}
+
+decl zero : . |- (n : nat)
+decl succ : (m : nat) |- (n : nat)
+decl copy : (m : nat) |- (n : nat * nat * 1)
+decl copyh : (m : nat) (x1 : nat) (x2 : nat) |- (n : nat * nat * 1)
+
+proc n <- zero = n.z ; close n
+proc n <- succ m = n.s ; n <-> m
+
+proc n <- copy m =
+  z1 <- zero ;
+  z2 <- zero ;
+  n <- copyh m z1 z2
+
+proc n <- copyh m x1 x2 =
+  case m (
+    s => x1 <- succ x1 ;
+         x2 <- succ x2 ;
+         n <- copyh m x1 x2
+  | z => wait m ; send n x1 ; send n x2 ; close n
+  )
+
+type multiStack[x][y] = &{push : nat -o multiStack[stack[x]][stack[y]],
+                          id : x,
+                          succ : y}
+
+type stack[x] = &{push : nat -o stack[stack[x]],
+                  pop : nat * x}
+
+type emp = &{push : nat -o stack[emp],
+             end : 1}
+
+decl pushAndPop[x][y] : (sid : stack[x]) (ssuc : stack[y]) |- (s : multiStack[x][y])
+
+proc s <- pushAndPop[x][y] sid ssuc =
+  case s (
+    push => n <- recv s ;
+            npair <- copy n ;
+            n1 <- recv npair ;
+            n2 <- recv npair ;
+            wait npair ;
+            sid.push ;
+            send sid n1 ;
+            ssuc.push ;
+            send ssuc n2 ;
+            s <- pushAndPop[stack[x]][stack[y]] sid ssuc
+  | id => s <- popId[stack[x]] sid        % sends the received values
+  | succ => s <- popSucc[stack[x]] ssuc   % sends the successors of the received values
+  )

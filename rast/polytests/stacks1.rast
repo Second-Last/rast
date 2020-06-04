@@ -1,0 +1,87 @@
+type S[a][x] = &{push : a -o S[a][S[a][x]],
+                 pop : a * x}
+
+type stack[a] = &{push : a -o stack[a],
+                  pop : +{none : 1,
+                          some : a * stack[a]}}
+
+type emp[a] = &{push : a -o nonemp[a][emp[a]],
+                pop : +{none : 1}}
+
+type nonemp[a][x] = &{push : a -o nonemp[a][nonemp[a][x]],
+                      pop : +{some : a * x}}
+
+(*
+  emp[a] <: stack[a]
+  x <: stack[a] => nonemp[a][x] <: stack[a]
+*)
+
+decl rev[a] : (i : stack[a]) |- (o : stack[a])
+decl rev_nonemp[a] : (i : nonemp[a][stack[a]]) |- (o : nonemp[a][stack[a]])
+decl rev_emp[a] : (i : emp[a]) |- (o : emp[a])
+
+proc o <- rev_nonemp[a] i =
+  i.pop ;
+  case i (
+    some => e <- recv i ;
+            o.push ;
+            send o e ;      % (i : stack[a]) |- (o : nonemp[a][nonemp[a][stack[a]]])
+            o <- rev i
+  )
+
+decl empty[a] : . |- (s : emp[a])
+decl elem[a][x] : (e : a) (t : x) |- (s : S[a][x])
+
+proc s <- empty[a] =
+  case s (
+    push => e <- recv s ;
+            t <- empty[a] ;
+            s <- elem[a][emp[a]] e t
+  | end => close s
+  )
+  
+proc s <- elem[a][x] e t =
+  case s (
+    push => f <- recv s ;
+            s' <- elem[a][x] e t ;
+            s <- elem[a][S[a][x]] f s'
+  | pop => send s e ;         % (t : x) |- s : x
+           s <-> t
+  )
+
+decl two_elems[a] : (x : a) (y : a) |- (d : a * a * 1)
+
+proc d <- two_elems[a] x y =
+  s <- empty[a] ;
+  s.push ;
+  send s x ;
+  s.push ;
+  send s y ;
+  s.pop ;
+  x <- recv s ;
+  send d x ;
+  s.pop ;
+  y <- recv s ;
+  send d y ;
+  s.end ;
+  d <-> s
+
+
+type nat = +{s : nat, z : 1}
+
+decl zero : . |- (n : nat)
+decl one : . |- (n : nat)
+decl two : . |- (n : nat)
+
+proc n <- zero = n.z ; close n
+proc n <- one = n.s ; n <- zero
+proc n <- two = n.s ; n <- one
+
+decl main : . |- (d : nat * nat * 1)
+
+proc d <- main =
+  o <- one ;
+  t <- two ;
+  d <- two_elems[nat] o t
+
+exec main
