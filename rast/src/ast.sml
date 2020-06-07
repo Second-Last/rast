@@ -26,6 +26,8 @@ datatype tp =
        | Forall of Arith.prop * tp (* !{phi}. A *)
        | ExistsNat of Arith.varname * tp (* ?n. A *)
        | ForallNat of Arith.varname * tp (* !n. A *)
+       | ExistsTp of tpvarname * tp (* ?[alpha]. A *)
+       | ForallTp of tpvarname * tp (* ![alpha]. A *)
        | PayPot of pot * tp        (* |> A  or  |{p}> A *)
        | GetPot of pot * tp        (* <| A  or  <{p}| A *)
        | Next of time * tp         (* ()A  or  ({t}) A *)
@@ -67,6 +69,10 @@ datatype exp =
        (* quantifying variables ?n. A and !n. A *)
        | SendNat of chan * Arith.arith * exp         (* send x {e} *)
        | RecvNat of chan * Arith.varname * exp       (* {v} <- recv x *)                       
+
+       (* type quantification ?[alpha]. A and ![alpha].A *)
+       | SendTp of chan * tp * exp                    
+       | RecvTp of chan * tpvarname * exp
 
        (* impossibility *)
        | Imposs                                      (* impossible *)             
@@ -175,6 +181,8 @@ datatype tp =
        | Forall of R.prop * tp     (* !{phi}. A *)
        | ExistsNat of Arith.varname * tp (* ?n. A *)
        | ForallNat of Arith.varname * tp (* !n. A *)
+       | ExistsTp of tpvarname * tp (* ?[alpha]. A *)
+       | ForallTp of tpvarname * tp (* ![alpha]. A *)
        | PayPot of pot * tp        (* |> A  or  |{p}> A *)
        | GetPot of pot * tp        (* <| A  or  <{p}| A *)
        | Next of time * tp         (* ()A  or  ({t}) A *)
@@ -216,6 +224,10 @@ datatype exp =
        | SendNat of chan * Arith.arith * exp         (* send x {e} *)
        | RecvNat of chan * Arith.varname * exp       (* {v} <- recv x *)
 
+       (* type quantification ?[alpha]. A and ![alpha].A *)
+       | SendTp of chan * tp * exp                    
+       | RecvTp of chan * tpvarname * exp
+                    
        (* impossibility; no concrete syntax for now *)
        | Imposs                                      (* impossible *)             
 
@@ -269,6 +281,8 @@ fun apply_tp sg (One) = One
   | apply_tp sg (Forall(phi,A)) = Forall(R.apply_prop sg phi, apply_tp sg A)
   | apply_tp sg (ExistsNat(v,A)) = ExistsNat(apply_tp_bind sg (v,A))
   | apply_tp sg (ForallNat(v,A)) = ForallNat(apply_tp_bind sg (v,A))
+  | apply_tp sg (ExistsTp(alpha,A)) = ExistsTp(alpha, apply_tp sg A)
+  | apply_tp sg (ForallTp(alpha,A)) = ForallTp(alpha, apply_tp sg A)
   | apply_tp sg (TpVar(alpha)) = TpVar(alpha)
   | apply_tp sg (TpName(a,As,es)) = TpName(a, List.map (apply_tp sg) As, R.apply_list sg es)
 and apply_tp_bind sg (v,A) =
@@ -297,6 +311,8 @@ fun apply_exp sg (Spawn(P,Q)) = Spawn(apply_exp sg P, apply_exp sg Q)
   | apply_exp sg (Assert(x,phi,P)) = Assert(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (SendNat(x,e,P)) = SendNat(x,R.apply sg e, apply_exp sg P)
   | apply_exp sg (RecvNat(x,v,P)) = RecvNat(apply_exp_bind sg (x,v,P))
+  | apply_exp sg (SendTp(x,A,P)) = SendTp(x, apply_tp sg A, apply_exp sg P)
+  | apply_exp sg (RecvTp(x,alpha,P)) = RecvTp(x, alpha, apply_exp sg P)
   | apply_exp sg (Assume(x,phi,P)) = Assume(x,R.apply_prop sg phi, apply_exp sg P)
   | apply_exp sg (Imposs) = Imposs
   | apply_exp sg (ExpName(x,f,As,es,xs)) = ExpName(x,f, List.map (apply_tp sg) As, R.apply_list sg es, xs)
@@ -309,6 +325,49 @@ and apply_branches sg branches = List.map (fn (l,ext,P) => (l,ext,apply_exp sg P
 
 (* substitution theta for type variables *)
 type tp_subst = (tpvarname * tp) list
+
+fun free_tpvars tpctx (Plus(choices)) = free_tpvars_choices tpctx choices
+  | free_tpvars tpctx (With(choices)) = free_tpvars_choices tpctx choices
+  | free_tpvars tpctx (Tensor(A,B)) = free_tpvars (free_tpvars tpctx A) B
+  | free_tpvars tpctx (Lolli(A,B)) = free_tpvars (free_tpvars tpctx A) B
+  | free_tpvars tpctx (One) = nil
+  | free_tpvars tpctx (Exists(phi,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (Forall(phi,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (ExistsNat(n,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (ForallNat(n,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (ExistsTp(alpha,A)) = free_tpvars_bind tpctx (alpha,A)
+  | free_tpvars tpctx (ForallTp(alpha,A)) = free_tpvars_bind tpctx (alpha,A)
+  | free_tpvars tpctx (PayPot(p,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (GetPot(p,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (Next(t,A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (Dia(A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (Box(A)) = free_tpvars tpctx A
+  | free_tpvars tpctx (TpVar(alpha)) =
+    if List.exists (fn alpha' => alpha' = alpha) tpctx
+    then tpctx
+    else tpctx @ [alpha]        (* keep in order, for no particular reason *)
+  | free_tpvars tpctx (TpName(a,As,es)) = free_tpvars_list tpctx As
+and free_tpvars_bind tpctx (alpha,A) =
+    if List.exists (fn alpha' => alpha' = alpha) tpctx
+    then free_tpvars tpctx A
+    else List.filter (fn alpha' => alpha' <> alpha) (free_tpvars tpctx A)
+and free_tpvars_list tpctx nil = tpctx
+  | free_tpvars_list tpctx (A::As) = free_tpvars_list (free_tpvars tpctx A) As
+and free_tpvars_choices tpctx nil = tpctx
+  | free_tpvars_choices tpctx ((l,A)::choices) = free_tpvars_choices (free_tpvars tpctx A) choices
+
+fun free_in_tp alpha A = List.exists (fn alpha' => alpha' = alpha) (free_tpvars nil A)
+
+fun free_in_tpsubst alpha nil = false
+  | free_in_tpsubst alpha ((alpha',A)::theta) =
+    free_in_tp alpha A orelse free_in_tpsubst alpha theta
+
+fun next_name alpha = alpha ^ "^"
+
+fun fresh_tpvar theta alpha =
+    if free_in_tpsubst alpha theta
+    then fresh_tpvar theta (next_name alpha)
+    else alpha
                 
 fun subst_tp theta (One) = One
   | subst_tp theta (Plus(choices)) = Plus(subst_choices theta choices)
@@ -324,6 +383,8 @@ fun subst_tp theta (One) = One
   | subst_tp theta (Forall(phi,A)) = Forall(phi, subst_tp theta A)
   | subst_tp theta (ExistsNat(v,A)) = ExistsNat(v,subst_tp theta A)
   | subst_tp theta (ForallNat(v,A)) = ForallNat(v, subst_tp theta A)
+  | subst_tp theta (ExistsTp(alpha,A)) = ExistsTp (subst_tp_bind theta (alpha,A))
+  | subst_tp theta (ForallTp(alpha,A)) = ForallTp (subst_tp_bind theta (alpha,A))
   | subst_tp theta (TpVar(alpha)) =
     ( case List.find (fn (alpha',A') => alpha = alpha') theta
        of SOME(_,A) => A
@@ -331,6 +392,10 @@ fun subst_tp theta (One) = One
         (* | NONE => TpVar(alpha) *) 
     )
   | subst_tp theta (TpName(a,As,es)) = TpName(a, List.map (subst_tp theta) As, es)
+
+and subst_tp_bind theta (alpha,A) =
+    let val alpha' = fresh_tpvar theta alpha
+    in (alpha', subst_tp ((alpha,TpVar(alpha'))::theta) A) end
 
 and subst_choices theta choices = List.map (fn (l,Al) => (l, subst_tp theta Al)) choices
 
@@ -354,12 +419,17 @@ fun subst_exp theta (Spawn(P,Q)) = Spawn(subst_exp theta P, subst_exp theta Q)
   | subst_exp theta (Assert(x,phi,P)) = Assert(x,phi,subst_exp theta P)
   | subst_exp theta (SendNat(x,e,P)) = SendNat(x,e,subst_exp theta P)
   | subst_exp theta (RecvNat(x,v,P)) = RecvNat(x,v,subst_exp theta P)
+  | subst_exp theta (SendTp(x,A,P)) = SendTp(x,subst_tp theta A, subst_exp theta P)
+  | subst_exp theta (RecvTp(x,alpha,P)) = RecvTp (subst_tp_exp_bind theta (x, alpha, P))
   | subst_exp theta (Assume(x,phi,P)) = Assume(x,phi,subst_exp theta P)
   | subst_exp theta (Imposs) = Imposs
   | subst_exp theta (ExpName(x,f,As,es,xs)) = ExpName(x,f, List.map (subst_tp theta) As, es, xs)
   | subst_exp theta (Marked(marked_P)) =
     Marked(Mark.mark' (subst_exp theta (Mark.data marked_P), Mark.ext marked_P))
 and subst_branches theta branches = List.map (fn (l,ext,P) => (l,ext,subst_exp theta P)) branches
+and subst_tp_exp_bind theta (x,alpha,P) =
+    let val alpha' = fresh_tpvar theta alpha
+    in (x, alpha', subst_exp ((alpha,TpVar(alpha'))::theta) P) end
 
 (**********************)
 (* Environment Lookup *)
@@ -450,6 +520,8 @@ fun pp_time (R.Int(1)) = ""
 fun pp_alphas nil = ""
   | pp_alphas (alpha::alphas) = "[" ^ alpha ^ "]" ^ pp_alphas alphas
 
+fun pp_tpvar alpha = "[" ^ alpha ^ "]"
+
 fun pp_vars nil = ""
   | pp_vars (v::vs) = "{" ^ v ^ "}" ^ pp_vars vs
 
@@ -472,6 +544,8 @@ fun pp_tp (One) = "1"
   | pp_tp (Forall(phi,A)) = "!" ^ pp_prop phi ^ ". " ^ pp_tp A
   | pp_tp (ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp A
   | pp_tp (ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp A
+  | pp_tp (ExistsTp(alpha,A)) = "?" ^ pp_tpvar alpha ^ ". " ^ pp_tp A
+  | pp_tp (ForallTp(alpha,A)) = "!" ^ pp_tpvar alpha ^ ". " ^ pp_tp A
   | pp_tp (TpVar(alpha)) = alpha
   | pp_tp (TpName(a,As,es)) = a ^ pp_tps As ^ pp_idx es
 and pp_choice nil = ""
@@ -506,6 +580,8 @@ fun pp_exp (Spawn(P,Q)) = pp_exp P ^ " ; " ^ pp_exp Q
   | pp_exp (Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_prop phi ^ " ; " ^ pp_exp P
   | pp_exp (SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_arith e ^ " ; " ^ pp_exp P
   | pp_exp (RecvNat(x,v,P)) = pp_arith (R.Var(v)) ^ " <- recv " ^ x ^ " ; " ^ pp_exp P
+  | pp_exp (SendTp(x,A,P)) = "send " ^ x ^ " " ^ pp_tps [A] ^ " ; " ^ pp_exp P
+  | pp_exp (RecvTp(x,alpha,P)) = pp_tpvar alpha ^ " <- recv " ^ x ^ " ; " ^ pp_exp P
   | pp_exp (Imposs) = "impossible"
   | pp_exp (ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp (Marked(marked_exp)) = pp_exp (Mark.data marked_exp)
