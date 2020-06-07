@@ -141,26 +141,6 @@ datatype stack
 
 infix 2 $
 
-fun pp_stack_item x = case x
-                       of Tok(t,r) => "Tok(" ^ T.toString t ^ ")"
-                        | Infix _ => "Infix"
-                        | Prefix _ => "Prefix"
-                        | Nonfix _ => "Nonfix"
-                        | AExp _ => "AExp"
-                        | Vars _ => "Vars"
-                        | Indices _ => "Indices"
-                        | Tp _ => "Tp"
-                        | TpInfix _ => "TpInfix"
-                        | Alts _ => "Alts"
-                        | Action _ => "Action"
-                        | Args _ => "Args"
-                        | Exp _ => "Exp"
-                        | Branches _ => "Branches"
-                        | Context _ => "Context"
-                        | Decl _ => "Decl"
-fun pp_stack (Bot) = "BOT"
-  | pp_stack (S $ x) = pp_stack S ^ " > " ^ pp_stack_item x
-
 (* Next section gives a static error while trying to
  * construct either a term or a proposition from an
  * arithmetic expression
@@ -394,7 +374,7 @@ and p_exp_def ST = ST |> p_id >> p_terminal T.LARROW >> p_id_parm_seq
 
 (* <id_seq> '=' <exp> *)
 and p_id_seq_exp ST = case first ST of
-    T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_seq_exp
+    T.IDENT(_) => ST |> p_id >> reduce r_chan >> p_id_seq_exp
   | T.EQ => ST |> shift >> p_actions
   | t => parse_error (here ST, "expected '=' or identifier, found: " ^ pp_tok t)
 

@@ -56,7 +56,7 @@ fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env
  *)
 fun impossL_branch env (x,(l,A.Exists(phi,A'))) ext' =
     (l, NONE, impossL_assumes env x (A.Exists(phi,A')))
-  | impossL_branch env (x,(l,A as A.TpName(a,es))) ext' =
+  | impossL_branch env (x,(l,A as A.TpName(a,As,es))) ext' =
     impossL_branch env (x,(l,TU.expd env A)) ext'
   | impossL_branch env (x,(l,A)) ext' = E.error_label_missing_branch (l,ext')
 
@@ -73,7 +73,7 @@ fun impossR_assumes env x (A.Forall(phi,C)) = A.Assume(x,phi,impossR_assumes env
  *)
 fun impossR_branch env (z,(l,A.Forall(phi,C'))) ext' =
     (l, NONE, impossR_assumes env z (A.Forall(phi,C')))
-  | impossR_branch env (z,(l,C as A.TpName(a,es))) ext' =
+  | impossR_branch env (z,(l,C as A.TpName(a,Aa,es))) ext' =
     impossR_branch env (z,(l,TU.expd env C)) ext'
   | impossR_branch env (z,(l,C)) ext' = E.error_label_missing_branch (l,ext')
 
