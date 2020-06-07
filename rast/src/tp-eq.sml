@@ -171,7 +171,7 @@ fun aggregate_nexts env ctx con (A as A.Next(t,A')) =
 
 (* main entry point *)
 fun eq_tp' env ctx con seen A A' =
-    ( TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n")
+    ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
     ; eq_tp env ctx con seen
             (aggregate_nexts env ctx con A)
             (aggregate_nexts env ctx con A')
@@ -250,7 +250,7 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
  *)
 and eq_tp_list env ctx con seen (a, nil, B) nil nil = true
   | eq_tp_list env ctx con seen (a, alpha::alphas, B) (A::As) (A'::As') =
-    (TextIO.print ("checking args!\n")
+    ( () (* TextIO.print ("checking args!\n") *)
     ; eq_tp' env ctx con seen A A'               (* A = A' *)
      orelse invariant env [(a,alpha)] alpha B)  (* or a[..,alpha,...] = B does not depend on alpha *)
     andalso eq_tp_list env ctx con seen (a, alphas, B) As As'
@@ -274,8 +274,8 @@ and eq_name_name env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As
      of NONE => eq_tp' env ctx con ((ctx,con,(A,A'))::seen)
                        (TU.expd env A) (TU.expd env A')
       | SOME(CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES'))) =>
-        (TextIO.print "found!\n";
-         TextIO.print (A.Print.pp_tp W ^ " =!= " ^ A.Print.pp_tp W' ^ "\n") ;
+        (* (TextIO.print "found!\n";
+            TextIO.print (A.Print.pp_tp W ^ " =!= " ^ A.Print.pp_tp W' ^ "\n") ; *)
         eq_tp_list env ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
         andalso eq_tp_list env ctx con seen (tp_def env a') As' AS'
          (* As = AS andalso As' = AS' *)
@@ -288,7 +288,6 @@ and eq_name_name env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As
                 in
                     result
                 end
-        )
 
 (* interface *)
 (* start algorithm with seen = nil *)

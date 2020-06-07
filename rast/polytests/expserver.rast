@@ -1,0 +1,84 @@
+#test success
+
+% from Thiemann & Vasconcelos, ICFP 2016
+
+% binary arithmetic, simplified from arith.rast
+type bin = +{b0 : bin, b1 : bin, e : 1}
+
+decl zero : . |- (x : bin)
+decl succ : (x : bin) |- (y : bin)
+
+proc x <- zero = x.e ; close x
+
+proc y <- succ x =
+  case x ( b0 => y.b1 ; y <-> x
+         | b1 => y.b0 ; y <- succ x
+         | e => y.b1 ; y.e ; wait x ; close y )
+
+decl plus : (x : bin) (y : bin) |- (z : bin)
+proc z <- plus x y =
+  case x ( b0 => case y ( b0 => z.b0 ; z <- plus x y
+                        | b1 => z.b1 ; z <- plus x y
+                        | e => wait y ; z.b0 ; z <-> x )
+         | b1 => case y ( b0 => z.b1 ; z <- plus x y
+                        | b1 => z.b0 ; w <- plus x y ; z <- succ w
+                        | e => wait y ; z.b1 ; z <-> x )
+         | e => wait x ; z <-> y )
+
+decl double : (x : bin) |- (y : bin)
+proc y <- double x = y.b0 ; y <-> x
+
+% arithmetic expression server
+type term[K] = +{ const : bin * K,
+                  add : term[term[K]],
+                  double : term[K] }
+
+decl eval[K] : (t : term[K]) |- (nk : bin * K)
+proc nk <- eval[K] t =
+  case t ( const =>                         % (t : bin * K) |- (nk : bin * K)
+                    n <- recv t ;           % (n : bin) (t : K) |- (nk : bin * K)
+                    send nk n ; nk <-> t
+         | add =>                           % (t : term[term[K]]) |- (nk : bin * K)
+                   nk1 <- eval[term[K]] t ; % (nk1 : bin * term[K]) |- (nk : bin * K)
+                   n1 <- recv nk1 ;         % (n1 : bin) (nk1 : term[K]) |- (nk : bin * K)
+                   nk2 <- eval[K] nk1 ;     % (n1 : bin) (nk2 : bin * K) |- (nk : bin * K)
+                   n2 <- recv nk2 ;         % (n1 : bin) (n2 : bin) (nk2 : K) |- (nk : bin * K)
+                   n <- plus n1 n2 ;        % (n : bin) (nk2 : K) |- (nk : bin * K)
+                   send nk n ; nk <-> nk2
+         | double =>                        % (t : term[K]) |- (nk : bin * K)
+                   nk1 <- eval[K] t ;       % (nk1 : bin * K) |- (nk : bin * K)
+                   n1 <- recv nk1 ;         % (n1 : bin) (nk1 : K) |- (nk : bin * K)
+                   n <- double n1 ;         % (n : bin) (nk1 : K) |- (nk : bin * K)
+                   send nk n ; nk <-> nk1
+         )
+
+% sample client
+decl x5 : . |- (n : bin)
+proc n <- x5 = n.b1 ; n.b0 ; n.b1 ; n.e ; close n
+
+decl x7 : . |- (n : bin)
+proc n <- x7 = n.b1 ; n.b1 ; n.b1 ; n.e ; close n
+
+decl t29 : . |- (t : term[1])
+% 5+2*(7+5) = 29
+proc t <- t29 =
+  t.add ;          % t : term[term[1]]
+  t.const ; n5 <- x5 ; send t n5 ; % t : term[1]
+  t.double ;       % t : term[1]
+  t.add ;          % t : term[term[1]]
+  t.const ; n7 <- x7 ; send t n7 ; % t : term[1]
+  t.const ; n5 <- x5 ; send t n5 ; % t : 1
+  close t
+
+decl x29 : . |- (n : bin)
+% 29 = b1 ; b0 ; b1 ; b1 ; b1 ; e ; close
+proc n <- x29 =
+  t <- t29 ;
+  ik <- eval[1] t ;
+  i <- recv ik ; wait ik ;
+  n <-> i
+
+exec x5
+exec x7
+exec t29
+exec x29
