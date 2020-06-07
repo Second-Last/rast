@@ -128,6 +128,7 @@ val lookup_expdec : env -> expname -> (tp_ctx * Arith.ctx * Arith.prop * (contex
 val lookup_expdef : env -> expname -> (tp_ctx * Arith.ctx * (chan list * exp * chan)) option
 
 val lookup_choice : choices -> label -> tp option
+val lookup_choice_rest : choices -> label -> (tp * choices) option
 val lookup_branch : branches -> label -> exp option
 
 (* Definitions and declarations *)
@@ -451,9 +452,16 @@ fun lookup_expdef (ExpDef(f',alphas,vs,(xs,P,x),_)::env') f =
   | lookup_expdef nil f = NONE
 
 fun lookup_choice ((l:label,A)::choices) k =
-    if k = l then SOME(A)
+    if l = k then SOME(A)
     else lookup_choice choices k
   | lookup_choice nil k = NONE
+
+fun lookup_choice_rest ((l:label,A)::choices) k =
+    if l = k then SOME(A,choices)
+    else (case lookup_choice_rest choices k
+           of NONE => NONE
+            | SOME(B,choices') => SOME(B,(l,A)::choices'))
+  | lookup_choice_rest nil k = NONE
 
 fun lookup_branch ((l:label,_,P)::branches) k =
     if k = l then SOME(P)

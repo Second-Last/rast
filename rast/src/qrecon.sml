@@ -54,12 +54,11 @@ fun impossL_assumes env x (A.Exists(phi,A)) = A.Assume(x,phi,impossL_assumes env
  * l_opt is label of the next branch if one (for error messages)
  * Checking unsat(phi) is postponed to type checking
  *)
-fun impossL_branch env (x,(l,A.Exists(phi,A'))) l_opt ext' =
+fun impossL_branch env (x,(l,A.Exists(phi,A'))) ext' =
     (l, NONE, impossL_assumes env x (A.Exists(phi,A')))
-  | impossL_branch env (x,(l,A as A.TpName(a,As,es))) l_opt ext' =
-    impossL_branch env (x,(l,TU.expd env A)) l_opt ext'
-  | impossL_branch env (x,(l,A)) NONE ext' = E.error_label_missing_branch (l,ext')
-  | impossL_branch env (x,(l,A)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
+  | impossL_branch env (x,(l,A as A.TpName(a,es))) ext' =
+    impossL_branch env (x,(l,TU.expd env A)) ext'
+  | impossL_branch env (x,(l,A)) ext' = E.error_label_missing_branch (l,ext')
 
 (* impossR_assumes env x A = assume x {phi1} ; assume x {phi2} ; ... impossible *)
 (* depending on whether A contains Forall(phi, A') *)
@@ -72,17 +71,11 @@ fun impossR_assumes env x (A.Forall(phi,C)) = A.Assume(x,phi,impossR_assumes env
  * l_opt is label of the next branch if one (for error messages)
  * Checking unsat(phi) is postponed to type checking
  *)
-fun impossR_branch env (z,(l,A.Forall(phi,C'))) l' ext' =
+fun impossR_branch env (z,(l,A.Forall(phi,C'))) ext' =
     (l, NONE, impossR_assumes env z (A.Forall(phi,C')))
-    (*
-      if not (C.contradictory phi)
-      then error_label_sat_con phi (l, ext')
-      else (l, NONE, A.AssumeR(phi,Imposs))
-     *)
-  | impossR_branch env (z,(l,A as A.TpName(a,As,es))) l' ext' =
-    impossR_branch env (z,(l,TU.expd env A)) l' ext'
-  | impossR_branch env (z,(l,C)) NONE ext' = E.error_label_missing_branch (l,ext')
-  | impossR_branch env (z,(l,C)) (SOME(l')) ext' = E.error_label_mismatch (l, l', ext')
+  | impossR_branch env (z,(l,C as A.TpName(a,es))) ext' =
+    impossR_branch env (z,(l,TU.expd env C)) ext'
+  | impossR_branch env (z,(l,C)) ext' = E.error_label_missing_branch (l,ext')
 
 (****************************)
 (* Lazily inserting asserts *)
@@ -266,27 +259,25 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
 (* all other cases are impossible, by approximate reconstruction *)
 
 (* reconstruct branches *)
-and recon_branchesL env D (x,nil) nil (z,C) ext = nil
-  | recon_branchesL env D (x,(l,A)::choices) ((l',ext',P)::branches) (z,C) ext =
-    if l = l'
-    then (l',ext',recon_assumeL env (TCU.update_tp (x,A) D) (x,A) P (z,C) ext)
-         ::(recon_branchesL env D (x,choices) branches (z,C) ext)
-    else (impossL_branch env (x,(l,A)) (SOME(l')) ext')
-         ::(recon_branchesL env D (x,choices) ((l',ext',P)::branches) (z,C) ext)
-  | recon_branchesL env D (x,(l,A)::choices) nil (z,C) ext =
-    (impossL_branch env (x,(l,A)) NONE ext)
-    ::(recon_branchesL env D (x,choices) nil (z,C) ext)
+and recon_branchesL env D (x,choices) ((l',ext',P)::branches) (z,C) ext =
+    let val (A,choices') = TCU.get_choice l' choices ext'
+    in (l',ext',recon_assumeL env (TCU.update_tp (x,A) D) (x,A) P (z,C) ext)
+       :: recon_branchesL env D (x,choices') branches (z,C) ext
+    end
+  | recon_branchesL env D (x,(l,A)::choices') nil (z,C) ext =
+    impossL_branch env (x,(l,A)) ext
+    :: recon_branchesL env D (x,choices') nil (z,C) ext
+  | recon_branchesL env D (x,nil) nil (z,C) ext = nil
 
-and recon_branchesR env D nil (z,nil) ext = nil
-  | recon_branchesR env D ((l,ext',P)::branches) (z,(l',C)::choices) ext =
-    if l = l'
-    then (l',ext',recon_assumeR env D P (z,C) ext)
-         ::(recon_branchesR env D branches (z,choices) ext)
-    else (impossR_branch env (z,(l',C)) (SOME(l)) ext')
-         ::(recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext)
-  | recon_branchesR env D nil (z,(l',C)::choices) ext =
-    (impossR_branch env (z,(l',C)) NONE ext)
-    ::(recon_branchesR env D nil (z,choices) ext)
+and recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext =
+    let val (C,choices') = TCU.get_choice l choices ext'
+    in (l,ext',recon_assumeR env D P (z,C) ext)
+       :: recon_branchesR env D branches (z,choices') ext
+    end
+  | recon_branchesR env D nil (z,(l',C)::choices') ext =
+    impossR_branch env (z,(l',C)) ext
+    :: recon_branchesR env D nil (z,choices') ext
+  | recon_branchesR env D nil (z,nil) ext = nil
 
 (* external interface: ignore potential *)
 val recon = fn env => fn ctx => fn con => fn A => fn pot => fn P => fn C => fn ext => recon' env A P C ext

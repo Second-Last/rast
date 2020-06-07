@@ -1,0 +1,9 @@
+#test error
+
+type nat = +{zero : 1, succ : nat}
+
+decl pred : (x : nat) |- (y : nat)
+proc y <- pred x =
+  case x ( succ => y <-> x
+         | zero => y.zero ; close y ; wait x )
+         

@@ -1,0 +1,6 @@
+#test error
+
+type nat = +{zero : 1, succ : nat}
+
+decl pred : (x : nat) |- (y : nat)
+proc y <- pred x = 

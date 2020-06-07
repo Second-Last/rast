@@ -1,0 +1,47 @@
+#test error
+
+% ping/pong, from Derakhshan
+type ack{i} = +{ack : ?j. ?{j < i}. astream{j}}
+type astream{i} = &{hd : ack{i},
+                    tl : !j. ?{j < i}. astream{j}}
+type nat_ = +{zero : 1, succ : nat_}
+
+type term{i}{j} = &{ pos1 : !i'. !{i' < i}. !j'. term{i'}{j'},
+                     pos2 : !i'. !{i' = i}. !j'. !{j' < j}.
+                            term{i'}{j'} }
+
+decl pterm{i}{j} : . |- (m : term{i}{j})
+proc m <- pterm{i}{j} =
+  case m ( pos1 => {i'} <- recv m ;
+                   {j'} <- recv m ;
+                   m <- pterm{i'}{j'}
+         | pos2 => {i'} <- recv m ;
+                   {j'} <- recv m ;
+                   m <- pterm{i'}{j'} ) 
+
+decl ping_pong{i}{j} : (x : nat_) |- (y : nat_)
+decl ping{i}{j} : (m : term{i}{j}) (x : nat_) |- (s : astream{j})
+decl pong{i}{j} : (m : term{i}{j}) (t : astream{i}) |- (y : nat_)
+
+proc y <- ping_pong{i}{j} x =
+  m1 <- pterm{i}{j} ;
+  s <- ping{i}{j} m1 x ;
+  m2 <- pterm{j}{i} ;
+  y <- pong{j}{i} m2 s
+
+proc y <- pong{i}{j} m t =
+  t.hd ;
+  case t ( ack => {i'} <- recv t ; % i' < i
+                  y.succ ;
+                  m.pos1 ; send m {i'} ; send m {j} ;
+                  y <- pong{i'}{j} m t )
+
+proc s <- ping{i}{j} m x =
+  case s ( hd => s.ack ;
+                 send s {j} ;
+                 m.pos2 ; send m {i} ; send m {j} ;
+                 s <- ping{i}{j} m x
+         | tl => {j'} <- recv s ;  % j' < j
+                 m.pos2 ; send m {i} ; send m {j'} ;
+                 s <- ping{i}{j'} m x )
+

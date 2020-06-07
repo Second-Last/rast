@@ -102,6 +102,6 @@ fun reset () =
     ; verbosity := 1
     ; help := false )
 
-val version = "Rast v1.01 (Mon Feb 10 15:26:22 EST 2020)"
+val version = "Rast v1.02 (Fri May 29 12:16:21 EDT 2020)"
 
 end (* structure Flags *)

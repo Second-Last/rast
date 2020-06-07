@@ -141,6 +141,26 @@ datatype stack
 
 infix 2 $
 
+fun pp_stack_item x = case x
+                       of Tok(t,r) => "Tok(" ^ T.toString t ^ ")"
+                        | Infix _ => "Infix"
+                        | Prefix _ => "Prefix"
+                        | Nonfix _ => "Nonfix"
+                        | AExp _ => "AExp"
+                        | Vars _ => "Vars"
+                        | Indices _ => "Indices"
+                        | Tp _ => "Tp"
+                        | TpInfix _ => "TpInfix"
+                        | Alts _ => "Alts"
+                        | Action _ => "Action"
+                        | Args _ => "Args"
+                        | Exp _ => "Exp"
+                        | Branches _ => "Branches"
+                        | Context _ => "Context"
+                        | Decl _ => "Decl"
+fun pp_stack (Bot) = "BOT"
+  | pp_stack (S $ x) = pp_stack S ^ " > " ^ pp_stack_item x
+
 (* Next section gives a static error while trying to
  * construct either a term or a proposition from an
  * arithmetic expression
@@ -374,8 +394,8 @@ and p_exp_def ST = ST |> p_id >> p_terminal T.LARROW >> p_id_parm_seq
 
 (* <id_seq> '=' <exp> *)
 and p_id_seq_exp ST = case first ST of
-    T.IDENT(_) => ST |> p_id >> reduce r_chan >> p_id_seq_exp
-  | T.EQ => ST |> shift >> p_exp
+    T.IDENT(_) => ST |> p_id >> reduce r_arg >> p_id_seq_exp
+  | T.EQ => ST |> shift >> p_actions
   | t => parse_error (here ST, "expected '=' or identifier, found: " ^ pp_tok t)
 
 and r_chan (S $ Chans(args, r1) $ Tok(T.IDENT(id), r2)) = S $ Chans(args @ [id], join r1 r2)
@@ -602,12 +622,15 @@ and r_choices (S $ Alts(alts) $ Tok(T.IDENT(id),r1) $ Tok(T.COLON,_) $ Tp(tp,r2)
 
 and m_exp (exp, r) = mark_exp (exp, r)
 
-(* <exp> *)
+(* <exp>, initial call *)
+and p_actions ST = ST |> push (Action (fn K => K, here ST)) >> p_exp
+
+(* <exp>, recursive calls *)
 and p_exp ST = case first ST of
     T.IDENT(id) => ST |> shift >> p_id_exps
-  | T.CASE => ST |> shift >> p_id >> p_terminal T.LPAREN >> push (Branches []) >> p_branches >> p_terminal T.RPAREN >> reduce r_exp_atomic >> p_exp
+  | T.CASE => ST |> shift >> p_id >> p_terminal T.LPAREN >> push (Branches []) >> p_branches >> p_terminal T.RPAREN >> reduce r_exp_atomic >> reduce r_exp
   | T.SEND => ST |> shift >> p_id >> p_id_exp >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.CLOSE => ST |> shift >> p_id >> reduce r_exp_atomic >> p_exp
+  | T.CLOSE => ST |> shift >> p_id >> reduce r_exp_atomic >> reduce r_exp
   | T.WAIT => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
   | T.DELAY => ST |> shift >> p_idx_opt >> p_exp
   (* rest needed for explicit syntax *)
@@ -621,7 +644,7 @@ and p_exp ST = case first ST of
   (* asserts and assumes for propositions *)
   | T.ASSERT => ST |> shift >> p_id >> p_con_semi >> p_exp
   | T.ASSUME => ST |> shift >> p_id >> p_con_semi >> p_exp
-  | T.IMPOSSIBLE => ST |> shift >> reduce r_exp_atomic >> p_exp
+  | T.IMPOSSIBLE => ST |> shift >> reduce r_exp_atomic >> reduce r_exp
   (* receiving an natural number *)
   | T.LBRACE => ST |> shift >> p_id >> p_terminal T.RBRACE >> p_recv_nat >> p_exp
   (* end of expression; do not consume token *)
@@ -678,8 +701,7 @@ and r_exp_atomic (S $ Tok(T.CLOSE,r1) $ Tok(T.IDENT(id),r2)) = S $ Exp(m_exp(A.C
 (* reduce <exp>, possibly multiple actions, cuts, or expressions *)
 (* stack ends with Action, Cut, or Exp items *)
 and r_exp (S $ Action(act,r1) $ Exp(exp,r2)) = r_exp (S $ Exp(act(exp), join r1 r2))
-  | r_exp (S $ Action(act, r)) = parse_error (r, "incomplete action")
-  | r_exp (S $ Exp(exp1,r1) $ Exp(exp2,r2)) = parse_error (join r1 r2, "consecutive expressions")
+  | r_exp (S $ Action(act, r)) = parse_error (r, "incomplete or missing action")
   (* done reducing *)
   | r_exp (S $ Exp(exp,r)) = S $ Exp(exp,r)
 
@@ -725,7 +747,7 @@ and r_action_3 (S $ Tok(T.WORK,r1) $ AExp(pot,r) $ Tok(T.SEMICOLON,r2)) =
 
 (* <branches> *)
 and p_branches ST = case first ST of
-    T.IDENT(id) => ST |> shift >> p_terminal T.RARROW >> p_exp >> reduce r_branch >> p_branches2
+    T.IDENT(id) => ST |> shift >> p_terminal T.RARROW >> p_actions >> reduce r_branch >> p_branches2
   | t => error_expected (here ST, T.IDENT("<label>"), t)
 and p_branches2 ST = case first ST of
     T.RPAREN => ST (* branches complete; do not shift or reduce *)

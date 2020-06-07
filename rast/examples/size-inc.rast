@@ -1,0 +1,43 @@
+#test success
+
+(* Encoding the sized-type termination argument for
+ * a binary counter in the style of Abel & Pientka,
+ * translated into the arithmetic constraint domain.
+ *)
+
+type ctr{i} = &{inc : !j. !{j < i}. ctr{j}}
+
+decl empty{i}          : (m:term{i})              |- (c : ctr{i})
+decl bit0{i}{k|i <= k} : (m:term{i}) (d : ctr{k}) |- (c : ctr{i})
+decl bit1{i}{k|i <= k} : (m:term{i}) (d : ctr{k}) |- (c : ctr{i})
+
+(* simplest termination measure *)
+type term{i} = !j. !{j < i}. term{j}
+
+(* process to implementation termination measure *)
+decl pterm{i} : . |- (m : term{i})
+proc m <- pterm{i} =
+  {j} <- recv m ;
+  m <- pterm{j}
+
+(* empty bit string = zero process *)
+proc c <- empty{i} m =
+  case c (inc => {j} <- recv c ;  % j < i
+                 send m {j} ;
+                 d <- empty{j} m ;  % d : ctr{j}, j < i
+                 m' <- pterm{j} ;
+                 c <- bit1{j}{j} m' d )
+
+proc c <- bit0{i}{k} m d =
+  case c (inc => {j} <- recv c ;  % j < i
+                 send m {j} ;
+                 c <- bit1{j}{k} m d )
+
+proc c <- bit1{i}{k} m d =
+  case c (inc => {j} <- recv c ;  % j < i <= k
+                 d.inc ; send d {j} ;
+                 % sending a second increment would lead to a type checking failure
+                 % d.inc ; send d {j+1} ;
+                 send m {j} ;
+                 c <- bit0{j}{j} m d )
+                 

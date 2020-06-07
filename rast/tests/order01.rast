@@ -1,0 +1,8 @@
+#test success
+
+type nat = +{z : 1, s : nat}
+
+decl copy : (x : nat) |- (y : nat)
+proc y <- copy x =
+  case x ( s => y.s ; y <- copy x
+         | z => wait x ; y.z ; close y)
