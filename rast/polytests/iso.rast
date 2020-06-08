@@ -115,3 +115,7 @@ proc x <- existsSum[A][B] =
   case x ( pi1 => y <- recv x ; x.pi1 ; x <-> y
          | pi2 => z <- recv x ; x.pi2 ; x <-> z )
 
+decl ex3 : . |- (x : ?[C]. &{pi1 : 1 -o C, pi2 : 1 -o C})
+proc x <- ex3 = x <- existsSum[1][1]
+
+exec ex3

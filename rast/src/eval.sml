@@ -13,7 +13,7 @@ sig
 
     structure Print :
     sig
-        val pp_value : value -> string
+        val pp_value : Ast.env -> value -> string
     end
 end
 
@@ -43,21 +43,21 @@ exception DynError
 structure Print =
 struct
 
-fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v                  (* k(v) *)
-  | pp_value (Send(w,v)) = "(" ^ pp_value w ^ ") ; " ^ pp_value v (* (w,v) *)
-  | pp_value (Close) = "close"                                    (* () *)
-  | pp_value (SendNat(n,v)) =
+fun pp_value env (Lab(k,v)) = k ^ " ; " ^ pp_value env v                  (* k(v) *)
+  | pp_value env (Send(w,v)) = "(" ^ pp_value env w ^ ") ; " ^ pp_value env v (* (w,v) *)
+  | pp_value env (Close) = "close"                                    (* () *)
+  | pp_value env (SendNat(n,v)) =
     if !Flags.verbosity >= 2
-    then "{" ^ Int.toString n ^ "} ; " ^ pp_value v
-    else pp_value v
-  | pp_value (SendTp(A,v)) = "[" ^ "-" ^ "] ; " ^ pp_value v  (* type not printable at present *)
-  | pp_value (CloRecv(eta,(x,P),z)) = "-"     (* closures not observable *)
-  | pp_value (CloCase(eta,branches,z)) = "-"  (* closures not observable *)
-  | pp_value (CloRecvNat(eta,(k,P),z)) = "-"  (* closures not observable *)
-  | pp_value (CloRecvTp(eta,(alpha,P),z)) = "-" (* closures not observable *)
+    then "{" ^ Int.toString n ^ "} ; " ^ pp_value env v
+    else pp_value env v
+  | pp_value env (SendTp(A,v)) = "[" ^ PP.pp_tp_compact env A ^ "] ; " ^ pp_value env v
+  | pp_value env (CloRecv(eta,(x,P),z)) = "-"     (* closures not observable *)
+  | pp_value env (CloCase(eta,branches,z)) = "-"  (* closures not observable *)
+  | pp_value env (CloRecvNat(eta,(k,P),z)) = "-"  (* closures not observable *)
+  | pp_value env (CloRecvTp(eta,(alpha,P),z)) = "-" (* closures not observable *)
 
-fun pp_eta [] = "."
-  | pp_eta ((x,v)::eta) = x ^ " = " ^ pp_value v ^ "\n" ^ pp_eta eta
+fun pp_eta env [] = "."
+  | pp_eta env ((x,v)::eta) = x ^ " = " ^ pp_value env v ^ "\n" ^ pp_eta env eta
                                    
 end (* structure Print *)
 

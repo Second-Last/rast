@@ -180,7 +180,7 @@ fun run' env (A.Exec(f,ext)::decls) =
         val texec_after = Time.toMicroseconds (Time.now ())
         val () = exec_time := !exec_time + (texec_after - texec_before)
         val () = if !Flags.verbosity >= 1
-                 then TextIO.print (x ^ " = " ^ Eval.Print.pp_value v ^ "\n")
+                 then TextIO.print (x ^ " = " ^ Eval.Print.pp_value env v ^ "\n")
                  else ()
     in run' env decls end
   | run' env (_::decls) = run' env decls

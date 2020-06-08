@@ -309,6 +309,11 @@ fun pp_tp_compact env A =
         val A'' = ext_tp env A'
     in P.pp_tp A'' end
 
+fun pp_tp_brackets env A = "[" ^ pp_tp_compact env A ^ "]"
+
+fun pp_tps_compact env nil = ""
+  | pp_tps_compact env (A::As) = pp_tp_brackets env A ^ pp_tps_compact env As
+
 fun pp_chan_tp_compact env (x,A) = "(" ^ x ^ " : " ^ pp_tp_compact env A ^ ")"
 fun pp_context_compact env nil = "."
   | pp_context_compact env [xA] = pp_chan_tp_compact env xA
@@ -349,10 +354,10 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = x <- f{..} ys *)
   | pp_exp env i (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
-  | pp_exp env i (A.SendTp(x,A,P)) = "send " ^ x ^ " " ^ pp_tps env [A] ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.SendTp(x,A,P)) = "send " ^ x ^ " " ^ pp_tp_brackets env A ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.RecvTp(x,alpha,P)) = "[" ^ alpha ^ "] <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Imposs) = "impossible"
-  | pp_exp env i (A.ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps env As ^ pp_idx es ^ " " ^ pp_chanlist xs
+  | pp_exp env i (A.ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps_compact env As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp env i (A.Marked(marked_exp)) = pp_exp env i (Mark.data marked_exp)
 and pp_exp_indent env i P = spaces i ^ pp_exp env i P
 and pp_exp_after env i s P = s ^ pp_exp env (i+len(s)) P
