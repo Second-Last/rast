@@ -330,6 +330,26 @@ and existsNatL trace env ctx con D (A.ExistsNat(v',A)) pot (A.RecvNat(x,v,P)) zC
   | existsNatL trace env ctx con D A pot (A.RecvNat(x,v,P)) zC ext =
     E.error_channel_type_mismatch env ("?<id>. <type>", (x,A)) ext
 
+and existsTpR trace env ctx con D pot (A.SendTp(x,A,P)) (z,A.ExistsTp(alpha,C)) ext (* z = x *) =
+    check_exp' trace env ctx con D pot P (z, A.subst_tp [(alpha,A)] C) ext
+  | existsTpR trace env ctx con D pot (A.SendTp(x,A,P)) (z,C) ext =
+    E.error_channel_type_mismatch env ("?[<id>]. <type>", (z,C)) ext
+
+and forallTpL trace env ctx con D (A.ForallTp(alpha,B)) pot (A.SendTp(x,A,P)) zC ext (* z != x *) =
+    check_exp' trace env ctx con (TCU.update_tp (x, A.subst_tp [(alpha,A)] B) D) pot P zC ext
+  | forallTpL trace env ctx con D B pot (A.SendTp(x,A,P)) zC ext (* z != x *) =
+    E.error_channel_type_mismatch env ("![<id>]. <type>", (x,B)) ext
+
+and forallTpR trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,A.ForallNat(alpha',C)) ext (* z = x *) =
+    check_exp' trace env (* (alpha::tpctx) ?? *) ctx con D pot P (z, A.subst_tp [(alpha',A.TpVar(alpha))] C) ext
+  | forallTpR trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,C) ext =
+    E.error_channel_type_mismatch env ("![<id>]. <type>", (z,C)) ext
+
+and existsTpL trace env ctx con D (A.ExistsTp(alpha',A)) pot (A.RecvTp(x,alpha,P)) zC ext (* z != x *) =
+    check_exp' trace env (* (alpha::tpctx) *) ctx con (TCU.update_tp (x, A.subst_tp [(alpha',A.TpVar(alpha))] A) D) pot P zC ext
+  | existsTpL trace env ctx con D A pot (A.RecvTp(x,alpha,P)) zC ext =
+    E.error_channel_type_mismatch env ("?[<id>]. <type>", (x,A)) ext
+
 and work trace env ctx con D pot (A.Work(p,P)) zC ext =
     if not (C.entails ctx con (R.Ge(p,R.Int(0))))
     then ERROR ext ("potential not positive: " ^ C.pp_jfail con (R.Ge(p,R.Int(0))))
@@ -463,6 +483,17 @@ and check_exp trace env ctx con D pot (A.Id(x,y)) zC ext =
     if x = z
     then forallNatR trace env ctx con D pot (A.RecvNat(x,v,P)) (z,TU.expand env C) ext
     else existsNatL trace env ctx con D (TCU.lookup_context env x D ext) pot (A.RecvNat(x,v,P)) (z,C) ext
+
+  (* quantified types ?[alpha].A, ![alpha].A *)
+  | check_exp trace env ctx con D pot (A.SendTp(x,A,P)) (z,C) ext =
+    if x = z
+    then existsTpR trace env ctx con D pot (A.SendTp(x,A,P)) (z,TU.expand env C) ext
+    else forallTpL trace env ctx con D (TCU.lookup_context env x D ext) pot (A.SendTp(x,A,P)) (z,C) ext
+
+  | check_exp trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,C) ext =
+    if x = z
+    then forallTpR trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,TU.expand env C) ext
+    else existsTpL trace env ctx con D (TCU.lookup_context env x D ext) pot (A.RecvTp(x,alpha,P)) (z,C) ext
 
   (* impossibility *)
   | check_exp trace env ctx con D pot (A.Imposs) zC ext =

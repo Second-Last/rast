@@ -41,6 +41,11 @@ sig
     val syn_recvNatR : Ast.env -> Arith.varname -> Ast.chan_tp -> Ast.chan_tp
     val syn_recvNatL : Ast.env -> Ast.context -> Ast.chan -> Arith.varname -> Ast.context
 
+    val syn_sendTpR : Ast.env -> Ast.tp -> Ast.chan_tp -> Ast.chan_tp
+    val syn_sendTpL : Ast.env -> Ast.context -> Ast.tp -> Ast.chan -> Ast.context
+    val syn_recvTpR : Ast.env -> Ast.tpvarname -> Ast.chan_tp -> Ast.chan_tp
+    val syn_recvTpL : Ast.env -> Ast.context -> Ast.chan -> Ast.tpvarname -> Ast.context
+
     (* context manipulation *)
     val remove_chans : Ast.chan list -> Ast.context -> Ast.ext -> Ast.context
     val remove_chan : Ast.chan -> Ast.context -> Ast.ext -> Ast.context
@@ -262,5 +267,21 @@ fun syn_recvNatL' env x v' (A.ExistsNat(v,A)) D' = (x,A.apply_tp [(v,R.Var(v'))]
 fun syn_recvNatL env ((x',A)::D') x v' =
     if x = x' then syn_recvNatL' env x v' (TU.expand env A) D'
     else (x',A)::syn_recvNatL env D' x v'
+
+fun syn_sendTpR' env z A (A.ExistsTp(alpha,C)) = (z,A.subst_tp [(alpha,A)] C)
+fun syn_sendTpR env A (z,C) = syn_sendTpR' env z A (TU.expand env C)
+
+fun syn_sendTpL' env x A (A.ForallNat(alpha,B)) D = (x,A.subst_tp [(alpha,A)] B)::D
+fun syn_sendTpL env ((x',B)::D') A x =
+    if x = x' then syn_sendTpL' env x A (TU.expand env B) D'
+    else (x',B)::syn_sendTpL env D' A x
+
+fun syn_recvTpR' env alpha' z (A.ForallTp(alpha,C)) = (z,A.subst_tp [(alpha,A.TpVar(alpha'))] C)
+fun syn_recvTpR env alpha' (z,C) = syn_recvTpR' env alpha' z (TU.expand env C)
+
+fun syn_recvTpL' env x alpha' (A.ExistsTp(alpha,A)) D' = (x,A.subst_tp [(alpha,A.TpVar(alpha'))] A)::D'
+fun syn_recvTpL env ((x',A)::D') x alpha' =
+    if x = x' then syn_recvTpL' env x alpha' (TU.expand env A) D'
+    else (x',A)::syn_recvTpL env D' x alpha'
 
 end (* structure TypeCheckUtil *)

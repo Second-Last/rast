@@ -64,6 +64,8 @@ fun closed_tp tpctx ctx (A.Plus(choice)) ext = closed_choice tpctx ctx choice ex
   | closed_tp tpctx ctx (A.Forall(phi,A)) ext = ( closed_prop ctx phi ext ; closed_tp tpctx ctx A ext )
   | closed_tp tpctx ctx (A.ExistsNat(v,A)) ext = closed_tp tpctx (v::ctx) A ext
   | closed_tp tpctx ctx (A.ForallNat(v,A)) ext = closed_tp tpctx (v::ctx) A ext
+  | closed_tp tpctx ctx (A.ExistsTp(alpha,A)) ext = closed_tp (alpha::tpctx) ctx A ext
+  | closed_tp tpctx ctx (A.ForallTp(alpha,A)) ext = closed_tp (alpha::tpctx) ctx A ext
   | closed_tp tpctx ctx (A.PayPot(p,A)) ext = ( closed ctx p ext ; closed_tp tpctx ctx A ext )
   | closed_tp tpctx ctx (A.GetPot(p,A)) ext = ( closed ctx p ext ; closed_tp tpctx ctx A ext )
   | closed_tp tpctx ctx (A.Next(t,A)) ext = ( closed ctx t ext ; closed_tp tpctx ctx A ext )
@@ -100,6 +102,8 @@ fun closed_exp tpctx ctx (A.Id _) ext = ()
   | closed_exp tpctx ctx (A.Assume(x,phi,P)) ext = (closed_prop ctx phi ext ; closed_exp tpctx ctx P ext )
   | closed_exp tpctx ctx (A.SendNat(x,e,P)) ext = (closed ctx e ext ; closed_exp tpctx ctx P ext )
   | closed_exp tpctx ctx (A.RecvNat(x,v,P)) ext = closed_exp tpctx (v::ctx) P ext
+  | closed_exp tpctx ctx (A.SendTp(x,A,P)) ext = (closed_tp tpctx ctx A ext ; closed_exp tpctx ctx P ext )
+  | closed_exp tpctx ctx (A.RecvTp(x,alpha,P)) ext = closed_exp (alpha::tpctx) ctx P ext
   | closed_exp tpctx ctx (A.Imposs) ext = ()
 
   | closed_exp tpctx ctx (A.Work(p,P)) ext = ( closed ctx p ext ; closed_exp tpctx ctx P ext )
@@ -136,6 +140,8 @@ fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con c
   | valid_explicit env ctx con (A.Forall(phi,A)) ext = valid_explicit env ctx (R.And(con,phi)) A ext
   | valid_explicit env ctx con (A.ExistsNat(v,A)) ext = valid_explicit env (v::ctx) con A ext
   | valid_explicit env ctx con (A.ForallNat(v,A)) ext = valid_explicit env (v::ctx) con A ext
+  | valid_explicit env ctx con (A.ExistsTp(alpha,A)) ext = valid_explicit env ctx con A ext (* tpctx? *)
+  | valid_explicit env ctx con (A.ForallTp(alpha,A)) ext = valid_explicit env ctx con A ext (* tpctx? *)
 
   | valid_explicit env ctx con (A.PayPot(e,A)) ext =
     if not (C.entails ctx con (R.Ge(e,R.Int(0)))) (* allowing 0, for uniformity *)
@@ -219,6 +225,8 @@ fun valid_implicit env _ (A.Plus(choice)) ext = valid_implicit_choice env Zero c
 
   | valid_implicit env _ (A.ExistsNat(v,A)) ext = valid_implicit env Pos A ext
   | valid_implicit env _ (A.ForallNat(v,A)) ext = valid_implicit env Neg A ext
+  | valid_implicit env _ (A.ExistsTp(alpha,A)) ext = valid_implicit env Pos A ext
+  | valid_implicit env _ (A.ForallTp(alpha,A)) ext = valid_implicit env Neg A ext
 
   | valid_implicit env Neg (A as A.PayPot _) ext =
     ERROR ext ("implicit type |> appears directly under !{...} or <|"

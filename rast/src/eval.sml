@@ -30,9 +30,11 @@ datatype value =
        | Send of value * value  (* * *)
        | Close                  (* 1 *)
        | SendNat of int * value (* ?v *) 
+       | SendTp of A.tp * value (* ?[alpha] *)
        | CloCase of (A.chan * value) list * A.branches * A.chan       (* & *)
        | CloRecv of (A.chan * value) list * (A.chan * A.exp) * A.chan (* -o *)
        | CloRecvNat of (A.chan * value) list * (R.varname * A.exp) * A.chan (* !v *) 
+       | CloRecvTp of (A.chan * value) list * (A.tpvarname * A.exp) * A.chan (* ![v] *)
 
 type environment = (A.chan * value) list
 
@@ -48,9 +50,11 @@ fun pp_value (Lab(k,v)) = k ^ " ; " ^ pp_value v                  (* k(v) *)
     if !Flags.verbosity >= 2
     then "{" ^ Int.toString n ^ "} ; " ^ pp_value v
     else pp_value v
+  | pp_value (SendTp(A,v)) = "[" ^ "-" ^ "] ; " ^ pp_value v  (* type not printable at present *)
   | pp_value (CloRecv(eta,(x,P),z)) = "-"     (* closures not observable *)
   | pp_value (CloCase(eta,branches,z)) = "-"  (* closures not observable *)
   | pp_value (CloRecvNat(eta,(k,P),z)) = "-"  (* closures not observable *)
+  | pp_value (CloRecvTp(eta,(alpha,P),z)) = "-" (* closures not observable *)
 
 fun pp_eta [] = "."
   | pp_eta ((x,v)::eta) = x ^ " = " ^ pp_value v ^ "\n" ^ pp_eta eta
@@ -154,9 +158,23 @@ and eval' env eta (A.Id(x,y)) z = (* x = z *)
          in eval env (update eta (x,v)) P z end
   | eval' env eta (A.RecvNat(x,k,P)) z =
     if x = z
-    then CloRecvNat(eta, (k,P) , z) (* !R *)
+    then CloRecvNat(eta, (k,P), z) (* !R *)
     else let val SendNat(n, v) = lookup eta x (* ?L *)
              val P' = A.apply_exp [(k, R.Int(n))] P
+         in eval env (update eta (x,v)) P' z end
+
+  | eval' env eta (A.SendTp(x,A,P)) z =
+    if x = z
+    then SendTp(A, eval env eta P z)
+    else let val CloRecvTp(eta', (alpha,Q), z') = lookup eta x
+             val Q' = A.subst_exp [(alpha,A)] Q
+             val v = eval env eta' Q' z'
+         in eval env (update eta (x,v)) P z end
+  | eval' env eta (A.RecvTp(x,alpha,P)) z =
+    if x = z
+    then CloRecvTp(eta, (alpha,P), z)
+    else let val SendTp(A, v) = lookup eta x
+             val P' = A.subst_exp [(alpha,A)] P
          in eval env (update eta (x,v)) P' z end
 
   | eval' env eta (A.Imposs) z = raise DynError

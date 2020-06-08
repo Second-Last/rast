@@ -212,6 +212,29 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addL_pay env (x,skip env A) (A.RecvNat(x,v,P'))
          in P'' end
 
+  | recon' env D (A.SendTp(x,A,P)) (z,C) ext =
+    if x = z
+    then let val P' = recon_getR env D P (TCU.syn_sendTpR env A (z, skipW env C)) ext
+             val P'' = addR_pay env (A.SendTp(x,A,P')) (z,skip env C)
+         in P'' end
+    else let val B = TCU.lookup_context env x D ext
+             val D' = TCU.syn_sendTpL env (TCU.update_tp (x, skipW env B) D) A x
+             val P' = recon_getL env D' (x, TCU.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_pay env (x,skip env B) (A.SendTp(x,A,P'))
+         in P'' end
+
+  | recon' env D (A.RecvTp(x,alpha,P)) (z,C) ext =
+    if x = z
+    then let val D' = D (* v goes into index variable context, which we don't track *)
+             val P' = recon_getR env D' P (TCU.syn_recvTpR env alpha (z, skipW env C)) ext
+             val P'' = addR_pay env (A.RecvTp(x,alpha,P')) (x, skip env C)
+         in P'' end
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_recvTpL env (TCU.update_tp (x, skipW env A) D) x alpha
+             val P' = recon_getL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_pay env (x,skip env A) (A.RecvTp(x,alpha,P'))
+         in P'' end
+         
   (* end structural cases *)
 
   (* impossibility *)
@@ -288,6 +311,10 @@ fun insert_work env pot (P as A.Id(z,x)) =
     A.SendNat(x,e, insert_work env pot P)
   | insert_work env pot (A.RecvNat(x,v,P)) =
     A.RecvNat(x,v, insert_work env pot P)
+  | insert_work env pot (A.SendTp(x,A,P)) =
+    A.SendTp(x,A, insert_work env pot P)
+  | insert_work env pot (A.RecvTp(x,alpha,P)) =
+    A.RecvTp(x,alpha, insert_work env pot P)
   | insert_work env pot (A.Imposs) = A.Imposs
   | insert_work env pot (A.Work(p,P)) =
     A.Work(p, insert_work env (R.minus(pot,p)) P)

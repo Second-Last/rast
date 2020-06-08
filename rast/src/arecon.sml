@@ -151,6 +151,23 @@ and existsNatL env D (A.ExistsNat(v',A)) (A.RecvNat(x,v,P)) zC ext = (* Q: any r
   | existsNatL env D A (A.RecvNat(x,v,P)) zC ext =
     E.error_channel_type_mismatch env ("?<id>. <type>", (x,A)) ext
 
+and existsTpR env D (A.SendTp(x,A,P)) (z,A.ExistsTp(alpha,C)) ext =
+    A.SendTp(x,A,recon env D P (z,A.subst_tp [(alpha,A)] C) ext)
+  | existsTpR env D (A.SendTp(x,A,P)) (z,C) ext =
+    E.error_channel_type_mismatch env ("?[<id>]. <type>", (z,C)) ext
+and forallTpL env D (A.ForallTp(alpha,B)) (A.SendTp(x,A,P)) zC ext =
+    A.SendTp(x,A,recon env (TCU.update_tp (x, A.subst_tp [(alpha,A)] B) D) P zC ext)
+  | forallTpL env D B (A.SendTp(x,A,P)) zC ext =
+    E.error_channel_type_mismatch env ("![<id>]. <type>", (x,B)) ext
+and forallTpR env D (A.RecvTp(x,alpha,P)) (z,A.ForallTp(alpha',C)) ext =
+    A.RecvTp(x,alpha, recon env D P (z,A.subst_tp [(alpha',A.TpVar(alpha))] C) ext)
+  | forallTpR env D (A.RecvTp(x,alpha,P)) (z,C) ext =
+    E.error_channel_type_mismatch env ("![<id>]. <type>", (z,C)) ext
+and existsTpL env D (A.ExistsTp(alpha',A)) (A.RecvTp(x,alpha,P)) zC ext =
+    A.RecvTp(x, alpha, recon env (TCU.update_tp (x, A.subst_tp [(alpha',A.TpVar(alpha))] A) D) P zC ext)
+  | existsTpL env D A (A.RecvTp(x,alpha,P)) zC ext =
+    E.error_channel_type_mismatch env ("?[<id>]. <type>", (x,A)) ext
+
 (* recon' env A P C ext
  * assumes A, C are structural
  * otherwise see recon
@@ -217,6 +234,16 @@ and recon' env D (P as A.Id(x,y)) (z,C) ext =
     if x = z
     then forallNatR env D P (z, skip env C) ext
     else existsNatL env D (lookup_skip env x D ext) P (z,C) ext
+
+  | recon' env D (P as A.SendTp(x,A,P')) (z,C) ext =
+    if x = z
+    then existsTpR env D P (z, skip env C) ext
+    else forallTpL env D (lookup_skip env x D ext) P (z,C) ext
+
+  | recon' env D (P as A.RecvTp(x,alpha,P')) (z,C) ext =
+    if x = z
+    then forallTpR env D P (z, skip env C) ext
+    else existsTpL env D (lookup_skip env x D ext) P (z,C) ext
 
   (* work, which is allowed before reconstruction *)
   | recon' env D (A.Work(p,P')) zC ext =

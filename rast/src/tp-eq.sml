@@ -52,6 +52,8 @@ fun invariant env seen alpha (A.Plus(choices)) = invariant_choices env seen alph
   | invariant env seen alpha (A.Forall(phi,A)) = invariant env seen alpha A
   | invariant env seen alpha (A.ExistsNat(v,A)) = invariant env seen alpha A
   | invariant env seen alpha (A.ForallNat(v,A)) = invariant env seen alpha A
+  | invariant env seen alpha (A.ExistsTp(alpha',A)) = alpha = alpha' orelse invariant env seen alpha A
+  | invariant env seen alpha (A.ForallTp(alpha',A)) = alpha = alpha' orelse invariant env seen alpha A
   | invariant env seen alpha (A.PayPot(p,A)) = invariant env seen alpha A
   | invariant env seen alpha (A.GetPot(p,A)) = invariant env seen alpha A
   | invariant env seen alpha (A.Next(t,A)) = invariant env seen alpha A
@@ -207,6 +209,11 @@ and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
   | eq_tp env ctx con seen (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
     eq_tp_bind env ctx con seen (v,A) (v',A')
 
+  | eq_tp env ctx con seen (A.ExistsTp(alpha,A)) (A.ExistsTp(alpha',A')) =
+    eq_tp_tpbind env ctx con seen (alpha,A) (alpha',A')
+  | eq_tp env ctx con seen (A.ForallTp(alpha,A)) (A.ForallTp(alpha',A')) =
+    eq_tp_tpbind env ctx con seen (alpha,A) (alpha',A')
+
   | eq_tp env ctx con seen (A.PayPot(p,A)) (A.PayPot(p',A')) =
     eq_id ctx con p p' andalso eq_tp' env ctx con seen A A'
   | eq_tp env ctx con seen (A.GetPot(p,A)) (A.GetPot(p',A')) = 
@@ -261,6 +268,14 @@ and eq_tp_bind env ctx con seen (v,A) (v',A') =
         val wA = A.apply_tp ((v, R.Var(w))::sigma) A
         val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
     in eq_tp' env (w::ctx) con seen wA wA' end
+
+and eq_tp_tpbind env ctx con seen (alpha,A) (alpha',A') =
+    (* need better variable name hygiene here!!! *)
+    let val theta = []
+        val beta = alpha (* A.fresh_tpvar theta alpha *)
+        val B = A.subst_tp ((alpha, A.TpVar(beta))::theta) A
+        val B' = A.subst_tp ((alpha', A.TpVar(beta))::theta) A'
+    in eq_tp' env ctx con seen B B' end
 
 and eq_choice env ctx con seen ((l,A)::choices) choices' =
     (case A.lookup_choice_rest choices' l

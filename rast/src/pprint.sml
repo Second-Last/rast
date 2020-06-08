@@ -80,6 +80,8 @@ fun ext_tp env (A.One) = A.One
   | ext_tp env (A.Forall(phi,A)) = A.Forall(phi,ext_tp env A)
   | ext_tp env (A.ExistsNat(v,A)) = A.ExistsNat(v,ext_tp env A)
   | ext_tp env (A.ForallNat(v,A)) = A.ForallNat(v,ext_tp env A)
+  | ext_tp env (A.ExistsTp(alpha,A)) = A.ExistsTp(alpha,ext_tp env A)
+  | ext_tp env (A.ForallTp(alpha,A)) = A.ForallTp(alpha,ext_tp env A)
   | ext_tp env (A.TpVar(alpha)) = A.TpVar(alpha)
   | ext_tp env (A as A.TpName(a,As,es)) =
     if is_internal a
@@ -246,6 +248,7 @@ fun is_prefix A = case A of
   | A.GetPot _ => true | A.PayPot _ => true
   | A.Exists _ => true | A.Forall _ => true
   | A.ExistsNat _ => true | A.ForallNat _ => true
+  | A.ExistsTp _ => true | A.ForallTp _ => true
   | _ => false
 
 (* pp_tp i A = "A", where i is the indentation after a newline
@@ -275,6 +278,8 @@ fun pp_tp i (A.One) = "1"
   | pp_tp i (A.Forall(phi,A)) = "!" ^ pp_con phi ^ ". " ^ pp_tp (i+len(pp_con(phi))+3) A
   | pp_tp i (A.ExistsNat(v,A)) = "?" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
   | pp_tp i (A.ForallNat(v,A)) = "!" ^ v ^ ". " ^ pp_tp (i+len(v)+3) A
+  | pp_tp i (A.ExistsTp(alpha,A)) = "?[" ^ alpha ^ "]. " ^ pp_tp (i+len(alpha)+5) A
+  | pp_tp i (A.ForallTp(alpha,A)) = "![" ^ alpha ^ "]. " ^ pp_tp (i+len(alpha)+5) A
   | pp_tp i (A.TpVar(alpha)) = alpha
   | pp_tp i (A.TpName(a,As,es)) = a ^ pp_tps i As ^ pp_idx es
 and pp_tp_indent i A = spaces i ^ pp_tp i A
@@ -344,6 +349,8 @@ fun pp_exp env i (A.Spawn(P,Q)) = (* P = x <- f{..} ys *)
   | pp_exp env i (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.SendTp(x,A,P)) = "send " ^ x ^ " " ^ pp_tps env [A] ^ " ;\n" ^ pp_exp_indent env i P
+  | pp_exp env i (A.RecvTp(x,alpha,P)) = "[" ^ alpha ^ "] <- recv " ^ x ^ " ;\n" ^ pp_exp_indent env i P
   | pp_exp env i (A.Imposs) = "impossible"
   | pp_exp env i (A.ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps env As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp env i (A.Marked(marked_exp)) = pp_exp env i (Mark.data marked_exp)
@@ -382,6 +389,8 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
   | pp_exp_prefix env (A.Assume(x,phi,P)) = "assume " ^ x ^ " " ^ pp_con phi ^ " ; ..."
   | pp_exp_prefix env (A.SendNat(x,e,P)) = "send " ^ x ^ " " ^ pp_idx [e] ^ " ; ..."
   | pp_exp_prefix env (A.RecvNat(x,v,P)) = "{" ^ v ^ "} <- recv " ^ x ^ " ; ..."
+  | pp_exp_prefix env (A.SendTp(x,A,P)) = "send " ^ x ^ " " ^ pp_tps env [A] ^ " ; ..."
+  | pp_exp_prefix env (A.RecvTp(x,alpha,P)) = "[" ^ alpha ^ "] <- recv " ^ x ^ " ; ..."
   | pp_exp_prefix env (A.Imposs) = "impossible"
   | pp_exp_prefix env (A.ExpName(x,f,As,es,xs)) = x ^ " <- " ^ f ^ pp_tps env As ^ pp_idx es ^ " " ^ pp_chanlist xs
   | pp_exp_prefix env (A.Marked(marked_exp)) = pp_exp_prefix env (Mark.data marked_exp)

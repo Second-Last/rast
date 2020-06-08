@@ -243,6 +243,30 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
              val P'' = addL_assert env (x,skip env A) (A.RecvNat(x,v,P'))
          in P'' end
 
+  | recon' env D (A.SendTp(x,A,P)) (z,C) ext =
+    if x = z
+    then let val P' = recon_assumeR env D P (TCU.syn_sendTpR env A (z, skipQ env C)) ext
+             val P'' = addR_assert env (A.SendTp(x,A,P')) (z, skip env C)
+         in P'' end
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_sendTpL env (TCU.update_tp (x, skipQ env A) D) A x
+             val P' = recon_assumeL env D' (x, TCU.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_assert env (x,skip env A) (A.SendTp(x,A,P'))
+         in P'' end
+
+  | recon' env D (A.RecvTp(x,alpha,P)) (z,C) ext =
+    if x = z
+    then let val D' = D (* alpha goes into index variable context, which we don't track *)
+             val P' = recon_assumeR env D' P (TCU.syn_recvTpR env alpha (z, skipQ env C)) ext
+             val P'' = addR_assert env (A.RecvTp(x,alpha,P')) (x, skip env C)
+         in P'' end
+    else let val A = TCU.lookup_context env x D ext
+             val D' = TCU.syn_recvTpL env (TCU.update_tp (x, skipQ env A) D) x alpha
+             val P' = recon_assumeL env D' (x,TCU.lookup_context env x D' ext) P (z,C) ext
+             val P'' = addL_assert env (x,skip env A) (A.RecvTp(x,alpha,P'))
+         in P'' end
+
+
   (* work, which is allowed before reconstruction *)
   | recon' env D (A.Work(p,P')) zC ext =
     A.Work(p, recon env D P' zC ext)
