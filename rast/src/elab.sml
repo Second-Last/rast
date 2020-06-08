@@ -193,7 +193,7 @@ fun resolve_exp env tpctx vs (A as A.Id(x,y)) ext = A
   | resolve_exp env tpctx vs (A.SendNat(x,e,P)) ext = A.SendNat(x,e,resolve_exp env tpctx vs P ext)
   | resolve_exp env tpctx vs (A.RecvNat(x,v,P)) ext = A.RecvNat(x,v,resolve_exp env tpctx vs P ext)
   | resolve_exp env tpctx vs (A.SendTp(x,A,P)) ext = A.SendTp(x,resolve_args env tpctx vs A ext, resolve_exp env tpctx vs P ext)
-  | resolve_exp env tpctx vs (A.RecvTp(x,alpha,P)) ext = A.RecvNat(x,alpha,resolve_exp env (alpha::tpctx) vs P ext)
+  | resolve_exp env tpctx vs (A.RecvTp(x,alpha,P)) ext = A.RecvTp(x,alpha,resolve_exp env (alpha::tpctx) vs P ext)
   | resolve_exp env tpctx vs (A as A.Imposs) ext = A
   | resolve_exp env tpctx vs (A.Work(p,P)) ext = A.Work(p,resolve_exp env tpctx vs P ext)
   | resolve_exp env tpctx vs (A.Pay(x,p,P)) ext = A.Pay(x,p,resolve_exp env tpctx vs P ext)
@@ -513,7 +513,7 @@ fun elab_decls env decls =
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
         val env'' = elab_exps' env' env'
-        val () = if !Flags.verbosity >= 2 then List.app (fn decl => TextIO.print (A.Print.pp_decl decl ^ "\n")) env'' else ()
+        (* val () = if !Flags.verbosity >= 2 then List.app (fn decl => TextIO.print (A.Print.pp_decl decl ^ "\n")) env'' else () *)
         val () = if !Flags.verbosity = ~1 then TextIO.print "\n" else ()
         val () = if !Flags.verbosity = ~1 orelse !Flags.verbosity >= 2
                  then ( TextIO.print ("% recon time: " ^ LargeInt.toString (!recon_time) ^ " us\n")

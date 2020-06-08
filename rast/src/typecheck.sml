@@ -340,7 +340,7 @@ and forallTpL trace env ctx con D (A.ForallTp(alpha,B)) pot (A.SendTp(x,A,P)) zC
   | forallTpL trace env ctx con D B pot (A.SendTp(x,A,P)) zC ext (* z != x *) =
     E.error_channel_type_mismatch env ("![<id>]. <type>", (x,B)) ext
 
-and forallTpR trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,A.ForallNat(alpha',C)) ext (* z = x *) =
+and forallTpR trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,A.ForallTp(alpha',C)) ext (* z = x *) =
     check_exp' trace env (* (alpha::tpctx) ?? *) ctx con D pot P (z, A.subst_tp [(alpha',A.TpVar(alpha))] C) ext
   | forallTpR trace env ctx con D pot (A.RecvTp(x,alpha,P)) (z,C) ext =
     E.error_channel_type_mismatch env ("![<id>]. <type>", (z,C)) ext

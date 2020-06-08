@@ -248,10 +248,10 @@ and recon' env D (P as A.Id(z',y)) (z,C) ext =
     then let val P' = recon_assumeR env D P (TCU.syn_sendTpR env A (z, skipQ env C)) ext
              val P'' = addR_assert env (A.SendTp(x,A,P')) (z, skip env C)
          in P'' end
-    else let val A = TCU.lookup_context env x D ext
-             val D' = TCU.syn_sendTpL env (TCU.update_tp (x, skipQ env A) D) A x
+    else let val B = TCU.lookup_context env x D ext
+             val D' = TCU.syn_sendTpL env (TCU.update_tp (x, skipQ env B) D) A x
              val P' = recon_assumeL env D' (x, TCU.lookup_context env x D' ext) P (z,C) ext
-             val P'' = addL_assert env (x,skip env A) (A.SendTp(x,A,P'))
+             val P'' = addL_assert env (x,skip env B) (A.SendTp(x,A,P'))
          in P'' end
 
   | recon' env D (A.RecvTp(x,alpha,P)) (z,C) ext =

@@ -474,14 +474,16 @@ and p_tpopr_rtri ST = case first ST of
   | T.LBRACE => ST |> p_idx >> p_terminal T.RANGLE
   | t => error_expected_list (here ST, [T.RANGLE, T.LBRACE], t)
 
-(* <con> '.' *)
+(* <con> '.' | <id> '.' | '[' <id> ']' '.' *)
 and p_con_dot ST = case first ST of
     T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_con >> p_terminal T.PERIOD
   | T.IDENT(id) => ST |> shift >> p_terminal T.PERIOD
-  | t => error_expected (here ST, T.LBRACE, t)
+  | T.LBRACKET => ST |> shift >> p_id >> p_terminal T.RBRACKET >> reduce r_con >> p_terminal T.PERIOD
+  | t => error_expected_list (here ST, [T.LBRACKET, T.LBRACE, T.IDENT("<var>")], t)
 
-(* reduce <con> ::= '{' <prop> '}' *)
+(* reduce <con> ::= '{' <prop> '}' | '[' <id> ']' *)
 and r_con (S $ Tok(T.LBRACE,r1) $ AExp(e,_) $ Tok(T.RBRACE,r2)) = S $ AExp(e, join r1 r2)
+  | r_con (S $ Tok(T.LBRACKET,r1) $ Tok(T.IDENT(id), _) $ Tok(T.RBRACKET,r2)) = S $ TpVars([id], join r1 r2)
 
 (* <arith> and <prop>, parsed as <aexp> *)
 (* This needs to be a joint infix parser because we cannot
@@ -571,9 +573,11 @@ and r_type_1 (S $ Tok(T.NAT(1),r)) = S $ Tp(A.One, r)
 and r_type_2 (S $ Tok(T.BAR,r1) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(R.Int(1),tp), join r1 r2)
   | r_type_2 (S $ Tok(T.BAR,r1) $ AExp(p,r) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPot(aexp2arith r p,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.QUESTION,r1) $ AExp(e,r) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Exists(aexp2prop r e,tp), join r1 r2)
-  | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ AExp(e,r) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(aexp2prop r e,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.QUESTION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsNat(id,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.QUESTION,r1) $ TpVars([id],_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ExistsTp(id,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ AExp(e,r) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.Forall(aexp2prop r e,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
+  | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ TpVars([id],_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallTp(id,tp), join r1 r2)
   | r_type_2 S = r_type_3 S
 and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Tps(As,_) $ Indices(es,r2)) = S $ Tp(A.TpName(id,As,es),join r1 r2)
   | r_type_3 (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
@@ -585,6 +589,8 @@ and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Tps(As,_) $ Indices(es,r2)) = S $ Tp(A.T
   (* should be the only possibilities *)
 
 and r_type_seq (S $ Tps(As,r1) $ Tok(T.LBRACKET,_) $ Tp(A,_) $ Tok(T.RBRACKET, r2)) = S $ Tps(As @ [A], join r1 r2)
+
+and r_type_msg (S $ Tok(T.LBRACKET,r1) $ Tp(tp,_) $ Tok(T.RBRACKET,r2)) = S $ Tp(tp, join r1 r2)
 
 (* <choices> *)
 (* Alts (_) accumulates alternative choices *)
@@ -625,14 +631,17 @@ and p_exp ST = case first ST of
   | T.ASSERT => ST |> shift >> p_id >> p_con_semi >> p_exp
   | T.ASSUME => ST |> shift >> p_id >> p_con_semi >> p_exp
   | T.IMPOSSIBLE => ST |> shift >> reduce r_exp_atomic >> reduce r_exp
-  (* receiving an natural number *)
-  | T.LBRACE => ST |> shift >> p_id >> p_terminal T.RBRACE >> p_recv_nat >> p_exp
+  (* receiving a natural number or type *)
+  | T.LBRACE => ST |> shift >> p_id >> p_terminal T.RBRACE >> p_recv_nat_tp >> p_exp
+  | T.LBRACKET => ST |> shift >> p_id >> p_terminal T.RBRACKET >> p_recv_nat_tp >> p_exp
   (* end of expression; do not consume token *)
   | t => ST |> reduce r_exp
 
 and p_id_exp ST = case first ST of
     T.IDENT(x) => ST |> shift
   | T.LBRACE => ST |> shift >> p_aexp >> p_terminal T.RBRACE >> reduce r_idx
+  | T.LBRACKET => ST |> shift >> p_type >> p_terminal T.RBRACKET >> reduce r_type_msg
+  | t => error_expected_list (here ST, [T.IDENT("<id>"), T.LBRACE, T.LBRACKET], t)
 
 and p_id_exps ST = case first ST of
     T.PERIOD => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
@@ -646,7 +655,7 @@ and p_spawn_or_recv ST = case first ST of
                       >> push (Chans([], here ST)) >> p_id_seq
   | t => parse_error (here ST, "expected 'recv', or identifier, found " ^ pp_tok t)
 
-and p_recv_nat ST = case first ST of
+and p_recv_nat_tp ST = case first ST of
     T.LARROW => ST |> shift >> p_terminal T.RECV >> p_id >> p_terminal T.SEMICOLON >> reduce r_action
   | t => error_expected (here ST, T.LARROW, t)
 
@@ -697,10 +706,15 @@ and r_action_1 (S $ Tok(T.IDENT(x),r1) $ Tok(T.PERIOD,_) $ Tok(T.IDENT(id),r2) $
   | r_action_1 (S $ Tok(T.LBRACE,r1) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,_) $ Tok(T.LARROW,_)
                 $ Tok(T.RECV, _) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.RecvNat(x,v,K),join r1 r2)), join r1 r3)
+  | r_action_1 (S $ Tok(T.LBRACKET,r1) $ Tok(T.IDENT(alpha),_) $ Tok(T.RBRACKET,_) $ Tok(T.LARROW,_)
+                  $ Tok(T.RECV, _) $ Tok(T.IDENT(x),r2) $ Tok(T.SEMICOLON, r3)) =
+    S $ Action((fn K => m_exp(A.RecvTp(x,alpha,K),join r1 r2)), join r1 r3)
   | r_action_1 (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Tok(T.IDENT(w),r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.Send(x,w,K), join r1 r2)), join r1 r3)
   | r_action_1 (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ AExp(e, r2) $ Tok(T.SEMICOLON, r3)) =
     S $ Action((fn K => m_exp(A.SendNat(x,aexp2arith r2 e,K), join r1 r2)), join r1 r3)
+  | r_action_1 (S $ Tok(T.SEND,r1) $ Tok(T.IDENT(x),_) $ Tp(A, r2) $ Tok(T.SEMICOLON, r3)) =
+    S $ Action((fn K => m_exp(A.SendTp(x,A,K), join r1 r2)), join r1 r3)
   | r_action_1 (S $ Tok(T.WAIT,r1) $ Tok(T.IDENT(id),r2) $ Tok(T.SEMICOLON,r3)) =
     S $ Action((fn K => m_exp(A.Wait(id,K),join r1 r2)), join r1 r3)
   | r_action_1 S = r_action_2 S

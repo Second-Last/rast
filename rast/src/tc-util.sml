@@ -271,7 +271,7 @@ fun syn_recvNatL env ((x',A)::D') x v' =
 fun syn_sendTpR' env z A (A.ExistsTp(alpha,C)) = (z,A.subst_tp [(alpha,A)] C)
 fun syn_sendTpR env A (z,C) = syn_sendTpR' env z A (TU.expand env C)
 
-fun syn_sendTpL' env x A (A.ForallNat(alpha,B)) D = (x,A.subst_tp [(alpha,A)] B)::D
+fun syn_sendTpL' env x A (A.ForallTp(alpha,B)) D = (x,A.subst_tp [(alpha,A)] B)::D
 fun syn_sendTpL env ((x',B)::D') A x =
     if x = x' then syn_sendTpL' env x A (TU.expand env B) D'
     else (x',B)::syn_sendTpL env D' A x

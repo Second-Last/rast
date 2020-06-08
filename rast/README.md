@@ -149,8 +149,10 @@ which is higher than the all prefix operators (`()` `[]` `<>`
          | <id> <idx_seq>       % Type name
          | ? <con>. <type>      % Provider send 'proof' of <prop>
          | ! <con>. <type>      % Provider receives 'proof' of <prop>
-         | ? <id>. <type>       % Existential type
-         | ! <id>. <type>       % Universal type
+         | ? <id>. <type>       % Existential (nat) type
+         | ! <id>. <type>       % Universal (nat) type
+         | ?[ <id> ]. <type>    % Existential type
+         | ![ <id> ]. <type>    % Universal type
          | ( <type> )           % Parentheses
 
 <type_seq> ::=  | [ <type> ] type_seq
@@ -176,7 +178,9 @@ which is higher than the all prefix operators (`()` `[]` `<>`
         | <id> <- recv <id> ; <exp>                   % receive channel
         | send <id> { <arith> } ; <exp>               % send natural number
         | { <id> } <- recv <id> ; <exp>               % receive natural number
-        
+        | send <id> [ <type> ] ; <exp>                % send type
+        | [ <id> ] <- recv <id> ; <exp>               % receive type
+
         | assert <id> <con> ; <exp>                   % assert constraints
         | assume <id> <con> ; <exp>                   % assume constraint
         | impossible                                  % constraints are contradictory

@@ -389,8 +389,7 @@ fun subst_tp theta (One) = One
   | subst_tp theta (TpVar(alpha)) =
     ( case List.find (fn (alpha',A') => alpha = alpha') theta
        of SOME(_,A) => A
-        (* for now, substitutions should be total *)
-        (* | NONE => TpVar(alpha) *) 
+        | NONE => TpVar(alpha) (* substitutions need not be total *)
     )
   | subst_tp theta (TpName(a,As,es)) = TpName(a, List.map (subst_tp theta) As, es)
 
@@ -562,6 +561,7 @@ and pp_choice nil = ""
     l ^ " : " ^ pp_tp A ^ ", " ^ pp_choice choices
 and pp_tp_paren (A as One) = pp_tp A
   | pp_tp_paren (A as TpName _) = pp_tp A
+  | pp_tp_paren (A as TpVar _) = pp_tp A
   | pp_tp_paren A = "(" ^ pp_tp A ^ ")"
 and pp_tps nil = ""
   | pp_tps (A::As) = "[" ^ pp_tp A ^ "]" ^ pp_tps As

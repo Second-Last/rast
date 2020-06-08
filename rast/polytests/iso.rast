@@ -1,0 +1,117 @@
+#test success
+
+%%% Some isomorphisms
+
+%%%
+%%% A * B -||- B * A
+%%%
+
+decl tensorComm[A][B] : (x : A * B) |- (y : B * A)
+proc y <- tensorComm[A][B] x =
+  a <- recv x ;
+  send y x ;
+  y <-> a
+
+%%%
+%%% A + B -||- ![C]. (A -o C) & (B -o C) -o C
+%%%
+
+% A + B |- ![C]. (A -o C) & (B -o C) -o C
+decl plusDef1[A][B] :
+  (x : +{pi1 : A, pi2 : B}) |- (y : ![C]. &{pi1 : A -o C, pi2 : B -o C} -o C)
+proc y <- plusDef1[A][B] x =
+  case x ( pi1 => [C] <- recv y ;
+                  z <- recv y ;
+                  z.pi1 ;
+                  send z x ;
+                  y <-> z
+         | pi2 => [C] <- recv y ;
+                  z <- recv y ;
+                  z.pi2 ;
+                  send z x ;
+                  y <-> z )
+
+% |- (A -o (A + B)) & (B -o (A + B))
+decl plusDefLemma[A][B] :
+  . |- (z : &{pi1 : A -o +{pi1 : A, pi2 : B}, pi2 : B -o +{pi1 : A, pi2 : B}})
+proc z <- plusDefLemma[A][B] =
+  case z ( pi1 => x <- recv z ; z.pi1 ; z <-> x
+         | pi2 => y <- recv z ; z.pi2 ; z <-> y )
+
+% ![C]. (A -o C) & (B -o C) -o C |- A + B
+decl plusDef2[A][B] :
+ (x : ![C]. &{pi1 : A -o C, pi2 : B -o C} -o C) |- (y : +{pi1 : A, pi2 : B})
+ 
+proc y <- plusDef2[A][B] x =
+  send x [+{pi1 : A, pi2 : B}] ;
+  z <- plusDefLemma[A][B] ;
+  send x z ;
+  y <-> x
+
+decl compPlusDef1[A][B] : (x : +{pi1 : A, pi2 : B}) |- (y : +{pi1 : A, pi2 : B})
+proc y <- compPlusDef1[A][B] x =
+  z <- plusDef1[A][B] x ;
+  y <- plusDef2[A][B] z
+
+decl compPlusDef2[A][B] :
+     (x : ![C]. &{pi1 : A -o C, pi2 : B -o C} -o C)
+  |- (y : ![C]. &{pi1 : A -o C, pi2 : B -o C} -o C)
+proc y <- compPlusDef2[A][B] x =
+  z <- plusDef2[A][B] x ;
+  y <- plusDef1[A][B] z
+
+type bool = +{pi1 : 1, pi2 : 1}
+decl false : . |- (b : bool)
+decl true : . |- (b : bool)
+proc b <- false = b.pi1 ; close b
+proc b <- true = b.pi2 ; close b
+
+decl ex1 : . |- (b : bool)
+proc b <- ex1 =
+  ff <- false ;
+  b <- compPlusDef1[1][1] ff
+
+decl ex2 : . |- (b : bool)
+proc b <- ex2 =
+  tt <- true ;
+  b <- compPlusDef1[1][1] tt
+
+exec ex1
+exec ex2
+
+%%%
+%%% A * B -||- ![C]. (A -o B -o C) -o C
+%%%
+
+decl tensorDef1[A][B] :
+  (x : A * B) |- (y : ![C]. (A -o B -o C) -o C)
+proc y <- tensorDef1[A][B] x =
+  z <- recv x ;  % (z : A) (x : B)
+  [C] <- recv y ;
+  f <- recv y ;  % f : A -o B -o C
+  send f z ; send f x ; y <-> f
+
+decl tensorDefLemma[A][B] :
+  . |- (z : A -o B -o A * B)
+proc z <- tensorDefLemma[A][B] =
+  x <- recv z ;
+  y <- recv z ;
+  send z x ; z <-> y
+
+decl tensorDef2[A][B] :
+  (y : ![C]. (A -o B -o C) -o C) |- (x : A * B)
+proc x <- tensorDef2[A][B] y =
+  send y [A * B] ;
+  z <- tensorDefLemma[A][B] ;
+  send y z ; x <-> y
+
+%%%
+%%% |- ?[C]. (A -o C) & (B -o C)
+%%%
+
+decl existsSum[A][B] : . |- (x : ?[C]. &{pi1 : A -o C, pi2 : B -o C})
+proc x <- existsSum[A][B] =
+  send x [+{pi1 : A, pi2 : B}] ;
+  case x ( pi1 => y <- recv x ; x.pi1 ; x <-> y
+         | pi2 => z <- recv x ; x.pi2 ; x <-> z )
+
