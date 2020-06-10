@@ -1,65 +1,117 @@
 #test success
 
-type D[x] = +{ L : D[A[x]], R : x }
-type A[x] = +{ R : x }
+% S = L^n ; R^n ; close  (n > 0)
 % D[x] = L^n ; R^(n+1) ; x
 % A[x] = R ; x
 
+%%% serial form
 type S = +{ L : D[1] }
-% S = L^n ; R^n ; close  (n > 0)
+type D[x] = +{ L : D[A[x]], R : x }
+type A[x] = +{ R : x }
 
-decl L[x] : (da : D[A[x]]) |- (d : D[x])
-decl R[x] : (k : x) |- (d : D[x])
-decl R_[x] : (k : x) |- (a : A[x])
-proc d <- L[x] da = d.L ; d <-> da
-proc d <- R[x] k = d.R ; d <-> k
-proc a <- R_[x] k = a.R ; a <-> k
+%%% constructors
+decl LS : (d : D[1]) |- (s : S)
+decl LD[x] : (da : D[A[x]]) |- (d : D[x])
+decl RD[x] : (k : x) |- (d : D[x])
+decl RA[x] : (k : x) |- (a : A[x])
 
+proc s <- LS d = s.L ; s <-> d
+proc d <- LD[x] da = d.L ; d <-> da
+proc d <- RD[x] k = d.R ; d <-> k
+proc a <- RA[x] k = a.R ; a <-> k
+
+%%% structured form
+type S' = +{ L' : D' }
 type D' = +{ L' : D' * A', R' : 1 }
 type A' = +{ R' : 1 }
 
-decl L' : (d' : D') (a' : A') |- (l' : D')
-decl R' : . |- (r' : D')
-decl R'_ : . |- (r' : A')
+%%% constructors
+decl L'S' : (d' : D') |- (s' : S')
+decl L'D' : (d' : D') (a' : A') |- (l' : D')
+decl R'D' : . |- (r' : D')
+decl R'A' : . |- (r' : A')
 
-proc l' <- L' d' a' = l'.L' ; send l' d' ; l' <-> a'
-proc r' <- R' = r'.R' ; close r'
-proc r' <- R'_ = r'.R' ; close r'
+proc l' <- L'D' d' a' = l'.L' ; send l' d' ; l' <-> a'
+proc r' <- R'D' = r'.R' ; close r'
+proc r' <- R'A' = r'.R' ; close r'
+proc l' <- L'S' d' = l'.L' ; l' <-> d'
 
-% Claim : D[x] == D' * x
-%         A[x] == A' * x
+% Claim : S == S' and D[x] == D' * x and A[x] == A' * x
 
-decl serializeD[x] : (d : D[x]) |- (d'k : D' * x)
-decl serializeA[x] : (a : A[x]) |- (a'k : A' * x)
+decl primeS : (s : S) |- (s' : S')
+decl primeD[x] : (d : D[x]) |- (d'k : D' * x)
+decl primeA[x] : (a : A[x]) |- (a'k : A' * x)
 
-decl deserializeD[x] : (d' : D') (k : x) |- (d : D[x])
-decl deserializeA[x] : (a' : A') (k : x) |- (a : A[x])
+decl unprimeS : (s' : S') |- (s : S)
+decl unprimeD[x] : (d' : D') (k : x) |- (d : D[x])
+decl unprimeA[x] : (a' : A') (k : x) |- (a : A[x])
 
-proc d'k <- serializeD[x] d =
+%%% priming S --> S', D[x] --> D' * x, A[x] --> A' * x
+
+proc s' <- primeS s =
+  case s ( L =>                               % (s : D[1]) |- (s' : S')
+                d'1 <- primeD[1] s ;      % (d'1 : D' * 1) |- (s : S')
+                d' <- recv d'1 ; wait d'1 ;   % (d' : D') |- (s : S')
+                s' <- L'S' d' )                
+
+proc d'k <- primeD[x] d =
   case d ( L =>                               % (d : D[A[x]]) |- (d'k : D' * x)
-                d'da <- serializeD[A[x]] d ;  % (d'da : D' * A[x]) |- (d'k : D' * x)
+                d'da <- primeD[A[x]] d ;  % (d'da : D' * A[x]) |- (d'k : D' * x)
                 d' <- recv d'da ;             % (d' : D') (d'da : A[x]) |- (d'k : D' * x)
-                a'k <- serializeA[x] d'da ;   % (d' : D') (a'k : A' * x) |- (d'k : D' * x)
+                a'k <- primeA[x] d'da ;   % (d' : D') (a'k : A' * x) |- (d'k : D' * x)
                 a' <- recv a'k ;              % (d' : D') (a' : A') (a'k : x) |- (d'k : D' * x)
-                l' <- L' d' a' ;              % (l' : D') (a'k : x) |- (d'k : D' * x)
+                l' <- L'D' d' a' ;              % (l' : D') (a'k : x) |- (d'k : D' * x)
                 send d'k l' ; d'k <-> a'k
          | R =>                               % (d : x) |- (d'k : D' * x)
-                r' <- R' ;                    % (r' : D') (d : x) |- (d'k : D' * x)
+                r' <- R'D' ;                    % (r' : D') (d : x) |- (d'k : D' * x)
                 send d'k r' ; d'k <-> d )
 
-proc a'k <- serializeA[x] a =
+proc a'k <- primeA[x] a =
   case a ( R =>                               % (a : x) |- (a'k : A' * x)
-                r' <- R'_ ;                   % (r' : A') (a : x) |- (a'k : A' * x)
+                r' <- R'A' ;                  % (r' : A') (a : x) |- (a'k : A' * x)
                 send a'k r' ; a'k <-> a )
 
-proc d <- deserializeD[x] d' k =
+%%% unpriming S' --> S, D' * x --> D[x], A' * x --> A[x]
+
+decl unit : . |- (k : 1)
+proc k <- unit = close k
+
+proc s <- unprimeS s' =
+  case s' ( L' =>                                % (s' : D') |- (s : S)
+                  k1 <- unit ;                   % (s' : D') (k1 : 1) |- (s : S)
+                  d1 <- unprimeD[1] s' k1 ;  % (d1 : D[1]) |- (s : S)
+                  s <- LS d1 )
+
+
+proc d <- unprimeD[x] d' k =
   case d' ( L' =>                                  % (d' : D' * A') (k : x) |- (d : D[x])
                   d'1 <- recv d' ;                 % (d'1 : D') (d' : A') (k : x) |- (d : D[x])
-                  a <- deserializeA[x] d' k ;      % (d'1 : D') (a : A[x]) |- (d : D[x])
-                  da <- deserializeD[A[x]] d'1 a ; % (da : D[A[x]]) |- (d : D[x])
-                  d <- L[x] da
+                  a <- unprimeA[x] d' k ;      % (d'1 : D') (a : A[x]) |- (d : D[x])
+                  da <- unprimeD[A[x]] d'1 a ; % (da : D[A[x]]) |- (d : D[x])
+                  d <- LD[x] da
           | R' => wait d' ;                        % (k : x) |- (d : D[x])
-                  d <- R[x] k )
-proc a <- deserializeA[x] a' k =
+                  d <- RD[x] k )
+
+proc a <- unprimeA[x] a' k =
   case a' ( R' => wait a' ;                        % (k : x) |- (a : A[x])
-                  a <- R_[x] k )
+                  a <- RA[x] k )
+
+%%% example L^4 ; R^4 ; close
+
+decl d4 : . |- (s : S)
+proc s <- d4 = s.L ; s.L ; s.L ; s.L ; s.R ; s.R ; s.R ; s.R ; close s
+
+
+decl d4' : . |- (s' : S')
+proc s' <- d4' =
+  s <- d4 ;
+  s' <- primeS s
+
+decl e4 : . |- (s : S)
+proc s <- e4 =
+  s' <- d4' ;
+  s <- unprimeS s'
+
+exec d4
+exec d4'
+exec e4
