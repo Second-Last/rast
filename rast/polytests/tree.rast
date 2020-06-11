@@ -1,0 +1,38 @@
+type tree[A][x] = +{leaf : 1, node : A * tree[A][L[x]] * tree[A][L[x]]}
+
+type L[x] = +{dummy : x}
+
+type list[A][x] = +{cons : A * list[A][x], nil : 1}
+
+type alist[A][x][y] = +{cons : A * alist[A][x][y], second : list[A][y]}
+
+decl append[A][x][y] : (l1 : list[A][x]) (l2 : list[A][y]) |- (l : alist[A][x][y])
+
+proc l <- append[A][x][y] l1 l2 =
+  case l1 (
+    cons => e <- recv l1 ;
+            l.cons ;
+            send l e ;
+            l <- append[A][x][y] l1 l2
+  | nil => wait l1 ;
+           l.second ;
+           l <-> l2
+  )
+
+(*
+decl prefix[A] : (t : tree[A]) |- (l : list[A])
+
+proc l <- prefix[A] t =
+  case t (
+    leaf => wait t ;
+            l.nil ;
+            close l
+  | node => e <- recv t ;
+            left <- recv t ;
+            l.cons ;
+            send l e ;
+            a <- prefix[A] left ;
+            b <- prefix[A] t ;
+            l <- append[A] a b
+  )
+*)
