@@ -304,6 +304,6 @@ and recon_branchesR env D ((l,ext',P)::branches) (z,choices) ext =
   | recon_branchesR env D nil (z,nil) ext = nil
 
 (* external interface: ignore potential *)
-val recon = fn env => fn ctx => fn con => fn A => fn pot => fn P => fn C => fn ext => recon' env A P C ext
+val recon = fn env => fn tpctx => fn ctx => fn con => fn A => fn pot => fn P => fn C => fn ext => recon' env A P C ext
 
 end (* structure QRecon *)

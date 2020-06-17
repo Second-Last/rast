@@ -335,7 +335,7 @@ and insert_work_branches env pot nil = nil
     
 (* external interface *)
 (* at present, we do not pass through constraints *)
-val recon = fn env => fn ctx => fn con => fn D => fn pot => fn P => fn zC => fn ext =>
+val recon = fn env => fn tpctx => fn ctx => fn con => fn D => fn pot => fn P => fn zC => fn ext =>
             insert_work env pot (recon env D P zC ext)
 
 end (* structure WRecon *)

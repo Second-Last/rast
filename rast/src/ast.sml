@@ -121,6 +121,7 @@ val subst_tp : tp_subst -> tp -> tp                (* [theta]A *)
 val subst_exp : tp_subst -> exp -> exp             (* [theta]P *)
 val subst_chan_tp : tp_subst -> chan_tp -> chan_tp (* [theta](x:A) *)
 val subst_context : tp_subst -> context -> context (* [theta]Delta *)
+val fresh_tpvar : tp_subst -> tpvarname -> tpvarname
 
 (* Environment lookup *)
 val lookup_tp : env -> tpname -> (tp_ctx * Arith.ctx * Arith.prop * tp) option
@@ -430,6 +431,13 @@ and subst_branches theta branches = List.map (fn (l,ext,P) => (l,ext,subst_exp t
 and subst_tp_exp_bind theta (x,alpha,P) =
     let val alpha' = fresh_tpvar theta alpha
     in (x, alpha', subst_exp ((alpha,TpVar(alpha'))::theta) P) end
+
+fun next_name v = v ^ "^"
+
+fun fresh_tpvar theta alpha =
+    if free_in_tpsubst alpha theta
+    then fresh_tpvar theta (next_name alpha)
+    else alpha
 
 (**********************)
 (* Environment Lookup *)

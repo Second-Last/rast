@@ -275,7 +275,7 @@ fun recon_top env ctx con D pot P zC ext =
     recon env D P zC ext
 
 (* external interface: ignore potential *)
-fun recon env ctx con D pot P zC ext =
+fun recon env tpctx ctx con D pot P zC ext =
     recon_top env ctx con D pot P zC ext
 
 end (* structure ARecon *)

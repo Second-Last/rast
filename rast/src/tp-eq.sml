@@ -20,7 +20,7 @@
 signature TYPE_EQUALITY =
 sig
 
-    val eq_tp : Ast.env -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.tp -> bool
+    val eq_tp : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.tp -> bool
 
 end  (* signature TYPE_EQUALITY *)
 
@@ -172,128 +172,127 @@ fun aggregate_nexts env ctx con (A as A.Next(t,A')) =
 (* eq_tp' env con seen A A' = true if (A == A') *)
 
 (* main entry point *)
-fun eq_tp' env ctx con seen A A' =
+fun eq_tp' env tpctx ctx con seen A A' =
     ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
-    ; eq_tp env ctx con seen
+    ; eq_tp env tpctx ctx con seen
             (aggregate_nexts env ctx con A)
             (aggregate_nexts env ctx con A')
     )
 
-and eq_tp env ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
-    eq_choice env ctx con seen choice choice'
-  | eq_tp env ctx con seen (A.With(choice)) (A.With(choice')) =
-    eq_choice env ctx con seen choice choice'
+and eq_tp env tpctx ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
+    eq_choice env tpctx ctx con seen choice choice'
+  | eq_tp env tpctx ctx con seen (A.With(choice)) (A.With(choice')) =
+    eq_choice env tpctx ctx con seen choice choice'
   
-  | eq_tp env ctx con seen (A.Tensor(A,B)) (A.Tensor(A',B')) =
-    eq_tp' env ctx con seen A A'
-    andalso eq_tp' env ctx con seen B B'
-  | eq_tp env ctx con seen (A.Lolli(A,B)) (A.Lolli(A',B')) =
-    eq_tp' env ctx con seen A A'
-    andalso eq_tp' env ctx con seen B B'
+  | eq_tp env tpctx ctx con seen (A.Tensor(A,B)) (A.Tensor(A',B')) =
+    eq_tp' env tpctx ctx con seen A A'
+    andalso eq_tp' env tpctx ctx con seen B B'
+  | eq_tp env tpctx ctx con seen (A.Lolli(A,B)) (A.Lolli(A',B')) =
+    eq_tp' env tpctx ctx con seen A A'
+    andalso eq_tp' env tpctx ctx con seen B B'
 
-  | eq_tp env ctx con seen (A.One) (A.One) = true
+  | eq_tp env tpctx ctx con seen (A.One) (A.One) = true
 
-  | eq_tp env ctx con seen (A.Exists(phi,A)) (A.Exists(phi',A')) =
+  | eq_tp env tpctx ctx con seen (A.Exists(phi,A)) (A.Exists(phi',A')) =
     C.equiv ctx con phi phi'
-    andalso eq_tp' env ctx (R.And(con,phi)) seen A A'
+    andalso eq_tp' env tpctx ctx (R.And(con,phi)) seen A A'
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
-  | eq_tp env ctx con seen (A.Forall(phi,A)) (A.Forall(phi',A')) =
+  | eq_tp env tpctx ctx con seen (A.Forall(phi,A)) (A.Forall(phi',A')) =
     C.equiv ctx con phi phi'
-    andalso eq_tp' env ctx (R.And(con,phi)) seen A A'
+    andalso eq_tp' env tpctx ctx (R.And(con,phi)) seen A A'
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
 
-  | eq_tp env ctx con seen (A.ExistsNat(v,A)) (A.ExistsNat(v',A')) =
-    eq_tp_bind env ctx con seen (v,A) (v',A')
-  | eq_tp env ctx con seen (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
-    eq_tp_bind env ctx con seen (v,A) (v',A')
+  | eq_tp env tpctx ctx con seen (A.ExistsNat(v,A)) (A.ExistsNat(v',A')) =
+    eq_tp_bind env tpctx ctx con seen (v,A) (v',A')
+  | eq_tp env tpctx ctx con seen (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
+    eq_tp_bind env tpctx ctx con seen (v,A) (v',A')
 
-  | eq_tp env ctx con seen (A.ExistsTp(alpha,A)) (A.ExistsTp(alpha',A')) =
-    eq_tp_tpbind env ctx con seen (alpha,A) (alpha',A')
-  | eq_tp env ctx con seen (A.ForallTp(alpha,A)) (A.ForallTp(alpha',A')) =
-    eq_tp_tpbind env ctx con seen (alpha,A) (alpha',A')
+  | eq_tp env tpctx ctx con seen (A.ExistsTp(alpha,A)) (A.ExistsTp(alpha',A')) =
+    eq_tp_tpbind env tpctx ctx con seen (alpha,A) (alpha',A')
+  | eq_tp env tpctx ctx con seen (A.ForallTp(alpha,A)) (A.ForallTp(alpha',A')) =
+    eq_tp_tpbind env tpctx ctx con seen (alpha,A) (alpha',A')
 
-  | eq_tp env ctx con seen (A.PayPot(p,A)) (A.PayPot(p',A')) =
-    eq_id ctx con p p' andalso eq_tp' env ctx con seen A A'
-  | eq_tp env ctx con seen (A.GetPot(p,A)) (A.GetPot(p',A')) = 
-    eq_id ctx con p p' andalso eq_tp' env ctx con seen A A'
+  | eq_tp env tpctx ctx con seen (A.PayPot(p,A)) (A.PayPot(p',A')) =
+    eq_id ctx con p p' andalso eq_tp' env tpctx ctx con seen A A'
+  | eq_tp env tpctx ctx con seen (A.GetPot(p,A)) (A.GetPot(p',A')) = 
+    eq_id ctx con p p' andalso eq_tp' env tpctx ctx con seen A A'
 
-  | eq_tp env ctx con seen (A.Next(t,A)) (A.Next(t',A')) =
-    eq_id ctx con t t' andalso eq_tp' env ctx con seen A A'
-  | eq_tp env ctx con seen (A.Box(A)) (A.Box(A')) =
-    eq_tp' env ctx con seen A A'
-  | eq_tp env ctx con seen (A.Dia(A)) (A.Dia(A')) =
-    eq_tp' env ctx con seen A A'
-  | eq_tp env ctx con seen (A.TpVar(alpha)) (A.TpVar(alpha')) =
+  | eq_tp env tpctx ctx con seen (A.Next(t,A)) (A.Next(t',A')) =
+    eq_id ctx con t t' andalso eq_tp' env tpctx ctx con seen A A'
+  | eq_tp env tpctx ctx con seen (A.Box(A)) (A.Box(A')) =
+    eq_tp' env tpctx ctx con seen A A'
+  | eq_tp env tpctx ctx con seen (A.Dia(A)) (A.Dia(A')) =
+    eq_tp' env tpctx ctx con seen A A'
+  | eq_tp env tpctx ctx con seen (A.TpVar(alpha)) (A.TpVar(alpha')) =
     alpha = alpha'
 
   (* case prior to polymorphism untouched *)
-  | eq_tp env ctx con seen (A as A.TpName(a,nil,es)) (A' as A.TpName(a',nil,es')) =
+  | eq_tp env tpctx ctx con seen (A as A.TpName(a,nil,es)) (A' as A.TpName(a',nil,es')) =
     if a = a'
     (* reflexivity *)
     then case !Flags.equality
-          of Flags.SubsumeRefl => eq_idx ctx con es es' orelse eq_name_name env ctx con seen A A' (* both *)
-           | Flags.Subsume => eq_name_name env ctx con seen A A' (* only coinductive equality *)
+          of Flags.SubsumeRefl => eq_idx ctx con es es' orelse eq_name_name env tpctx ctx con seen A A' (* both *)
+           | Flags.Subsume => eq_name_name env tpctx ctx con seen A A' (* only coinductive equality *)
            | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
-    else eq_name_name env ctx con seen A A' (* coinductive type equality *)
+    else eq_name_name env tpctx ctx con seen A A' (* coinductive type equality *)
 
   (* new case for polymorphism *)
-  | eq_tp env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+  | eq_tp env tpctx ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
     if a = a'
     (* reflexivity *)
-    then eq_tp_list env ctx con seen (tp_def env a) As As' (* only reflexivity here *)
-    else eq_name_name env ctx con seen A A' (* coinductive type equality *)
+    then eq_tp_list env tpctx ctx con seen (tp_def env a) As As' (* only reflexivity here *)
+    else eq_name_name env tpctx ctx con seen A A' (* coinductive type equality *)
 
-  | eq_tp env ctx con seen (A as A.TpName(a,As,es)) A' =
-    eq_tp' env ctx con seen (TU.expd env A) A'
-  | eq_tp env ctx con seen A (A' as A.TpName(a',As',es')) =
-    eq_tp' env ctx con seen A (TU.expd env A')
+  | eq_tp env tpctx ctx con seen (A as A.TpName(a,As,es)) A' =
+    eq_tp' env tpctx ctx con seen (TU.expd env A) A'
+  | eq_tp env tpctx ctx con seen A (A' as A.TpName(a',As',es')) =
+    eq_tp' env tpctx ctx con seen A (TU.expd env A')
 
-  | eq_tp env ctx con seen A A' = false
+  | eq_tp env tpctx ctx con seen A A' = false
 
-(* eq_tp_list env ctx con seen (a, alphas, B) As As'
+(* eq_tp_list env tpctx ctx con seen (a, alphas, B) As As'
  * requires |alphas| = |As| = |As'| and a[alphas]{...} = B
  *)
-and eq_tp_list env ctx con seen (a, nil, B) nil nil = true
-  | eq_tp_list env ctx con seen (a, alpha::alphas, B) (A::As) (A'::As') =
+and eq_tp_list env tpctx ctx con seen (a, nil, B) nil nil = true
+  | eq_tp_list env tpctx ctx con seen (a, alpha::alphas, B) (A::As) (A'::As') =
     ( () (* TextIO.print ("checking args!\n") *)
-    ; eq_tp' env ctx con seen A A'               (* A = A' *)
+    ; eq_tp' env tpctx ctx con seen A A'               (* A = A' *)
      orelse invariant env [(a,alpha)] alpha B)  (* or a[..,alpha,...] = B does not depend on alpha *)
-    andalso eq_tp_list env ctx con seen (a, alphas, B) As As'
+    andalso eq_tp_list env tpctx ctx con seen (a, alphas, B) As As'
 
-and eq_tp_bind env ctx con seen (v,A) (v',A') =
+and eq_tp_bind env tpctx ctx con seen (v,A) (v',A') =
     let val sigma = R.zip ctx (R.create_idx ctx)
         val w = R.fresh_var sigma v
         val wA = A.apply_tp ((v, R.Var(w))::sigma) A
         val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
-    in eq_tp' env (w::ctx) con seen wA wA' end
+    in eq_tp' env tpctx (w::ctx) con seen wA wA' end
 
-and eq_tp_tpbind env ctx con seen (alpha,A) (alpha',A') =
-    (* need better variable name hygiene here!!! *)
-    let val theta = []
-        val beta = alpha (* A.fresh_tpvar theta alpha *)
+and eq_tp_tpbind env tpctx ctx con seen (alpha,A) (alpha',A') =
+    let val theta = ListPair.zipEq (tpctx, List.map A.TpVar tpctx) (* create identity type subst *)
+        val beta = A.fresh_tpvar theta alpha
         val B = A.subst_tp ((alpha, A.TpVar(beta))::theta) A
         val B' = A.subst_tp ((alpha', A.TpVar(beta))::theta) A'
-    in eq_tp' env ctx con seen B B' end
+    in eq_tp' env tpctx ctx con seen B B' end
 
-and eq_choice env ctx con seen ((l,A)::choices) choices' =
+and eq_choice env tpctx ctx con seen ((l,A)::choices) choices' =
     (case A.lookup_choice_rest choices' l
       of NONE => false
-       | SOME(A',choices'') => eq_tp' env ctx con seen A A'
-                               andalso eq_choice env ctx con seen choices choices'')
-  | eq_choice env ctx con seen nil ((l',A')::choices') = false
-  | eq_choice env ctx con seen nil nil = true
+       | SOME(A',choices'') => eq_tp' env tpctx ctx con seen A A'
+                               andalso eq_choice env tpctx ctx con seen choices choices'')
+  | eq_choice env tpctx ctx con seen nil ((l',A')::choices') = false
+  | eq_choice env tpctx ctx con seen nil nil = true
 
-and eq_name_name env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
     case mem_seen env seen a a'
-     of NONE => eq_tp' env ctx con ((ctx,con,(A,A'))::seen)
+     of NONE => eq_tp' env tpctx ctx con ((ctx,con,(A,A'))::seen)
                        (TU.expd env A) (TU.expd env A')
       | SOME(CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES'))) =>
         (* (TextIO.print "found!\n";
             TextIO.print (A.Print.pp_tp W ^ " =!= " ^ A.Print.pp_tp W' ^ "\n") ; *)
-        eq_tp_list env ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
-        andalso eq_tp_list env ctx con seen (tp_def env a') As' AS'
+        eq_tp_list env tpctx ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
+        andalso eq_tp_list env tpctx ctx con seen (tp_def env a') As' AS'
          (* As = AS andalso As' = AS' *)
         andalso let val (FCTX,sigma) = gen_fresh CTX
                     val FCON = R.apply_prop sigma CON
@@ -307,6 +306,6 @@ and eq_name_name env ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As
 
 (* interface *)
 (* start algorithm with seen = nil *)
-fun eq_tp env ctx con A B = eq_tp' env ctx con nil A B
+fun eq_tp env tpctx ctx con A B = eq_tp' env tpctx ctx con nil A B
 
 end  (* structure TypeEquality *)

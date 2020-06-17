@@ -11,7 +11,7 @@ signature RECON =
 sig
 
     (* recon env ctx con D pot P (z:C) ext = P' *)
-    val recon : Ast.env -> Arith.ctx -> Arith.prop
+    val recon : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop
                 -> Ast.context -> Ast.pot -> Ast.exp -> Ast.chan_tp -> Ast.ext
                 -> Ast.exp
 

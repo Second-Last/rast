@@ -80,16 +80,16 @@ fun pp_costs () =
     ^ "--time=" ^ Flags.pp_cost (!Flags.time)
 
 (* quantifier reconstruction: first do approximate type checking *)
-fun qrecon env ctx con A pot P C ext =
-    let val P' = AR.recon env ctx con A pot P C ext (* P' = P *)
-        val P'' = QR.recon env ctx con A pot P' C ext
+fun qrecon env tpctx ctx con A pot P C ext =
+    let val P' = AR.recon env tpctx ctx con A pot P C ext (* P' = P *)
+        val P'' = QR.recon env tpctx ctx con A pot P' C ext
     in P'' end
 
 (* work reconstruction: first do quantifier reconstruction *)
-fun wrecon env ctx con A pot P C ext =
-    let val P = qrecon env ctx con A pot P C ext
+fun wrecon env tpctx ctx con A pot P C ext =
+    let val P = qrecon env tpctx ctx con A pot P C ext
         val P = Cost.apply_cost_work P
-        val P = WR.recon env ctx con A pot P C ext
+        val P = WR.recon env tpctx ctx con A pot P C ext
     in P end
 
 (* reconstruct syntax work time A pot P C ext = P'
@@ -99,10 +99,10 @@ fun wrecon env ctx con A pot P C ext =
  * of 'work' and 'time' (None: don't, otherwise do)
  * We assume the cost model has already been applied
  *)
-fun reconstruct Flags.Explicit _          _          env ctx con A pot P C ext = Cost.apply_cost_model P
-  | reconstruct Flags.Implicit Flags.None Flags.None env ctx con A pot P C ext = qrecon env ctx con A pot P C ext
-  | reconstruct Flags.Implicit _          Flags.None env ctx con A pot P C ext = wrecon env ctx con A pot P C ext
-  | reconstruct Flags.Implicit _          _          env ctx con A pot P C ext = ERROR ext ("only explicit syntax allowed")
+fun reconstruct Flags.Explicit _          _          env tpctx ctx con A pot P C ext = Cost.apply_cost_model P
+  | reconstruct Flags.Implicit Flags.None Flags.None env tpctx ctx con A pot P C ext = qrecon env tpctx ctx con A pot P C ext
+  | reconstruct Flags.Implicit _          Flags.None env tpctx ctx con A pot P C ext = wrecon env tpctx ctx con A pot P C ext
+  | reconstruct Flags.Implicit _          _          env tpctx ctx con A pot P C ext = ERROR ext ("only explicit syntax allowed")
 
 (* dups vs = true if there is a duplicate variable in vs *)
 fun dups (nil:R.varname list) = false
@@ -426,7 +426,7 @@ and elab_exps env nil = nil
     let
         val B = A.expd_tp env (a,As,es)
         val B' = A.expd_tp env (a',As',es')
-        val () = if TEQ.eq_tp env ctx con B B'
+        val () = if TEQ.eq_tp env [] ctx con B B' (* allow assertion of type equalities!!! *)
                  then ()
                  else ERROR ext ("type " ^ PP.pp_tp env A ^ " not equal " ^ PP.pp_tp env A')
     in 
@@ -459,7 +459,7 @@ and elab_exps env nil = nil
              (* cost model now applied during reconstruction *)
              val trecon_init = Time.toMicroseconds (Time.now ())
              (* reconstruction will insert assert, assume, pay, get, work *)
-             val P'' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env vs con D pot P' zC ext
+             val P'' = reconstruct (!Flags.syntax) (!Flags.work) (!Flags.time) env alphas vs con D pot P' zC ext
              val trecon_final = Time.toMicroseconds (Time.now ())
              val trecon = trecon_final - trecon_init
              val () = recon_time := !recon_time + trecon
@@ -477,12 +477,12 @@ and elab_exps env nil = nil
              (* is necessary for implicit syntax, since reconstruction is approximate *)
              val tc_init = Time.toMicroseconds (Time.now ())
              (* type check now *)
-             val () = TC.check_exp false env vs con D pot P'' zC ext (* type check *)
+             val () = TC.check_exp false env alphas vs con D pot P'' zC ext (* type check *)
                  handle ErrorMsg.Error =>
                         (* if verbosity >= 2, type-check again, this time with tracing *)
                         if !Flags.verbosity >= 2
                         then ( TextIO.print ("% tracing type checking...\n")
-                             ; TC.check_exp true env vs con D pot P'' zC ext ) (* will re-raise ErrorMsg.Error *)
+                             ; TC.check_exp true env alphas vs con D pot P'' zC ext ) (* will re-raise ErrorMsg.Error *)
                         else raise ErrorMsg.Error (* re-raise if not in verbose mode *)
              val tc_final = Time.toMicroseconds (Time.now ())
              val tc = tc_final - tc_init

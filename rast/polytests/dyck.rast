@@ -1,10 +1,11 @@
 #test success
 
-type D[x] = +{ L : D[D[x]],
-               R : x }
-
+% S is the language of balanced parentheses 'L' and 'R'
 type S = +{ L : D[S],
             $ : 1}
+
+type D[x] = +{ L : D[D[x]],
+               R : x }
 
 % constructors
 decl LD[x] : (d : D[D[x]]) |- (c : D[x])
@@ -33,8 +34,8 @@ decl serialize[x] : (t : tree) (k : x) |- (c : D[x])
 proc c <- serialize[x] t k =
   case t ( leaf => wait t ; c.R ; c <-> k
          | node => c.L ;
-                   l <- recv t ; % t = r, l : tree, t : tree, k : x |- c : D[D[x]]
-                   d <- serialize[x] t k ;  % l : tree, d : D[x] |- c : D[D[x]]
+                   l <- recv t ;              % (l : tree) (t : tree) (k : x) |- c : D[D[x]]
+                   d <- serialize[x] t k ;    % (l : tree) (d : D[x]) |- (c : D[D[x]])
                    c <- serialize[D[x]] l d )
                    
 proc tk <- deserialize[x] c =
