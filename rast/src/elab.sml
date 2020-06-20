@@ -357,7 +357,7 @@ fun elab_tps env nil = nil
     in
          tp_defs @ elab_tps env decls
     end
-  | elab_tps env ((decl as A.TpEq([],con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'),ext))::decls) =
+  | elab_tps env ((decl as A.TpEq([],[],con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'),ext))::decls) =
     (* variables are implicitly quantified; collect here *)
     (* because we have not yet elaborated type definitions
      * we cannot check the equality here; wait for the second pass
@@ -368,12 +368,14 @@ fun elab_tps env nil = nil
         val () = if !Flags.verbosity >= 1
                  then TextIO.print (postponed decl ^ PP.pp_decl env decl ^ "\n")
                  else ()
+        val tpctx0 = A.free_tpvars [] A
+        val tpctx1 = A.free_tpvars tpctx0 A'
         val ctx0 = R.free_prop con nil (* always nil, in current syntax *)
         val ctx1 = R.free_varlist es ctx0
         val ctx2 = R.free_varlist es' ctx1
         val () = TV.valid env [] ctx2 con A ext
         val () = TV.valid env [] ctx2 con A' ext
-        val decl' = A.TpEq(ctx2,con,A,A',ext)
+        val decl' = A.TpEq(tpctx1,ctx2,con,A,A',ext)
     in
         decl'::elab_tps env decls
     end
@@ -421,7 +423,7 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.TpDef _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
-  | elab_exps env ((decl as A.TpEq(ctx,con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'), ext))::decls) =
+  | elab_exps env ((decl as A.TpEq([],ctx,con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'), ext))::decls) =
     (* already checked validity during first pass; now check type equality *)
     let
         val B = A.expd_tp env (a,As,es)
@@ -432,6 +434,8 @@ and elab_exps env nil = nil
     in 
         decl::elab_exps' env decls
     end
+  | elab_exps env ((decl as A.TpEq(tpctx,ctx,con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'), ext))::decls) =
+    ERROR ext ("type variable in type equality declarations not yet supported")
   | elab_exps env ((decl as A.ExpDec _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls

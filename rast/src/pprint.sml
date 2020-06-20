@@ -408,7 +408,7 @@ fun pp_decl env (A.TpDef(a,alphas,vs,R.True,A,_)) =
     pp_tp_after 0 ("type " ^ a ^ P.pp_alphas alphas ^ P.pp_vars vs ^ " = ") (ext_tp env A)
   | pp_decl env (A.TpDef(a,alphas,vs,con,A,_)) =
     pp_tp_after 0 ("type " ^ a ^ P.pp_alphas alphas ^ P.pp_vars vs ^ P.pp_con con ^ " = ") (ext_tp env A)
-  | pp_decl env (A.TpEq(ctx,con,A.TpName(a,As,es),A.TpName(a',As',es'),_)) =
+  | pp_decl env (A.TpEq(tpctx,ctx,con,A.TpName(a,As,es),A.TpName(a',As',es'),_)) =
     "eqtype " ^ a ^ pp_tps env As ^ pp_idx es ^ " = " ^ a' ^ pp_tps env As' ^ pp_idx es'
   | pp_decl env (A.ExpDec(f,alphas,vs,con,(D,pot,zC),_)) =
     "decl " ^ f ^ P.pp_alphas alphas ^ P.pp_vars vs ^ P.pp_con con ^ " : "

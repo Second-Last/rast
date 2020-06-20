@@ -100,7 +100,7 @@ type branches = (label * ext * exp) list             (* (l1 => P1 | ... | ln => 
 datatype decl =
          Pragma of string * string * ext                     (* #options, #test *)
        | TpDef of tpname * tp_ctx * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
-       | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a{..} = b{..} *)
+       | TpEq of tp_ctx * Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a[..]{..} = b[..]{..} *)
        | ExpDec of expname * tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
                                                              (* decl f{..} : Delta |{p}- (z : C) *)
        | ExpDef of expname * tp_ctx * Arith.ctx * (chan list * exp * chan) * ext
@@ -121,6 +121,8 @@ val subst_tp : tp_subst -> tp -> tp                (* [theta]A *)
 val subst_exp : tp_subst -> exp -> exp             (* [theta]P *)
 val subst_chan_tp : tp_subst -> chan_tp -> chan_tp (* [theta](x:A) *)
 val subst_context : tp_subst -> context -> context (* [theta]Delta *)
+
+val free_tpvars : tp_ctx -> tp -> tp_ctx
 val fresh_tpvar : tp_subst -> tpvarname -> tpvarname
 
 (* Environment lookup *)
@@ -255,7 +257,7 @@ type branches = (label * ext * exp) list       (* (l1 => P1 | ... | ln => Pn) *)
 datatype decl =
          Pragma of string * string * ext                     (* #options, #test *)
        | TpDef of tpname * tp_ctx * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
-       | TpEq of Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a{..} = b{..} *)
+       | TpEq of tp_ctx * Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a[..]{..} = b[..]{..} *)
        | ExpDec of expname * tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
                                                              (* decl f{..} : Delta |{p}- (z : C) *)
        | ExpDef of expname * tp_ctx * Arith.ctx * (chan list * exp * chan) * ext
@@ -616,7 +618,7 @@ fun pp_context nil = "."
 
 fun pp_decl (TpDef(a,alphas,vs,R.True,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ " = " ^ pp_tp A
   | pp_decl (TpDef(a,alphas,vs,con,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
-  | pp_decl (TpEq(ctx,con,TpName(a,As,es),TpName(a',As',es'),_)) = "eqtype " ^ a ^ pp_tps As ^ pp_idx es ^ " = " ^ a' ^ pp_tps As' ^ pp_idx es'
+  | pp_decl (TpEq(tpctx,ctx,con,TpName(a,As,es),TpName(a',As',es'),_)) = "eqtype " ^ a ^ pp_tps As ^ pp_idx es ^ " = " ^ a' ^ pp_tps As' ^ pp_idx es'
   | pp_decl (ExpDec(f,alphas,vs,con,(D,pot,zC),_)) = "decl " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
   | pp_decl (ExpDef(f,alphas,vs,(xs,P,x),_)) = "proc " ^ x ^ " <- " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ " " ^ pp_chanlist xs ^ " = " ^ pp_exp P
   | pp_decl (Exec(f,_)) = "exec " ^ f

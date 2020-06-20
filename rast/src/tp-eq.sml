@@ -96,7 +96,6 @@ fun eq_idx ctx con nil nil = true
 (* Structural equality *)
 
 (* mem_env env a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in env *)
-(* still need to generalize for type arguments *)
 fun mem_env (A.TpEq(TPCTX,CTX,CON,A as A.TpName(B,AS,ES),A' as A.TpName(B',AS',ES'),_)::env) a a' =
     if B = a andalso B' = a'
     then SOME(TPCTX,CTX,CON,(A,A'))
@@ -168,6 +167,146 @@ fun aggregate_nexts' env ctx con s (A.Next(t,A')) =
 fun aggregate_nexts env ctx con (A as A.Next(t,A')) =
     aggregate_nexts' env ctx con t A'
   | aggregate_nexts env ctx con A = A
+
+(* match_tp env exvars tpctx ctx con seen theta A A' = theta'
+ * if theta' extends theta and [theta']A === [theta']A'
+ * where === is syntactic equality
+ *)
+
+fun not_free_in betas A =
+    let val alphas = A.free_tpvars nil A
+    in List.all (fn beta => not (List.exists (fn alpha => alpha = beta) alphas)) betas end
+
+(* main entry point *)
+fun match_tp' env tpctx exvars locals ctx con theta A A' =
+    ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
+    ; match_tp env tpctx exvars locals ctx con theta
+            (aggregate_nexts env ctx con A)
+            (aggregate_nexts env ctx con A')
+    )
+
+and match_tp env tpctx exvars locals ctx con theta (A.Plus(choice)) (A.Plus(choice')) =
+    match_choice env tpctx exvars locals ctx con theta choice choice'
+  | match_tp env tpctx exvars locals ctx con theta (A.With(choice)) (A.With(choice')) =
+    match_choice env tpctx exvars locals ctx con theta choice choice'
+  
+  | match_tp env tpctx exvars locals ctx con theta (A.Tensor(A,B)) (A.Tensor(A',B')) =
+    (case match_tp' env tpctx exvars locals ctx con theta A A'
+      of NONE => NONE
+       | SOME(theta1) => match_tp' env tpctx exvars locals ctx con theta1 B B')
+  | match_tp env tpctx exvars locals ctx con theta (A.Lolli(A,B)) (A.Lolli(A',B')) =
+    (case match_tp' env tpctx exvars locals ctx con theta A A'
+      of NONE => NONE
+       | SOME(theta1) => match_tp' env tpctx exvars locals ctx con theta1 B B')
+
+  | match_tp env tpctx exvars locals ctx con theta (A.One) (A.One) = SOME(theta)
+
+  | match_tp env tpctx exvars locals ctx con theta (A.Exists(phi,A)) (A.Exists(phi',A')) =
+    if C.equiv ctx con phi phi'
+    then match_tp' env tpctx exvars locals ctx (R.And(con,phi)) theta A A'
+    else NONE
+  | match_tp env tpctx exvars locals ctx con theta (A.Forall(phi,A)) (A.Forall(phi',A')) =
+    if C.equiv ctx con phi phi'
+    then match_tp' env tpctx exvars locals ctx (R.And(con,phi)) theta A A'
+    else NONE
+
+  | match_tp env tpctx exvars locals ctx con theta (A.ExistsNat(v,A)) (A.ExistsNat(v',A')) =
+    match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A')
+  | match_tp env tpctx exvars locals ctx con theta (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
+    match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A')
+
+  | match_tp env tpctx exvars locals ctx con theta (A.ExistsTp(alpha,A)) (A.ExistsTp(alpha',A')) =
+    match_tp_tpbind env tpctx exvars locals ctx con theta (alpha,A) (alpha',A')
+  | match_tp env tpctx exvars locals ctx con theta (A.ForallTp(alpha,A)) (A.ForallTp(alpha',A')) =
+    match_tp_tpbind env tpctx exvars locals ctx con theta (alpha,A) (alpha',A')
+
+  | match_tp env tpctx exvars locals ctx con theta (A.PayPot(p,A)) (A.PayPot(p',A')) =
+    if eq_id ctx con p p'
+    then match_tp' env tpctx exvars locals ctx con theta A A'
+    else NONE
+  | match_tp env tpctx exvars locals ctx con theta (A.GetPot(p,A)) (A.GetPot(p',A')) = 
+    if eq_id ctx con p p'
+    then match_tp' env tpctx exvars locals ctx con theta A A'
+    else NONE
+
+  | match_tp env tpctx exvars locals ctx con theta (A.Next(t,A)) (A.Next(t',A')) =
+    if eq_id ctx con t t'
+    then match_tp' env tpctx exvars locals ctx con theta A A'
+    else NONE
+  | match_tp env tpctx exvars locals ctx con theta (A.Box(A)) (A.Box(A')) =
+    match_tp' env tpctx exvars locals ctx con theta A A'
+  | match_tp env tpctx exvars locals ctx con theta (A.Dia(A)) (A.Dia(A')) =
+    match_tp' env tpctx exvars locals ctx con theta A A'
+    
+  | match_tp env tpctx exvars locals ctx con theta (A.TpVar(alpha)) A' =
+    if List.exists (fn beta => beta = alpha) exvars
+    then (* alpha is subject to instantiation! *)
+        case List.find (fn (beta,B) => beta = alpha) theta
+         of NONE => if not_free_in locals A'
+                    then SOME((alpha,A')::theta)
+                    else NONE
+          | SOME(beta,B) => (* B = A' required, no further instantiation for matching *)
+            (* B should not depend on locals, but A' might *)
+            (case match_tp env tpctx [] locals ctx con [] B A'
+              of NONE => NONE
+               | SOME [] => SOME(theta)
+            (* SOME(_::_) should be impossible *)
+            )
+    else (* alpha is not subject to instantiation! *)
+        (* this means it should be in locals or tpctx *)
+        if List.exists (fn beta => beta = alpha) (tpctx @ locals)
+        then (case A'
+               of A.TpVar(alpha') => if alpha = alpha' then SOME(theta) else NONE
+                | _ => NONE)
+        else raise Match (* this should be impossible *)
+
+  | match_tp env tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+    if a = a' andalso eq_idx ctx con es es'
+    then match_tp_list env tpctx exvars locals ctx con theta (tp_def env a) As As'
+    else NONE
+
+  | match_tp env tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) A' =
+    match_tp' env tpctx exvars locals ctx con theta (TU.expd env A) A'
+  | match_tp env tpctx exvars locals ctx con theta A (A' as A.TpName(a',As',es')) =
+    match_tp' env tpctx exvars locals ctx con theta A (TU.expd env A')
+
+  | match_tp env tpctx exvars locals ctx con theta A A' = NONE
+
+(* match_tp_list env tpctx exvars locals ctx con theta (a, alphas, B) As As'
+ * requires |alphas| = |As| = |As'| and a[alphas]{...} = B
+ *)
+and match_tp_list env tpctx exvars locals ctx con theta (a, nil, B) nil nil = SOME(theta)
+  | match_tp_list env tpctx exvars locals ctx con theta (a, alpha::alphas, B) (A::As) (A'::As') =
+    (if invariant env [(a,alpha)] alpha B
+     then match_tp_list env tpctx exvars locals ctx con theta (a, alphas, B) As As'
+     else case match_tp' env tpctx exvars locals ctx con theta A A'
+           of NONE => NONE
+            | SOME(theta1) => match_tp_list env tpctx exvars locals ctx con theta1 (a, alphas, B) As As')
+
+and match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A') =
+    let val sigma = R.zip ctx (R.create_idx ctx)
+        val w = R.fresh_var sigma v
+        val wA = A.apply_tp ((v, R.Var(w))::sigma) A
+        val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
+    in match_tp' env tpctx exvars locals (w::ctx) con theta wA wA' end
+
+and match_tp_tpbind env tpctx exvars locals ctx con theta (alpha,A) (alpha',A') =
+    let val allVars = tpctx @ exvars @ locals
+        val dummy = ListPair.zipEq (allVars, List.map A.TpVar allVars)
+        val beta = A.fresh_tpvar dummy alpha
+        val B = A.subst_tp [(alpha, A.TpVar(beta))] A
+        val B' = A.subst_tp [(alpha', A.TpVar(beta))] A'
+    in match_tp' env tpctx exvars (beta::locals) ctx con theta B B' end
+
+and match_choice env tpctx exvars locals ctx con theta ((l,A)::choices) choices' =
+    (case A.lookup_choice_rest choices' l
+      of NONE => NONE
+       | SOME(A',choices'') =>
+         case match_tp' env tpctx exvars locals ctx con theta A A'
+          of NONE => NONE
+           | SOME(theta1) => match_choice env tpctx exvars locals ctx con theta1 choices choices'')
+  | match_choice env tpctx exvars locals ctx con theta nil ((l',A')::choices') = NONE
+  | match_choice env tpctx exvars locals ctx con theta nil nil = SOME(theta)
 
 (* eq_tp' env con seen A A' = true if (A == A') *)
 
@@ -274,7 +413,7 @@ and eq_tp_tpbind env tpctx ctx con seen (alpha,A) (alpha',A') =
         val beta = A.fresh_tpvar theta alpha
         val B = A.subst_tp ((alpha, A.TpVar(beta))::theta) A
         val B' = A.subst_tp ((alpha', A.TpVar(beta))::theta) A'
-    in eq_tp' env tpctx ctx con seen B B' end
+    in eq_tp' env (beta::tpctx) ctx con seen B B' end
 
 and eq_choice env tpctx ctx con seen ((l,A)::choices) choices' =
     (case A.lookup_choice_rest choices' l
@@ -291,10 +430,18 @@ and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName
       | SOME(TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES'))) =>
         (* (TextIO.print "found!\n";
             TextIO.print (A.Print.pp_tp W ^ " =!= " ^ A.Print.pp_tp W' ^ "\n") ; *)
-        eq_tp_list env tpctx ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
+        (* eq_tp_list env tpctx ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
         andalso eq_tp_list env tpctx ctx con seen (tp_def env a') As' AS'
+         *)
+        (* now there are binders, so we check for substitution instances *)
+        (* !!! use of ctx and con here is suspicious/wrong !!! *)
+        (case match_tp_list env tpctx TPCTX [] ctx con [] (tp_def env a) AS As
+          of NONE => false
+           | SOME(theta1) => case match_tp_list env tpctx TPCTX [] ctx con theta1 (tp_def env a') AS' As'
+                              of NONE => false
+                               | SOME(theta2) => 
          (* As = AS andalso As' = AS' *)
-        andalso let val (FCTX,sigma) = gen_fresh CTX
+                let val (FCTX,sigma) = gen_fresh CTX
                     val FCON = R.apply_prop sigma CON
                     val FES = R.apply_list sigma ES
                     val FES' = R.apply_list sigma ES'
@@ -302,7 +449,7 @@ and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName
                     val result = C.entails ctx con phi (* could be trusting non-linear *)
                 in
                     result
-                end
+                end)
 
 (* interface *)
 (* start algorithm with seen = nil *)
