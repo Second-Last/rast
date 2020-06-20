@@ -95,25 +95,25 @@ fun eq_idx ctx con nil nil = true
 
 (* Structural equality *)
 
-(* mem_env env a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in env *)
+(* mem_env env a a' => [TPCTX1,CTX1,CON1,TpName(a,As1,es1),TpName(a',As1',es1'),...] *)
 fun mem_env (A.TpEq(TPCTX,CTX,CON,A as A.TpName(B,AS,ES),A' as A.TpName(B',AS',ES'),_)::env) a a' =
     if B = a andalso B' = a'
-    then SOME(TPCTX,CTX,CON,(A,A'))
+    then (TPCTX,CTX,CON,(A,A'))::mem_env env a a'
     else if B = a' andalso B' = a
-    then SOME(TPCTX,CTX,CON,(A',A))   (* flip! *)
+    then (TPCTX,CTX,CON,(A',A))::mem_env env a a'   (* flip! *)
     else mem_env env a a'
   | mem_env (_::env) a a' = mem_env env a a'
-  | mem_env nil a a' = NONE
+  | mem_env nil a a' = nil
 
-(* mem_env env seen a a' => SOME(TPCTX,CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in seen *)
+(* mem_env env seen a a' => [TPCTX1,CTX1,CON1,TpName(a,As1,es1),TpName(a',As1',es1'),...] *)
 fun mem_seen env ((E as (TPCTX,CTX,CON,(A as A.TpName(B,AS,ES), A' as A.TpName(B',AS',ES'))))::seen) a a' =
     if B = a andalso B' = a'
-    then SOME(TPCTX,CTX,CON,(A,A'))
+    then (TPCTX,CTX,CON,(A,A'))::mem_seen env seen a a'
     else if B = a' andalso B' = a
-    then SOME(TPCTX,CTX,CON,(A',A))
+    then (TPCTX,CTX,CON,(A',A))::mem_seen env seen a a'
     else mem_seen env seen a a'
   | mem_seen env (_::seen) a a' = mem_seen env seen a a'
-  | mem_seen env nil a a' = mem_env env a a'
+  | mem_seen env nil a a' = nil
 
 (* fresh internal name generation, in the arithmetic layer *)
 fun fresh v = "%" ^ v
@@ -424,32 +424,38 @@ and eq_choice env tpctx ctx con seen ((l,A)::choices) choices' =
   | eq_choice env tpctx ctx con seen nil nil = true
 
 and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
-    case mem_seen env seen a a'
-     of NONE => eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,A'))::seen)
-                       (TU.expd env A) (TU.expd env A')
-      | SOME(TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES'))) =>
-        (* (TextIO.print "found!\n";
-            TextIO.print (A.Print.pp_tp W ^ " =!= " ^ A.Print.pp_tp W' ^ "\n") ; *)
-        (* eq_tp_list env tpctx ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
-        andalso eq_tp_list env tpctx ctx con seen (tp_def env a') As' AS'
-         *)
-        (* now there are binders, so we check for substitution instances *)
-        (* !!! use of ctx and con here is suspicious/wrong !!! *)
-        (case match_tp_list env tpctx TPCTX [] ctx con [] (tp_def env a) AS As
-          of NONE => false
-           | SOME(theta1) => case match_tp_list env tpctx TPCTX [] ctx con theta1 (tp_def env a') AS' As'
-                              of NONE => false
-                               | SOME(theta2) => 
-         (* As = AS andalso As' = AS' *)
-                let val (FCTX,sigma) = gen_fresh CTX
-                    val FCON = R.apply_prop sigma CON
-                    val FES = R.apply_list sigma ES
-                    val FES' = R.apply_list sigma ES'
-                    val phi = gen_prop_eq FCTX FCON FES es FES' es'
-                    val result = C.entails ctx con phi (* could be trusting non-linear *)
-                in
-                    result
-                end)
+    eq_name_name_seen env tpctx ctx con seen (mem_seen env seen a a') A A'
+and eq_name_name_seen env tpctx ctx con seen nil (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+    eq_name_name_eqs env tpctx ctx con seen (mem_env env a a') A A' (* an instance of global eq decls *)
+    orelse eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,A'))::seen) (* or a local equality loop *)
+                  (TU.expd env A) (TU.expd env A')
+  | eq_name_name_seen env tpctx ctx con seen seen_eqs (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+    (* seen_eqs <> nil, so don't add another equality to help termination issues *)
+    eq_name_name_eqs env tpctx ctx con seen (seen_eqs @ mem_env env a a') A A'
+and eq_name_name_eqs env tpctx ctx con seen nil A A' = false (* do not recurse *)
+  | eq_name_name_eqs env tpctx ctx con seen
+                     ((TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES')))::eqs)
+                     (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+    (* eq_tp_list env tpctx ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
+     andalso eq_tp_list env tpctx ctx con seen (tp_def env a') As' AS'
+     *)
+    (* now there are binders, so we check for substitution instances *)
+    (* !!! use of ctx and con here is suspicious/wrong !!! *)
+    (case match_tp_list env tpctx TPCTX [] ctx con [] (tp_def env a) AS As
+      of NONE => eq_name_name_eqs env tpctx ctx con seen eqs A A'
+       | SOME(theta1) => case match_tp_list env tpctx TPCTX [] ctx con theta1 (tp_def env a') AS' As'
+                          of NONE => eq_name_name_eqs env tpctx ctx con seen eqs A A'
+                           | SOME(theta2) => 
+                             (* As = AS andalso As' = AS' *)
+                             let val (FCTX,sigma) = gen_fresh CTX
+                                 val FCON = R.apply_prop sigma CON
+                                 val FES = R.apply_list sigma ES
+                                 val FES' = R.apply_list sigma ES'
+                                 val phi = gen_prop_eq FCTX FCON FES es FES' es'
+                                 val result = C.entails ctx con phi (* could be trusting non-linear *)
+                             in
+                                 result orelse eq_name_name_eqs env tpctx ctx con seen eqs A A'
+                             end)
 
 (* interface *)
 (* start algorithm with seen = nil *)
