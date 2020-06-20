@@ -1,0 +1,64 @@
+#test success
+
+type list[A] = +{nil : 1, cons : A * list[A]}
+type nest[A] = +{nil : 1, cons : A * nest[A * A]}
+
+type list'[A] = +{nil : 1, cons : A * list'[A]}
+type nest'[A] = +{nil : 1, cons : A * nest'[A * A]}
+
+decl id1[A] : (l : list[A]) |- (k : list[A])
+decl id2[A] : (l : list[A]) |- (k : list'[A])
+decl id3[A] : (l : list'[A]) |- (k : list[A])
+decl id4[A] : (l : list'[A]) |- (k : list'[A])
+
+proc k <- id1[A] l = k <-> l
+proc k <- id2[A] l = k <-> l
+proc k <- id3[A] l = k <-> l
+proc k <- id4[A] l = k <-> l
+
+decl id5 : (l : list[1]) |- (k : list[1])
+decl id6 : (l : list[1]) |- (k : list'[1])
+decl id7 : (l : list'[1]) |- (k : list[1])
+decl id8 : (l : list'[1]) |- (k : list'[1])
+
+proc k <- id5 l = k <-> l
+proc k <- id6 l = k <-> l
+proc k <- id7 l = k <-> l
+proc k <- id8 l = k <-> l
+
+% nested type equality seems to fail iff both outer
+% and inner constructor are renamings of each other
+
+decl id09[A] : (l : list[list[A]]) |- (k : list[list[A]])
+decl id10[A] : (l : list[list[A]]) |- (k : list[list'[A]])
+decl id11[A] : (l : list[list[A]]) |- (k : list'[list[A]])
+decl id12[A] : (l : list[list[A]]) |- (k : list'[list'[A]])  % fails
+decl id13[A] : (l : list[list'[A]]) |- (k : list[list[A]])
+decl id14[A] : (l : list[list'[A]]) |- (k : list[list'[A]])
+decl id15[A] : (l : list[list'[A]]) |- (k : list'[list[A]])  % fails
+decl id16[A] : (l : list[list'[A]]) |- (k : list'[list'[A]])
+decl id17[A] : (l : list'[list[A]]) |- (k : list[list[A]])
+decl id18[A] : (l : list'[list[A]]) |- (k : list[list'[A]])  % fails
+decl id19[A] : (l : list'[list[A]]) |- (k : list'[list[A]])
+decl id20[A] : (l : list'[list[A]]) |- (k : list'[list'[A]])
+decl id21[A] : (l : list'[list'[A]]) |- (k : list[list[A]])  % fails
+decl id22[A] : (l : list'[list'[A]]) |- (k : list[list'[A]])
+decl id23[A] : (l : list'[list'[A]]) |- (k : list'[list[A]])
+decl id24[A] : (l : list'[list'[A]]) |- (k : list'[list'[A]])
+
+proc k <- id09[A] l = k <-> l
+proc k <- id10[A] l = k <-> l
+proc k <- id11[A] l = k <-> l
+% proc k <- id12[A] l = k <-> l
+proc k <- id13[A] l = k <-> l
+proc k <- id14[A] l = k <-> l
+% proc k <- id15[A] l = k <-> l
+proc k <- id16[A] l = k <-> l
+proc k <- id17[A] l = k <-> l
+% proc k <- id18[A] l = k <-> l
+proc k <- id19[A] l = k <-> l
+proc k <- id20[A] l = k <-> l
+% proc k <- id21[A] l = k <-> l
+proc k <- id22[A] l = k <-> l
+proc k <- id23[A] l = k <-> l
+proc k <- id24[A] l = k <-> l
