@@ -1,0 +1,73 @@
+decl P : . |- (w : E)
+proc w <- P =          % . |- (w : D)
+  w.L1 ;               % . |- (w : T[D])
+  w.L1 ;               % . |- (w : T[T[D]])
+  w.R1 ;               % . |- (w : T[D])
+  w.R1 ;               % . |- (w : D)
+  w.$ ;                % . |- (w : 1)
+  close w
+
+decl P' : . |- (w : E)
+proc w <- P' =          % . |- (w : D)
+  w.L1 ;               % . |- (w : T[D])
+  w.L1 ;               % . |- (w : T[T[D]])
+  w.R1 ;               % . |- (w : T[D])
+  w.R1 ;               % . |- (w : D)
+  w.$ ;                % . |- (w : 1)
+  close w
+
+type T1[x] = +{L1 : T1[T1[x]], L2 : T2[T1[x]], R1 : x}
+
+type T2[x] = +{L1 : T1[T2[x]], L2 : T2[T2[x]], R2 : x}
+
+type E = +{L1 : T1[E], L2 : T2[E], $ : 1}
+
+decl Q : . |- (w : E)
+proc w <- Q =
+  w.L1 ;
+  w.L2 ;
+  w.R2 ;
+  w.R1 ;
+  w.$ ;
+  close w
+
+type T[x] = +{L : T[T[x]], R : x}
+type D = +{L : T[D], $ : 1}
+
+type tree = +{ leaf : 1, node : tree * tree * 1 }
+
+% constructors
+decl leaf : . |- (t : tree)
+decl node : (l : tree) (r : tree) |- (t : tree)
+
+proc t <- leaf = t.leaf ; close t
+proc t <- node l r = t.node ; send t l ; send t r ; close t
+
+% serializing and deserializing
+decl deserialize[x] : (c : T[x]) |- (t : tree * x)
+decl serialize[x] : (t : tree) (k : x) |- (c : T[x])
+
+proc c <- serialize[x] t k =
+  case t ( leaf => wait t ;                     % (k : x) |- (c : T[x]) 
+                   c.R ;                        % (k : x) |- (c : x)
+                   c <-> k
+         | node => l <- recv t ;                % (t : tree * 1) (l : tree) (k : x) |- (c : T[x])
+                   r <- recv t ;                % (t : 1) (l : tree) (r : tree) (k : x) |- (c : T[x])
+                   wait t ;                     % (l : tree) (r : tree) (k : x) |- (c : T[x])
+                   c.L ;                        % (l : tree) (r : tree) (k : x) |- (c : T[T[x]])
+                   d <- serialize[x] r k ;      % (l : tree) (d : T[x]) |- c : T[T[x]]
+                   c <- serialize[T[x]] l d )
+                   
+proc tk <- deserialize[x] c =
+  case c ( L =>                               % (c : D[D[x]]) |- (tk : tree * x)
+                tk1 <- deserialize[T[x]] c ;  % (tk1 : tree * D[x]) |- (tk : tree * x)
+                l <- recv tk1 ;               % (l : tree) (tk1 : D[x]) |- (tk : tree * x)
+                tk2 <- deserialize[x] tk1 ;   % (l : tree) (tk2 : tree * x) |- (tk : tree * x)
+                r <- recv tk2 ;               % (l : tree) (r : tree) (tk2 : x) |- (tk : tree * x)
+                t <- node l r ;               % (t : tree) (tk2 : x) |- (tk : tree * x)
+                send tk t ; tk <-> tk2
+         | R =>                               % (c : x) |- (tk : tree * x)
+                t <- leaf ;                   % (t : tree) (c : x) |- (tk : tree * x)
+                send tk t ; tk <-> c
+
+         )

@@ -97,21 +97,21 @@ fun eq_idx ctx con nil nil = true
 
 (* mem_env env a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in env *)
 (* still need to generalize for type arguments *)
-fun mem_env (A.TpEq(CTX,CON,A as A.TpName(B,AS,ES),A' as A.TpName(B',AS',ES'),_)::env) a a' =
+fun mem_env (A.TpEq(TPCTX,CTX,CON,A as A.TpName(B,AS,ES),A' as A.TpName(B',AS',ES'),_)::env) a a' =
     if B = a andalso B' = a'
-    then SOME(CTX,CON,(A,A'))
+    then SOME(TPCTX,CTX,CON,(A,A'))
     else if B = a' andalso B' = a
-    then SOME(CTX,CON,(A',A))   (* flip! *)
+    then SOME(TPCTX,CTX,CON,(A',A))   (* flip! *)
     else mem_env env a a'
   | mem_env (_::env) a a' = mem_env env a a'
   | mem_env nil a a' = NONE
 
-(* mem_env env seen a a' => SOME(CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in seen *)
-fun mem_seen env ((E as (CTX,CON,(A as A.TpName(B,AS,ES), A' as A.TpName(B',AS',ES'))))::seen) a a' =
+(* mem_env env seen a a' => SOME(TPCTX,CTX,CON,TpName(a,As,es),TpName(a',As',es')) if exists in seen *)
+fun mem_seen env ((E as (TPCTX,CTX,CON,(A as A.TpName(B,AS,ES), A' as A.TpName(B',AS',ES'))))::seen) a a' =
     if B = a andalso B' = a'
-    then SOME(CTX,CON,(A,A'))
+    then SOME(TPCTX,CTX,CON,(A,A'))
     else if B = a' andalso B' = a
-    then SOME(CTX,CON,(A',A))
+    then SOME(TPCTX,CTX,CON,(A',A))
     else mem_seen env seen a a'
   | mem_seen env (_::seen) a a' = mem_seen env seen a a'
   | mem_seen env nil a a' = mem_env env a a'
@@ -286,9 +286,9 @@ and eq_choice env tpctx ctx con seen ((l,A)::choices) choices' =
 
 and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
     case mem_seen env seen a a'
-     of NONE => eq_tp' env tpctx ctx con ((ctx,con,(A,A'))::seen)
+     of NONE => eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,A'))::seen)
                        (TU.expd env A) (TU.expd env A')
-      | SOME(CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES'))) =>
+      | SOME(TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), W' as A.TpName(_,AS',ES'))) =>
         (* (TextIO.print "found!\n";
             TextIO.print (A.Print.pp_tp W ^ " =!= " ^ A.Print.pp_tp W' ^ "\n") ; *)
         eq_tp_list env tpctx ctx con seen (tp_def env a) As AS (* no binders, so no change in type context allowed *)
