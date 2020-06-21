@@ -116,11 +116,11 @@ datatype stack_item =
  | Nonfix of T.terminal * region
  | AExp of aexp * region                                        (* arithmetic expression *)
 
- | Vars of (R.varname * R.prop) list * region                   (* list of variables with constraints *)
- | Indices of R.arith list * region                             (* list of index expressions *)
+ | Vars of (R.varname * R.prop) list * region option            (* list of variables with constraints *)
+ | Indices of R.arith list * region option                      (* list of index expressions *)
 
- | TpVars of A.tpvarname list * region                          (* list of type variables *)
- | Tps of A.tp list * region                                    (* list of types *)
+ | TpVars of A.tpvarname list * region option                   (* list of type variables *)
+ | Tps of A.tp list * region option                             (* list of types *)
 
  | Tp of A.tp * region                                          (* types *)
  | TpInfix of prec * (A.tp * A.tp -> A.tp) * region             (* infix tensor and lolli type operators *)
@@ -252,6 +252,10 @@ infix 1 |>
 
 (* region manipulation *)
 fun join (left1, right1) (left2, right2) = (left1, right2)
+fun optJoin (NONE) (left2, right2) = SOME(left2, right2)
+  | optJoin (SOME(left1,right1)) (left2, right2) = SOME(left1, right2)
+fun joinOpt (left1, right1) (NONE) = (left1, right1)
+  | joinOpt (left1, right1) (SOME(left2, right2)) = (left1, right2)
 fun here (S, M.Cons((t, r), ts')) = r
 val nowhere = (0,0)
 
@@ -276,11 +280,11 @@ fun p_decl ST = case first ST of
   | t => parse_error (here ST, "unexpected token " ^ pp_tok t ^ " at top level")
 
 (* <id> <parm_seq> *)
-(* TpVars(_,r) accumulates the ast for <tpvar_seq> *)
-and p_id_parm_seq ST = ST |> p_id >> push (TpVars(nil, here ST)) >> p_parm_seq
+(* TpVars(_,rOpt) accumulates the ast for <tpvar_seq> *)
+and p_id_parm_seq ST = ST |> p_id >> push (TpVars(nil, NONE)) >> p_parm_seq
 and p_parm_seq ST = case first ST of
     T.LBRACKET => ST |> shift >> p_id >> p_terminal T.RBRACKET >> reduce r_tpvar_seq >> p_parm_seq
-  | t => ST |> push (Vars(nil, here ST)) >> p_var_seq
+  | t => ST |> push (Vars(nil, NONE)) >> p_var_seq
 
 (* <var_seq> *)
 and p_var_seq ST = case first ST of
@@ -296,27 +300,27 @@ and p_bar_prop_opt ST = case first ST of
   | _ => ST
 
 (* accumulate type variables alpha *)
-and r_tpvar_seq (S $ TpVars(alphas,r1) $ Tok(T.LBRACKET,_) $ Tok(T.IDENT(alpha),_) $ Tok(T.RBRACKET,r2)) =
-    S $ TpVars(alphas @ [alpha], join r1 r2)
+and r_tpvar_seq (S $ TpVars(alphas,r1opt) $ Tok(T.LBRACKET,_) $ Tok(T.IDENT(alpha),_) $ Tok(T.RBRACKET,r2)) =
+    S $ TpVars(alphas @ [alpha], optJoin r1opt r2)
 
 (* accumulate (v,phi) for every variable v and constraint phi (defaults to 'true') *)
-and r_var_seq (S $ Vars(l,r1) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ AExp(e,r) $ Tok(T.RBRACE,r2)) =
-    S $ Vars(l @ [(v,aexp2prop r e)], join r1 r2)
-  | r_var_seq (S $ Vars(l,r1) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,r2)) =
-    S $ Vars(l @ [(v,R.True)], join r1 r2)
+and r_var_seq (S $ Vars(l,r1opt) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ AExp(e,r) $ Tok(T.RBRACE,r2)) =
+    S $ Vars(l @ [(v,aexp2prop r e)], optJoin r1opt r2)
+  | r_var_seq (S $ Vars(l,r1opt) $ Tok(T.LBRACE,_) $ Tok(T.IDENT(v),_) $ Tok(T.RBRACE,r2)) =
+    S $ Vars(l @ [(v,R.True)], optJoin r1opt r2)
 
 (* <id> <arg_seq> *)
 (* Tps(As,r) accumulates the type arguments *)
-and p_id_arg_seq ST = ST |> p_id >> push (Tps(nil, here ST)) >> p_arg_seq
+and p_id_arg_seq ST = ST |> p_id >> push (Tps(nil, NONE)) >> p_arg_seq
 
 (* <arg_seq> *)
 and p_arg_seq ST = case first ST of
     T.LBRACKET => ST |> shift >> p_type >> p_terminal T.RBRACKET >> reduce r_type_seq >> p_arg_seq
-  | _ => ST |> push (Indices(nil, here ST)) >> p_idx_seq
+  | _ => ST |> push (Indices(nil, NONE)) >> p_idx_seq
 
 (* <id> <idx_seq> *)
 (* Indices(_,r) accumulates the ast for <idx_seq> *)
-and p_id_idx_seq ST = ST |> p_id >> push (Indices(nil, here ST)) >> p_idx_seq
+and p_id_idx_seq ST = ST |> p_id >> push (Indices(nil, NONE)) >> p_idx_seq
 
 (* <idx_seq> *)
 and p_idx_seq ST = case first ST of
@@ -324,7 +328,7 @@ and p_idx_seq ST = case first ST of
   | t => ST
 
 (* accumulate e into sequence of indices *)
-and r_idx_seq (S $ Indices(l,r1) $ AExp(e,r2)) = S $ Indices(l @ [aexp2arith r2 e], join r1 r2)
+and r_idx_seq (S $ Indices(l,r1opt) $ AExp(e,r2)) = S $ Indices(l @ [aexp2arith r2 e], optJoin r1opt r2)
 
 (* '=' <type> *)
 and p_eq_type ST = case first ST of
@@ -387,9 +391,9 @@ and r_decl_1 (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(
     (* 'type' <id> <parm_seq> = <type> *)
     S $ Decl(A.TpDef(id,alphas,vars l,phis l,tp,PS.ext(join r1 r2)))
   | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Tps(As1,_) $ Indices(es1,_)
-                $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),_) $ Tps(As2,_) $ Indices(es2, r2)) =
+                $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),r2) $ Tps(As2,r3opt) $ Indices(es2, r4opt)) =
     (* 'eqtype' <id> <arg_seq> = <id> <arg_seq> *)
-    S $ Decl(A.TpEq([],[],R.True,A.TpName(id1,As1,es1),A.TpName(id2,As2,es2),PS.ext(join r1 r2)))
+    S $ Decl(A.TpEq([],[],R.True,A.TpName(id1,As1,es1),A.TpName(id2,As2,es2),PS.ext(joinOpt (joinOpt r2 r3opt) r4opt)))
   | r_decl_1 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(l,_) $ Tok(T.COLON,_)
                 $ Context(ctx,_) $ Tok(T.TURNSTILE,_)
                 $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
@@ -402,12 +406,12 @@ and r_decl_2 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(
                 $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
     (* 'decl' <id> <parm_seq> : <ctx> '|{' <arith> '}-' <id> : <type> *)
     S $ Decl(A.ExpDec(id,alphas,vars l,phis l,(ctx,aexp2arith r pot,(c,tp)), PS.ext(join r1 r2)))
-  | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ TpVars(alphas, _) $ Vars(l,r)
+  | r_decl_2 (S $ Tok(T.PROC,r1) $ Tok(T.IDENT(x),_) $ Tok(T.LARROW,_) $ Tok(T.IDENT(id),_) $ TpVars(alphas, _) $ Vars(l,rOpt)
                 $ Chans(xs,_) $ Tok(T.EQ,_) $ Exp(exp,r2)) =
     (* 'proc' <id> '<-' <id> <parm_seq> <id_seq> = <exp> *)
-    (case (phis l)
-     of R.True => S $ Decl(A.ExpDef(id,alphas,vars l,(xs, exp, x),PS.ext(join r1 r2)))
-      | _ => parse_error (r, "constraint found in process definition"))
+    (case (phis l, rOpt)
+     of (R.True, _) => S $ Decl(A.ExpDef(id,alphas,vars l,(xs, exp, x),PS.ext(join r1 r2)))
+      | (_, SOME(r)) => parse_error (r, "constraint found in process definition"))
   | r_decl_2 (S $ Tok(T.EXEC,r1) $ Tok(T.IDENT(id),r2)) =
     (* 'exec' <id> *)
     S $ Decl(A.Exec(id, PS.ext(join r1 r2)))
@@ -483,7 +487,7 @@ and p_con_dot ST = case first ST of
 
 (* reduce <con> ::= '{' <prop> '}' | '[' <id> ']' *)
 and r_con (S $ Tok(T.LBRACE,r1) $ AExp(e,_) $ Tok(T.RBRACE,r2)) = S $ AExp(e, join r1 r2)
-  | r_con (S $ Tok(T.LBRACKET,r1) $ Tok(T.IDENT(id), _) $ Tok(T.RBRACKET,r2)) = S $ TpVars([id], join r1 r2)
+  | r_con (S $ Tok(T.LBRACKET,r1) $ Tok(T.IDENT(id), _) $ Tok(T.RBRACKET,r2)) = S $ TpVars([id], SOME(join r1 r2))
 
 (* <arith> and <prop>, parsed as <aexp> *)
 (* This needs to be a joint infix parser because we cannot
@@ -579,7 +583,7 @@ and r_type_2 (S $ Tok(T.BAR,r1) $ Tok(T.RANGLE,_) $ Tp(tp, r2)) = S $ Tp(A.PayPo
   | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ Tok(T.IDENT(id),_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallNat(id,tp), join r1 r2)
   | r_type_2 (S $ Tok(T.EXCLAMATION,r1) $ TpVars([id],_) $ Tok(T.PERIOD,_) $ Tp(tp,r2)) = S $ Tp(A.ForallTp(id,tp), join r1 r2)
   | r_type_2 S = r_type_3 S
-and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Tps(As,_) $ Indices(es,r2)) = S $ Tp(A.TpName(id,As,es),join r1 r2)
+and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Tps(As,r2opt) $ Indices(es,r3opt)) = S $ Tp(A.TpName(id,As,es),joinOpt (joinOpt r1 r2opt) r3opt)
   | r_type_3 (S $ Tok(T.LPAREN, r1) $ Tp(tp,_) $ Tok(T.RPAREN, r2)) = S $ Tp(tp, join r1 r2)
   | r_type_3 (S $ Tp(tp1, r1) $ TpInfix(_, con, _) $ Tp(tp2, r2)) = r_type (S $ Tp(con(tp1,tp2), join r1 r2))
   | r_type_3 (S $ Tp(_,r1) $ Tp(_, r2)) = parse_error (join r1 r2, "consecutive types")
@@ -588,7 +592,7 @@ and r_type_3 (S $ Tok(T.IDENT(id),r1) $ Tps(As,_) $ Indices(es,r2)) = S $ Tp(A.T
   | r_type_3 (S $ Tok(_,r)) = parse_error (r, "unknown or empty type expression")
   (* should be the only possibilities *)
 
-and r_type_seq (S $ Tps(As,r1) $ Tok(T.LBRACKET,_) $ Tp(A,_) $ Tok(T.RBRACKET, r2)) = S $ Tps(As @ [A], join r1 r2)
+and r_type_seq (S $ Tps(As,r1opt) $ Tok(T.LBRACKET,_) $ Tp(A,_) $ Tok(T.RBRACKET, r2)) = S $ Tps(As @ [A], optJoin r1opt r2)
 
 and r_type_msg (S $ Tok(T.LBRACKET,r1) $ Tp(tp,_) $ Tok(T.RBRACKET,r2)) = S $ Tp(tp, join r1 r2)
 
@@ -651,7 +655,7 @@ and p_id_exps ST = case first ST of
 
 and p_spawn_or_recv ST = case first ST of
     T.RECV => ST |> shift >> p_id >> p_terminal T.SEMICOLON >> reduce r_action >> p_exp
-  | T.IDENT(id) => ST |> p_id >> push (Tps(nil, here ST)) >> p_arg_seq
+  | T.IDENT(id) => ST |> p_id >> push (Tps(nil, NONE)) >> p_arg_seq
                       >> push (Chans([], here ST)) >> p_id_seq
   | t => parse_error (here ST, "expected 'recv', or identifier, found " ^ pp_tok t)
 
