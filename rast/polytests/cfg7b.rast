@@ -1,0 +1,48 @@
+#test success
+
+type A[x] = +{ n : A[A[x]], l : D[x] }
+type B[y] = +{ n : B[B[y]], l : C[y] }
+
+type D[x] = +{ l : x }
+type C[y] = +{ l : y }
+
+eqtype A[1] = B[1]
+eqtype A[z] = B[z]
+eqtype A[A[z]] = B[B[z]]
+eqtype A[A[A[z]]] = B[B[B[z]]]
+
+(*
+A[x] = +{ l : x * A[A[x]] }
+A[x] is invariant if A[B] == A[C] for all B,C
+*)
+
+decl id : (d : A[1]) |- (c : B[1])
+proc c <- id d = c <-> d
+
+(*
+A[1] == B[1]
+A[A[1]] == B[B[1]] and +{l : 1} == C[1]
+
+BPA1: 1 == A[1] and 1 == B[1] (false)
+
+BPA2: A[x] == B[x'] and A[1] == B[1] (true) (fresh x)
+x == x' will force A[1] = B[1]
+
+a[A1]..[An] == b[B1]..[Bk] (assume all these positions are normed)
+BPA2': a[x][y] == b[x]
+
+a[x][y] = b[x][y] and A1 == B1 and A2 == B2
+a[y][x] = b[x][y] and A1 == B2 and A2 == B1
+
+a[x][y] = b[y][x]
+
+%---------------
+a[x][y] = +{l : x, k : y}
+b[z] =    +{l : z, k : z}
+x == z, y == z
+
+a[A1][A2] == b[B1]
+A1 == B1 (because x == z)
+A2 == B1 (because y == z)
+
+*)
