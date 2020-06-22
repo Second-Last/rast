@@ -2,82 +2,82 @@
 
 %%% from Henry, email of June 19, 2020
 
-type Stack[A][alpha] = &{ push : A -o Stack[A][+{some : A * Stack[A][alpha]}], pop : alpha }
+type Stack[A][alpha] = &{ push : A -o Stack[A][Some[A][alpha]],
+                          pop : alpha }
+type Some[A][alpha] = +{ some : A * Stack[A][alpha] }
+type None           = +{ none : 1 }
 
-decl emp[A] : . |- (s : Stack[A][+{none : 1}])
+type Either[A]      = +{ none : 1, some : A * Stack[A][Either[A]] }
+
+%%% Stacks as chains
+
+decl emp[A] : . |- (s : Stack[A][None])
 proc s <- emp[A] =
   case s ( push => x <- recv s ;
                    s' <- emp[A] ;
                    s <- elem[A][+{none : 1}] x s'
          | pop => s.none ; close s )
 
-decl elem[A][alpha] : (x : A) (t : Stack[A][alpha])
-    |- (s : Stack[A][+{some : A * Stack[A][alpha]}])
+decl elem[A][alpha] : (x : A) (t : Stack[A][alpha]) |- (s : Stack[A][Some[A][alpha]])
 proc s <- elem[A][alpha] x t =
   case s ( push => y <- recv s ;
                    s' <- elem[A][alpha] x t ;
-                   s <- elem[A][+{some:A * Stack[A][alpha]}] y s'
+                   s <- elem[A][Some[A][alpha]] y s'
          | pop => s.some ; send s x ; s <-> t )
 
-type S[A] = +{ none : 1, some : A * Stack[A][S[A]] }
+%%% Reversing "imprecise" stacks
+%%% hypothesizing a subtyping coercion
 
-decl rev[A] : (a : Stack[A][S[A]]) (t : Stack[A][S[A]]) |- (s : Stack[A][S[A]])
+decl rev[A] : (a : Stack[A][Either[A]]) (t : Stack[A][Either[A]]) |- (s : Stack[A][Either[A]])
 proc s <- rev[A] a t =
   t.pop ;
   case t ( none => wait t ; s <-> a
-         | some => x <- recv t ;        % t : Stack[A][S[A]]
-                   a.push ; send a x ;  % a : Stack[A][+{some : A * Stack[A][S[A]]}]
-                   a' <- coerceSome[A] a ;  % a' : Stack[A][S[A]]
+         | some => x <- recv t ;            % t : Stack[A][Either[A]]
+                   a.push ; send a x ;      % a : Stack[A][Some[A][Either[A]]]
+                   a' <- stackSomeEither[A] a ;  % a' : Stack[A][Either[A]]
                    s <- rev[A] a' t )
 
-% implementing subtyping coercion?
+%%% Subtype coercions
 
-decl coerceSome[A] : (a : Stack[A][+{some : A * Stack[A][S[A]]}])
-                  |- (s : Stack[A][S[A]])
-decl coerceNone[A] : (a : Stack[A][+{none : 1}])
-                  |- (s : Stack[A][S[A]])
+% Some[A][Either[A]] <: Either[A]
+% None               <: Either[A]
+decl someEither[A] : (a : Some[A][Either[A]]) |- (s : Either[A])
+decl noneEither[A] : (a : None)               |- (s : Either[A])
+
+proc s <- someEither[A] a =
+  case a ( some => x <- recv a ;        % a : Stack[A][Either[A]]
+                   s.some ; send s x ;  % s : Stack[A][Either[A]]
+                   s <-> a )
+proc s <- noneEither[A] a =
+  case a ( none =>                      % a : 1
+                   s.none ;             % s : 1
+                   s <-> a )
+
+%%% Subtype coercions fail for stacks?
+%%% Stack[A][Some[A][Either[A]]] <: Stack[A][Either[A]] ?
+%%% Stack[A][None]               <: Stack[A][Either[A]] ?
+decl stackSomeEither[A] : (a : Stack[A][Some[A][Either[A]]]) |- (s : Stack[A][Either[A]])
+decl stackNoneEither[A] : (a : Stack[A][None])               |- (s : Stack[A][Either[A]])
 
 (*
-proc s <- coerceSome[A] a =
-  case s ( push => x <- recv s ;         % s : Stack[A][+{some : A * Stack[A][S[A]]}]
-                   a.push ; send a x ;   % a : Stack[A][+{some : A * Stack[A][+{some : A * Stack[A][S[A]]}]}]
-                   % cannot make a recursive call here
-                   % s <- coerceSome[A] a
-                   % next few lines type-check, but get into a infinite loop
-                   a' <- coerceSome[A] a ;   % a' : Stack[A][S[A]]
-                   a'.push ; send a' x ; % a : Stack[A][+{some : A * Stack[A][S[A]]}]
-                   s <-> a'
-         | pop => % s : S[A]
-                  a.pop ; % a : +{some : A * Stack[A][S[A]]}
-                  case a ( some => x <- recv a ; % a : Stack[A][S[A]]
-                                   s.some ; send s x ; % s : Stack[A][S[A]]
+proc s <- stackSomeEither[A] a =
+  case s ( push => x <- recv s ;         % s : Stack[A][Some[A][Either[A]]]
+                   a.push ; send a x ;   % a : Stack[A][Some[A][Some[A][Either[A]]]]
+                   s <- stackSomeEither[A] a  % ill-typed!!!
+         | pop =>                                      % s : Either[A]
+                  a.pop ;                              % a : Some[A][Either[A]]
+                  case a ( some => x <- recv a ;       % a : Stack[A][Either[A]]
+                                   s.some ; send s x ; % s : Stack[A][Either[A]]
                                    s <-> a ) )
 *)
 
-% the type below doesn't seem to work in the case of a pop
 (*
-decl coerceSome[A][B] : (a : Stack[A][+{some : A * Stack[A][B]}])
-              |- (s : Stack[A][B])
-proc s <- coerceSome[A][B] a =
-  case s ( push => x <- recv s ;         % s : Stack[A][+{some : A * Stack[A][B]}]
-                   a.push ; send a x ;   % a : Stack[A][+{some : A * Stack[A][+{some : A * Stack[A][B]}]}]
-                   s <- coerceSome[A][+{some:A * Stack[A][B]}] a
-         | pop => % s : B
-                  a.pop ; % a : +{some : A * Stack[A][B]}
-                  case a ( some => x <- recv a ; % a : Stack[A][B]
-                                   s.some ; send s x ; % s : Stack[A][S[A]]
-                                   s <-> a ) )
-*)
-
-% the process below would also seem to get into an infinite loop
-(*
-proc s <- coerceNone[A] a =
-  case s ( push => x <- recv s ;  % s : Stack[A][+{some : A * Stack[A][S[A]]}]
-                   a' <- coerceNone[A] a ; % a' : stack[A][S[A]]
-                   a'.push ; send a' x ;   % a' : stack[A][+{some : A * Stack[A][S[A]]}]
-                   s <-> a'
-         | pop => a.pop ; % a : {none : 1}
-                  case a ( none => % a : 1
+proc s <- stackNoneEither[A] a =
+  case s ( push => x <- recv s ;         % s : Stack[A][Some[A][Either[A]]]
+                   a.push ; send a x ;   % a : Stack[A][Some[A][None]]
+                   s <- stackNoneEither[A] a  % ill-typed!!!
+         | pop => a.pop ;                % a : None
+                  case a ( none =>       % a : 1
                                    s.none ;
                                    s <-> a ) )
 *)
@@ -94,7 +94,7 @@ proc n <- zero = n.z ; close n
 proc n <- one = n.s ; n.z ; close n
 proc n <- two = n.s ; n.s ; n.z ; close n
 
-decl s123 : . |- (s : Stack[nat][+{some:nat * Stack[nat][+{some:nat * Stack[nat][+{some:nat * Stack[nat][+{none : 1}]}]}]}])
+decl s123 : . |- (s : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]])
 proc s <- s123 =
   t <- emp[nat] ;
   n0 <- zero ;
@@ -105,26 +105,26 @@ proc s <- s123 =
   t.push ; send t n2 ;
   s <-> t
 
-decl w123 : . |- (s : Stack[nat][S[nat]])
+decl w123 : . |- (s : Stack[nat][Either[nat]])
 proc s <- w123 =
   t <- emp[nat] ;
-  t <- coerceNone[nat] t ;
+  t <- stackNoneEither[nat] t ;
   n0 <- zero ;
   t.push ; send t n0 ;
-  t <- coerceSome[nat] t ;
+  t <- stackSomeEither[nat] t ;
   n1 <- one ;
   t.push ; send t n1 ;
-  t <- coerceSome[nat] t ;
+  t <- stackSomeEither[nat] t ;
   n2 <- two ;
   t.push ; send t n2 ;
-  t <- coerceSome[nat] t ;
+  t <- stackSomeEither[nat] t ;
   s <-> t
 
-decl w321 : . |- (s : Stack[nat][S[nat]])
+decl w321 : . |- (s : Stack[nat][Either[nat]])
 proc s <- w321 =
   t <- w123 ;
   e <- emp[nat] ;
-  e' <- coerceNone[nat] e ;
+  e' <- stackNoneEither[nat] e ;
   s <- rev[nat] e' t
 
 exec s123
