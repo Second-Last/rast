@@ -15,7 +15,7 @@ decl emp[A] : . |- (s : Stack[A][None])
 proc s <- emp[A] =
   case s ( push => x <- recv s ;
                    s' <- emp[A] ;
-                   s <- elem[A][+{none : 1}] x s'
+                   s <- elem[A][None] x s'
          | pop => s.none ; close s )
 
 decl elem[A][alpha] : (x : A) (t : Stack[A][alpha]) |- (s : Stack[A][Some[A][alpha]])
