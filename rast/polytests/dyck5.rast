@@ -1,0 +1,142 @@
+#test success
+
+%%% Examples using Dyck language
+%%% Henry DeYoung
+%%% June 23 2020
+
+%%% Surrounding a word from the Dyck language
+
+%% Pseudocode sketch
+% 
+% D₀ = ⊕{ <: D D₀ , $: 1 }
+% D α = ⊕{ <: D (D α) , >: α }
+% 
+% f : α -o β ⊢ fmap :: v : D α -o D β =
+%   w <- recv v ;
+%   w.case (
+%     < => v.< ;             % w : D (D α) , v : D (D β)
+%          g <- fmap <- f ;  % g : D α -o D β
+%          h <- fmap <- g ;  % h : D (D α) -o D (D β)
+%          send h w ; v <- h
+%   | > => v.> ;
+%          send f w ; v <- f )
+% 
+% ⊢ append_> :: v : D₀ -o D D₀ =
+%   w <- recv v ;
+%   w.case (
+%     < => v.< ;             % w : D D₀ , v : D (D D₀)
+%          f <- append_> ;   % f : D₀ -o D D₀
+%          g <- fmap <- f ;  % g : D D₀ -o D (D D₀)
+%          send g w ; v <- g
+%   | $ => v.> ; v.$ ;
+%          wait w ; close v )
+% 
+% w : D₀ ⊢ surround :: v : D₀ =
+%   v.< ;
+%   f <- append_> ;
+%   send f w ; v <- f
+%
+%%
+
+type D[alpha] = +{ L : D[D[alpha]] , R : alpha }
+type D0       = +{ L : D[D0] , E : 1 }
+
+decl fmap[alpha][beta] : (f : alpha -o beta) |- (v : D[alpha] -o D[beta])
+proc v <- fmap[alpha][beta] f =
+  w <- recv v ;
+  case w ( L => v.L ;
+                g <- fmap[alpha][beta] f ;
+                h <- fmap[D[alpha]][D[beta]] g ;
+                send h w ; v <-> h
+         | R => v.R ;
+                send f w ; v <-> f )
+
+decl append_R : . |- (v : D0 -o D[D0])
+proc v <- append_R =
+  w <- recv v ;
+  case w ( L => v.L ;
+                f <- append_R ;
+                g <- fmap[D0][D[D0]] f ;
+                send g w ; v <-> g
+         | E => v.R ; v.E ;
+                wait w ; close v )
+                
+decl surround : (w : D0) |- (v : D0)
+proc v <- surround w =
+  v.L ;
+  f <- append_R ;
+  send f w ; v <-> f
+
+
+% Trying it out
+decl emp : . |- (w : D0)
+decl one : . |- (w : D0)
+decl two : . |- (w : D0)
+
+proc w <- emp = w.E ; close w
+proc w <- one = w.L ; w.R ; w.E ; close w
+proc w <- two = w.L ; w.R ; w.L ; w.R ; w.E ; close w
+
+decl surround_emp : . |- (v : D0)
+proc v <- surround_emp =
+  w <- emp ;
+  v <- surround w
+
+decl surround_one : . |- (v : D0)
+proc v <- surround_one =
+  w <- one ;
+  v <- surround w
+
+decl surround_two : . |- (v : D0)
+proc v <- surround_two =
+  w <- two ;
+  v <- surround w
+
+exec surround_emp
+exec surround_one
+exec surround_two
+
+
+%%% Concatenating two words
+
+%% Pseudocode sketch
+% 
+% w₂ : D₀ ⊢ append :: v : D₀ -o D₀ =
+%   w₁ <- recv v ;
+%   w₁.case (
+%     < => v.< ;             % w : D D₀ , v : D D₀
+%          f <- append w₂ ;  % f : D₀ -o D₀
+%          g <- fmap <- f ;  % g : D D₀ -o D D₀
+%          send g w₁ ; v <- g
+%   | $ => wait w₁ ; v <- w₂ )
+% 
+% w₁ : D₀ , w₂ : D₀ ⊢ concat :: v : D₀ =
+%   f <- append w₂ ;
+%   send f w₁ ; v <- f
+%
+%%
+
+decl append : (w2 : D0) |- (v : D0 -o D0)
+proc v <- append w2 =
+  w1 <- recv v ;
+  case w1 ( L => v.L ;
+                 f <- append w2 ;
+                 g <- fmap[D0][D0] f ;
+                 send g w1 ; v <-> g
+         | E => wait w1 ; v <-> w2 )
+                
+decl concat : (w1 : D0) (w2 : D0) |- (v : D0)
+proc v <- concat w1 w2 =
+  f <- append w2 ;
+  send f w1 ; v <-> f
+
+
+% Trying it out
+
+decl cs2s1 : . |- (v : D0)
+proc v <- cs2s1 =
+  w1 <- surround_two ;
+  w2 <- surround_one ;
+  v <- concat w1 w2
+
+exec cs2s1
