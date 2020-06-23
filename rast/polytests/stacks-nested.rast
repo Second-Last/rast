@@ -39,8 +39,10 @@ proc s <- rev[A] a t =
 
 %%% Subtype coercions
 
+%%% these first two are obsolete
 % Some[A][Either[A]] <: Either[A]
 % None               <: Either[A]
+(*
 decl someEither[A] : (a : Some[A][Either[A]]) |- (s : Either[A])
 decl noneEither[A] : (a : None)               |- (s : Either[A])
 
@@ -52,13 +54,56 @@ proc s <- noneEither[A] a =
   case a ( none =>                      % a : 1
                    s.none ;             % s : 1
                    s <-> a )
+*)
 
-%%% Subtype coercions fail for stacks?
-%%% Stack[A][Some[A][Either[A]]] <: Stack[A][Either[A]] ?
-%%% Stack[A][None]               <: Stack[A][Either[A]] ?
+%%% Subtype coercions as per Henry's email, June 22
+%%%
+%%% Stack[A][Some[A][Either[A]]] <: Stack[A][Either[A]]
+%%% Stack[A][None]               <: Stack[A][Either[A]]
 decl stackSomeEither[A] : (a : Stack[A][Some[A][Either[A]]]) |- (s : Stack[A][Either[A]])
 decl stackNoneEither[A] : (a : Stack[A][None])               |- (s : Stack[A][Either[A]])
 
+%%% Generalize, so we can map a coercion over all the elements of a stack
+decl fmap[A][alpha][beta] : (f : alpha -o beta) (t : Stack[A][alpha]) |- (s : Stack[A][beta])
+decl some_f[A][alpha][beta] : (f : alpha -o beta) |- (g : Some[A][alpha] -o Some[A][beta])
+
+proc s <- fmap[A][alpha][beta] f t =
+  case s ( push => t.push ;
+                   x <- recv s ; send t x ; % (t : Stack[A][Some[A][alpha]]) |- (s : Stack[A][Some[A][beta]])
+                   g <- some_f[A][alpha][beta] f ;  % g : Some[A][alpha] -o Some[A][beta]
+                   s <- fmap[A][Some[A][alpha]][Some[A][beta]] g t
+         | pop => t.pop ;      % t : alpha
+                  send f t ; s <-> f )
+
+proc g <- some_f[A][alpha][beta] f =
+  t <- recv g ;
+  case t ( some => g.some ;
+                   x <- recv t ; send g x ;  % t : Stack[A][alpha] |- g : Stack[A][beta]
+                   g <- fmap[A][alpha][beta] f t )
+
+%%% Obtain specific instances
+decl some_either[A] : . |- (f : Some[A][Either[A]] -o Either[A])
+proc f <- some_either[A] =
+  t <- recv f ;
+  case t ( some => f.some ;
+                   x <- recv t ; send f x ;
+                   f <-> t )
+
+decl none_either[A] : . |- (f : None -o Either[A])
+proc f <- none_either[A] =
+  t <- recv f ;
+  case t ( none => f.none ; f <-> t )
+
+proc s <- stackSomeEither[A] t =
+  f <- some_either[A] ;                    % f : Some[A][Either[A]] -o Either[A]
+  s <- fmap[A][Some[A][Either[A]]][Either[A]] f t
+
+proc s <- stackNoneEither[A] t =
+  f <- none_either[A] ;
+  s <- fmap[A][None][Either[A]] f t
+
+
+%%% The two attempts below fail to type-check
 (*
 proc s <- stackSomeEither[A] a =
   case s ( push => x <- recv s ;         % s : Stack[A][Some[A][Either[A]]]
@@ -94,8 +139,8 @@ proc n <- zero = n.z ; close n
 proc n <- one = n.s ; n.z ; close n
 proc n <- two = n.s ; n.s ; n.z ; close n
 
-decl s123 : . |- (s : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]])
-proc s <- s123 =
+decl s012 : . |- (s : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]])
+proc s <- s012 =
   t <- emp[nat] ;
   n0 <- zero ;
   t.push ; send t n0 ;
@@ -105,8 +150,8 @@ proc s <- s123 =
   t.push ; send t n2 ;
   s <-> t
 
-decl w123 : . |- (s : Stack[nat][Either[nat]])
-proc s <- w123 =
+decl w012 : . |- (s : Stack[nat][Either[nat]])
+proc s <- w012 =
   t <- emp[nat] ;
   t <- stackNoneEither[nat] t ;
   n0 <- zero ;
@@ -120,13 +165,37 @@ proc s <- w123 =
   t <- stackSomeEither[nat] t ;
   s <-> t
 
-decl w321 : . |- (s : Stack[nat][Either[nat]])
-proc s <- w321 =
-  t <- w123 ;
+decl w210 : . |- (s : Stack[nat][Either[nat]])
+proc s <- w210 =
+  t <- w012 ;
   e <- emp[nat] ;
   e' <- stackNoneEither[nat] e ;
   s <- rev[nat] e' t
 
-exec s123
-% exec w123
-% exec w321
+exec s012
+exec w012
+exec w210
+
+type list[A] = +{nil : 1, cons : A * list[A]}
+
+decl stackList[A] : (s : Stack[A][Either[A]]) |- (l : list[A])
+proc l <- stackList[A] s =
+  s.pop ;  % s : Either[A]
+  case s ( some => l.cons ;
+                   x <- recv s ; send l x ;
+                   l <- stackList[A] s
+         | none => l.nil ;
+                   wait s ; close l )
+
+decl l012 : . |- (l : list[nat])
+proc l <- l012 =
+  s <- w012 ;
+  l <- stackList[nat] s
+
+decl l210 : . |- (l : list[nat])
+proc l <- l210 =
+  s <- w210 ;
+  l <- stackList[nat] s
+
+exec l012
+exec l210
