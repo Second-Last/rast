@@ -1,0 +1,137 @@
+#test success
+
+%%% can we explore type x -o D[x] ?
+
+% S is the language of balanced parentheses 'L' and 'R'
+type S = +{ L : D[S],
+            $ : 1}
+
+type D[x] = +{ L : D[D[x]],
+               R : x }
+
+% constructors
+decl LD[x] : (d : D[D[x]]) |- (c : D[x])
+decl R[x] : (d : x) |- (c : D[x])
+decl LS : (d : D[S]) |- (c : S)
+decl $ : . |- (c : S)
+
+proc c <- LD[x] d = c.L ; c <-> d
+proc c <- R[x] d = c.R ; c <-> d
+proc c <- LS d = c.L ; c <-> d
+proc c <- $ = c.$ ; close c
+
+type tree = +{ leaf : 1, node : tree * tree }
+
+% constructors
+decl leaf : . |- (t : tree)
+decl node : (l : tree) (r : tree) |- (t : tree)
+
+proc t <- leaf = t.leaf ; close t
+proc t <- node l r = t.node ; send t l ; t <-> r
+
+% serializing and deserializing
+decl deserialize[x] : (c : D[x]) |- (t : tree * x)
+decl serialize[x] : (t : tree) (k : x) |- (c : D[x])
+
+proc c <- serialize[x] t k =
+  case t ( leaf => wait t ; c.R ; c <-> k
+         | node => c.L ;
+                   l <- recv t ;              % (l : tree) (t : tree) (k : x) |- c : D[D[x]]
+                   d <- serialize[x] t k ;    % (l : tree) (d : D[x]) |- (c : D[D[x]])
+                   c <- serialize[D[x]] l d )
+                   
+proc tk <- deserialize[x] c =
+  case c ( L =>                               % (c : D[D[x]]) |- (tk : tree * x)
+                tk1 <- deserialize[D[x]] c ;  % (tk1 : tree * D[x]) |- (tk : tree * x)
+                l <- recv tk1 ;               % (l : tree) (tk1 : D[x]) |- (tk : tree * x)
+                tk2 <- deserialize[x] tk1 ;   % (l : tree) (tk2 : tree * x) |- (tk : tree * x)
+                r <- recv tk2 ;               % (l : tree) (r : tree) (tk2 : x) |- (tk : tree * x)
+                t <- node l r ;               % (t : tree) (tk2 : x) |- (tk : tree * x)
+                send tk t ; tk <-> tk2
+         | R =>                               % (c : x) |- (tk : tree * x)
+                t <- leaf ;                   % (t : tree) (c : x) |- (tk : tree * x)
+                send tk t ; tk <-> c
+
+         )
+         
+% appending two Dyck words
+decl append : (c : S) (d : S) |- (e : S)
+proc e <- append c d =
+  case c ( L =>                             % (c : D[S]) (d : S) |- (e : S)
+                tk1 <- deserialize[S] c ;   % (tk1 : tree * S) (d : S) |- (e : S)
+                t <- recv tk1 ;             % (t : tree) (tk1 : S) (d : S) |- (e : S)
+                e2 <- append tk1 d ;        % (t : tree) (e2 : S) |- (e : S)
+                e12 <- serialize[S] t e2 ;  % (e12 : D[S]) |- (e : S)
+                e.L ; e <-> e12             % or: e <- LS e12
+         | $ => wait c ; e <-> d )
+
+decl app[x] : (c : S) (d : D[x]) |- (e : D[x])
+proc e <- app[x] c d =
+  case c ( L =>                             % (c : D[S]) (d : D[x]) |- (e : D[x])
+                tk1 <- deserialize[S] c ;   % (tk1 : tree * S) (d : D[x]) |- (e : D[x])
+                t <- recv tk1 ;             % (t : tree) (tk1 : S) (d : D[x]) |- (e : D[x])
+                e2 <- app[x] tk1 d ;        % (t : tree) (e2 : D[x]) |- (e : D[x])
+                e12 <- serialize[D[x]] t e2 ;  % (e12 : D[D[x]]) |- (e : D[x])
+                e.L ; e <-> e12             % or: e <- LS e12
+         | $ => wait c ; e <-> d )
+
+% wrapping a Dyck word
+decl justR : . |- (c : D[S])
+proc c <- justR =
+  c.R ; c.$ ; close c
+
+decl wrap : (c : S) |- (d : S)
+proc d <- wrap c =
+     d.L ;             % (c : S) |- (d : D[S])
+     r <- justR ;      % (c : S) (r : D[S]) |- (d : D[S])
+     d <- app[S] c r
+
+% examples
+decl ex1 : . |- (c : S)
+% ex1 = L ; R ; $ ; close
+proc c <- ex1 = c.L ; c.R ; c.$ ; close c
+
+decl ex2[x] : (d : D[x]) |- (c : D[x])
+% ex2 d = L ; R ; d
+proc c <- ex2[x] d =
+  c.L ; c.R ; c <-> d
+
+decl ex3[x] : (d : x) |- (c : D[x])
+% ex3 d = L ; R ; R; d
+proc c <- ex3[x] d =
+  c.L ; c.R ; c.R ; c <-> d
+
+decl ex4 : . |- (c : D[S])
+% ex4 = L ; R ; R; L ; R ; $ ; close
+proc c <- ex4 =
+  d <- ex1 ;
+  c <- ex3[S] d
+
+decl ex5 : . |- (c : S)
+% ex5 = L ; L ; R ; R ; L ; R ; $ ; close
+proc c <- ex5 =
+  d <- ex4 ;  % d : D[S]  L ; R ; R ; L ; R ; $ ; close
+  c <- LS d
+
+decl ex6 : . |- (c : S)
+% ex6 = L ; R ; L ; L ; R ; R ; L ; R ; $ ; close
+proc c <- ex6 =
+  d1 <- ex1 ;
+  d2 <- ex5 ;
+  c <- append d1 d2
+
+decl ex7 : . |- (c : S)
+% ex7 = L ; L ; R ; R ; L ; R ; L ; R ; $ ; close
+proc c <- ex7 =
+  d1 <- ex5 ;
+  d2 <- ex1 ;
+  c <- append d1 d2
+
+decl ex8 : . |- (c : S)
+proc c <- ex8 =
+  d <- ex7 ;
+  c <- wrap d
+
+exec ex6
+exec ex7
+exec ex8

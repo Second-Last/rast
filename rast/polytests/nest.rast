@@ -1,0 +1,36 @@
+#test success
+
+type elem = +{a : 1, b : 1, c : 1, d : 1}
+
+decl a : . |- (x : elem)
+decl b : . |- (x : elem)
+decl c : . |- (x : elem)
+decl d : . |- (x : elem)
+
+proc x <- a = x.a ; close x
+proc x <- b = x.b ; close x
+proc x <- c = x.c ; close x
+proc x <- d = x.d ; close x
+
+decl pair[A][B] : (x : A) (y : B) |- (z : A * B)
+proc z <- pair[A][B] x y =
+  send z x ; z <-> y
+
+type list[A] = +{nil : 1, cons : A * list[A]}
+type nest[A] = +{nil : 1, cons : A * nest[A * A]}
+type bush[A] = +{nil : 1, cons : A * bush[bush[A]]}
+
+decl ex1 : . |- (n : nest[elem])
+proc n <- ex1 =
+  x <- a ; n.cons ; send n x ;
+  x1 <- a ; x2 <- b ;
+  x <- pair[elem][elem] x1 x2 ;
+  n.cons ; send n x ;
+  x1 <- a ; x2 <- b ; x3 <- c ; x4 <- d ;
+  x12 <- pair[elem][elem] x1 x2 ;
+  x34 <- pair[elem][elem] x3 x4 ;
+  x <- pair[elem * elem][elem * elem] x12 x34 ;
+  n.cons ; send n x ;
+  n.nil ; close n
+
+exec ex1

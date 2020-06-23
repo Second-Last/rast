@@ -1,0 +1,141 @@
+#test success
+
+% S = L^n ; R^n ; close  (n > 0)
+% D[x][y] = L^n ; R1^(n+1) ; x | L^n ; R2^(n+1)
+% A[x] = R1 ; x
+% B[y] = R2 ; y
+
+%%% serial form
+type S = +{ L : D[1][1] }
+type D[x][y] = +{ L : D[A[x]][B[y]], R1 : x, R2 : y}
+type A[x] = +{ R1 : x }
+type B[y] = +{ R2 : y }
+
+%%% constructors
+decl LS : (d : D[1][1]) |- (s : S)
+decl LD[x][y] : (da : D[A[x]][B[y]]) |- (d : D[x][y])
+decl R1D[x][y] : (k1 : x) |- (d : D[x][y])
+decl R2D[x][y] : (k2 : y) |- (d : D[x][y])
+decl RA[x] : (k : x) |- (a : A[x])
+decl RB[y] : (k : y) |- (a : B[y])
+
+proc s <- LS d = s.L ; s <-> d
+proc d <- LD[x][y] da = d.L ; d <-> da
+proc d <- R1D[x][y] k = d.R1 ; d <-> k
+proc d <- R2D[x][y] k = d.R2 ; d <-> k
+proc a <- RA[x] k = a.R1 ; a <-> k
+proc b <- RB[y] k = b.R2 ; b <-> k
+
+%%% structured form
+type S' = +{ L' : D' }
+type D' = +{ L' : D' * &{a' : A', b' : B'}, R1' : 1, R2' : 1}
+type A' = +{ R1' : 1 }
+type B' = +{ R2' : 1 }
+
+%%% constructors
+decl L'S' : (d' : D') |- (s' : S')
+decl L'D' : (d' : D') (c' : &{a':A',b':B'}) |- (l' : D')
+decl R1'D' : . |- (r' : D')
+decl R2'D' : . |- (r' : D')
+decl R1'A' : . |- (r' : A')
+decl R2'B' : . |- (r' : B')
+
+proc l' <- L'S' d' = l'.L' ; l' <-> d'
+proc l' <- L'D' d' c' = l'.L' ; send l' d' ; l' <-> c'
+proc r' <- R1'D' = r'.R1' ; close r'
+proc r' <- R2'D' = r'.R2' ; close r'
+proc r' <- R1'A' = r'.R1' ; close r'
+proc r' <- R2'B' = r'.R2' ; close r'
+
+% Claim : S == S' and D[x][y] == D' * (x & y)
+% and A[x] == A' * x and B[y] = B' * y
+decl primeS : (s : S) |- (s' : S')
+decl primeD[x][y] : (d : D[x][y]) |- (d'k : D' * &{a':x,b':y})
+decl primeA[x] : (a : A[x]) |- (a'k : A' * x)
+decl primeB[y] : (b : B[y]) |- (b'k : B' * y)
+
+(*
+decl unprimeS : (s' : S') |- (s : S)
+decl unprimeD[x] : (d' : D') (k : x) |- (d : D[x])
+decl unprimeA[x] : (a' : A') (k : x) |- (a : A[x])
+*)
+%%% priming S --> S', D[x][y] --> D' * (x & y), A[x] --> A' * x, B[y] --> B' * y
+
+decl consume11 : (k : &{a':1,b':1}) |- (u : 1)
+proc u <- consume11 k = k.a' ; wait k ; close u
+
+proc s' <- primeS s =
+  case s ( L =>                               % (s : D[1]) |- (s' : S')
+                d'11 <- primeD[1][1] s ;      % (d'11 : D' * (1 & 1)) |- (s : S')
+                d' <- recv d'11 ;
+                u <- consume11 d'11; wait u;  % (d' : D') |- (s : S')
+                s' <- L'S' d' )                
+
+(*
+proc d'k <- primeD[x][y] d =
+  case d ( L =>                               % (d : D[A[x]][B[y]]) |- (d'k : D' * &{a':x,b':y})
+                d'dc <- primeD[A[x]][B[y]] d ;  % (d'dc : D' * &{a':A[x],b':B[y]}) |- (d'k : D' * &{a':x,b':y})
+                d' <- recv d'dc ;             % (d' : D') (d'dc : &{a':A[x],b':B[y]}) |- (d'k : D' * &{a':x,b':y})
+                % problem here: cannot request a' or b' from d'dc
+                % before the request for either a' or b' arrives on d'k
+                a'k <- primeA[x] d'da ;   % (d' : D') (a'k : A' * x) |- (d'k : D' * x)
+                a' <- recv a'k ;              % (d' : D') (a' : A') (a'k : x) |- (d'k : D' * x)
+                l' <- L'D' d' a' ;              % (l' : D') (a'k : x) |- (d'k : D' * x)
+                send d'k l' ; d'k <-> a'k
+         | R =>                               % (d : x) |- (d'k : D' * x)
+                r' <- R'D' ;                    % (r' : D') (d : x) |- (d'k : D' * x)
+                send d'k r' ; d'k <-> d )
+*)
+
+(*
+proc a'k <- primeA[x] a =
+  case a ( R =>                               % (a : x) |- (a'k : A' * x)
+                r' <- R'A' ;                  % (r' : A') (a : x) |- (a'k : A' * x)
+                send a'k r' ; a'k <-> a )
+*)
+
+%%% unpriming S' --> S, D' * x --> D[x], A' * x --> A[x]
+(*
+decl unit : . |- (k : 1)
+proc k <- unit = close k
+
+proc s <- unprimeS s' =
+  case s' ( L' =>                                % (s' : D') |- (s : S)
+                  k1 <- unit ;                   % (s' : D') (k1 : 1) |- (s : S)
+                  d1 <- unprimeD[1] s' k1 ;  % (d1 : D[1]) |- (s : S)
+                  s <- LS d1 )
+
+
+proc d <- unprimeD[x] d' k =
+  case d' ( L' =>                                  % (d' : D' * A') (k : x) |- (d : D[x])
+                  d'1 <- recv d' ;                 % (d'1 : D') (d' : A') (k : x) |- (d : D[x])
+                  a <- unprimeA[x] d' k ;      % (d'1 : D') (a : A[x]) |- (d : D[x])
+                  da <- unprimeD[A[x]] d'1 a ; % (da : D[A[x]]) |- (d : D[x])
+                  d <- LD[x] da
+          | R' => wait d' ;                        % (k : x) |- (d : D[x])
+                  d <- RD[x] k )
+
+proc a <- unprimeA[x] a' k =
+  case a' ( R' => wait a' ;                        % (k : x) |- (a : A[x])
+                  a <- RA[x] k )
+
+%%% example L^4 ; R^4 ; close
+
+decl d4 : . |- (s : S)
+proc s <- d4 = s.L ; s.L ; s.L ; s.L ; s.R ; s.R ; s.R ; s.R ; close s
+
+
+decl d4' : . |- (s' : S')
+proc s' <- d4' =
+  s <- d4 ;
+  s' <- primeS s
+
+decl e4 : . |- (s : S)
+proc s <- e4 =
+  s' <- d4' ;
+  s <- unprimeS s'
+
+exec d4
+exec d4'
+exec e4
+*)

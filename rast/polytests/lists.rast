@@ -1,0 +1,36 @@
+(*
+type seg[A][x][y] = ![y]. list[A][y][z] -o list[A][x][z]
+
+decl nil[A]: . |- (l : ![x]. list[A][x][x])
+decl cons[A][x][y] : (e : A) (l : list[A][y][z]) |- (k : ![x]. list[x][z])
+
+decl append[A][x][y][z] : (l1 : list[A][x][y]) (l2 : list[A][y][z]) |- (l : list[A][x][z])
+*)
+
+type stack[A][x][y] = &{ push : A -o ![z]. stack[A][x][z],
+                         pop : +{ none : 1,
+                                  some : A * ?[z]. stack[A][x][z] } }
+
+decl empty[A][x] : . |- (s : stack[A][x][x])
+decl elem[A][x][z] : (e : A) (t : ?[y]. stack[A][x][y]) |- (s : stack[A][x][z])
+
+decl exists[A][x][y] : (s : stack[A][x][y]) |- (s' : ?[y']. stack[A][x][y'])
+proc s' <- exists[A][x][y] s = send s' [y] ; s' <-> s
+  
+
+proc s <- empty[A][x] =
+  case s ( push => e <- recv s ;
+                   [z] <- recv s ;
+                   emp <- empty[A][x] ;  % emp : stack[A][x][x]
+                   t <- exists[A][x][x] emp ;    % t : ?[y]. stack[A][x][y]
+                   s <- elem[A][x][z] e t
+         | pop => s.none ; close s )
+proc s <- elem[A][x][z] e t =
+  case s ( push => e' <- recv s ;
+                   [y] <- recv s ;              % t : ?[y]. stack[A][x][y] |- s : stack[A][x][y]
+                   t' <- elem[A][x][z] e t ;    % t' : stack[A][x][z] |- s : stack[A][x][y]
+                   t'' <- exists[A][x][z] t' ;  % t'' : ?[z]. stack[A][x][z] |- s : stack[A][x][y]
+                   s <- elem[A][x][y] e' t''
+         | pop => s.some ; send s e ;           % t : ?[y]. stack[A][x][y] |- s : ?[z]. stack[A][x][z]
+                  s <-> t )
+
