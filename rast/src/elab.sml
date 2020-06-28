@@ -361,7 +361,7 @@ fun elab_tps env nil = nil
     in
          tp_defs @ elab_tps env decls
     end
-  | elab_tps env ((decl as A.TpEq([],[],con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'),ext))::decls) =
+  | elab_tps env ((decl as A.TpEq([],[],con,A as A.TpName(a,As,es),rel,A' as A.TpName(a',As',es'),ext))::decls) =
     (* variables are implicitly quantified; collect here *)
     (* because we have not yet elaborated type definitions
      * we cannot check the equality here; wait for the second pass
@@ -380,7 +380,7 @@ fun elab_tps env nil = nil
         val ctx2 = R.free_varlist es' ctx1
         val () = TV.valid env tpctx1 ctx2 con Ar ext
         val () = TV.valid env tpctx1 ctx2 con Ar' ext
-        val decl' = A.TpEq(tpctx1,ctx2,con,Ar,Ar',ext)
+        val decl' = A.TpEq(tpctx1,ctx2,con,Ar,rel,Ar',ext)
     in
         decl'::elab_tps env decls
     end
@@ -433,7 +433,7 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.TpDef _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
-  | elab_exps env ((decl as A.TpEq(tpctx,ctx,con,A as A.TpName(a,As,es),A' as A.TpName(a',As',es'), ext))::decls) =
+  | elab_exps env ((decl as A.TpEq(tpctx,ctx,con,A as A.TpName(a,As,es),A.BiVar,A' as A.TpName(a',As',es'), ext))::decls) =
     (* already checked validity during first pass; now check type equality *)
     let
         val B = A.expd_tp env (a,As,es)

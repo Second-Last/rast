@@ -393,7 +393,7 @@ and r_decl_1 (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(
   | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Tps(As1,_) $ Indices(es1,_)
                 $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),r2) $ Tps(As2,r3opt) $ Indices(es2, r4opt)) =
     (* 'eqtype' <id> <arg_seq> = <id> <arg_seq> *)
-    S $ Decl(A.TpEq([],[],R.True,A.TpName(id1,As1,es1),A.TpName(id2,As2,es2),PS.ext(joinOpt (joinOpt r2 r3opt) r4opt)))
+    S $ Decl(A.TpEq([],[],R.True,A.TpName(id1,As1,es1),A.BiVar,A.TpName(id2,As2,es2),PS.ext(joinOpt (joinOpt r2 r3opt) r4opt)))
   | r_decl_1 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(l,_) $ Tok(T.COLON,_)
                 $ Context(ctx,_) $ Tok(T.TURNSTILE,_)
                 $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =

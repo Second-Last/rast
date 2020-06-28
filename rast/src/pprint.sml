@@ -414,12 +414,16 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
 (* Declarations *)
 (****************)
 
+fun pp_rel A.BiVar = "="
+  | pp_rel A.CoVar = "<:"
+  | pp_rel A.ContraVar = ":>"
+
 fun pp_decl env (A.TpDef(a,alphas,Ws_opt,vs,R.True,A,_)) =
     pp_tp_after 0 ("type " ^ a ^ pp_alphas_variance alphas Ws_opt ^ P.pp_vars vs ^ " = ") (ext_tp env A)
   | pp_decl env (A.TpDef(a,alphas,Ws_opt,vs,con,A,_)) =
     pp_tp_after 0 ("type " ^ a ^ pp_alphas_variance alphas Ws_opt ^ P.pp_vars vs ^ P.pp_con con ^ " = ") (ext_tp env A)
-  | pp_decl env (A.TpEq(tpctx,ctx,con,A.TpName(a,As,es),A.TpName(a',As',es'),_)) =
-    "eqtype " ^ a ^ pp_tps env As ^ pp_idx es ^ " = " ^ a' ^ pp_tps env As' ^ pp_idx es'
+  | pp_decl env (A.TpEq(tpctx,ctx,con,A.TpName(a,As,es),rel,A.TpName(a',As',es'),_)) =
+    "eqtype " ^ a ^ pp_tps env As ^ pp_idx es ^ " " ^ pp_rel rel ^ " " ^ a' ^ pp_tps env As' ^ pp_idx es'
   | pp_decl env (A.ExpDec(f,alphas,vs,con,(D,pot,zC),_)) =
     "decl " ^ f ^ P.pp_alphas alphas ^ P.pp_vars vs ^ P.pp_con con ^ " : "
     ^ pp_context_compact env D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp_compact env zC
