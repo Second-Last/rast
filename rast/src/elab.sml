@@ -164,7 +164,7 @@ fun valid_args env tpctx vs (A.Plus(choices)) ext = valid_args_choices env tpctx
   | valid_args env tpctx vs (A.TpVar(alpha)) ext = ()
   | valid_args env tpctx vs (A.TpName(a,As,es)) ext =
     ( case A.lookup_tp env a
-       of SOME(alphas', vs', con', _) =>
+       of SOME(alphas', Ws_opt', vs', con', _) =>
           ( if List.length alphas' = List.length As then ()
             else E.error_tparam_number ("parameterized type " ^ a) (List.length alphas', List.length As) ext
           ; if List.length vs' = List.length es then ()
@@ -220,11 +220,13 @@ in
   fun fresh_name () = "%" ^ Int.toString (!n) before n := !n+1
 end
 
+fun is_internal a = String.sub (a,0) = #"%"
+
 fun apply_fst f (A,env) = (f A, env)
 
-fun exists (A.TpDef(a,alphas,vs,con,A,ext)) nil = false
-  | exists (A.TpDef(a,alphas,vs,con,A,ext)) (A.TpDef(a',alphas',vs',con',A',ext')::env) =
-    a = a' orelse exists (A.TpDef(a,alphas,vs,con,A,ext)) env
+fun exists (A.TpDef(a,alphas,Ws_opt,vs,con,A,ext)) nil = false
+  | exists (A.TpDef(a,alphas,Ws_opt,vs,con,A,ext)) (A.TpDef(a',alphas',Ws_opt',vs',con',A',ext')::env) =
+    a = a' orelse exists (A.TpDef(a,alphas,Ws_opt,vs,con,A,ext)) env
 
 fun combine nil env = env
   | combine (decl::env1) env2 =
@@ -236,10 +238,10 @@ fun combine nil env = env
  * a new definition "type a = A'" with A' == A and
  * also definitions for all internal names in A'
  *)
-fun tp_naming (A.TpDef(a,alphas,vs,con,A,ext)) =
+fun tp_naming (A.TpDef(a,alphas,Ws_opt,vs,con,A,ext)) =
   let val (A',env) = tp_name_subtp alphas vs con A []
   in
-    A.TpDef(a,alphas,vs,con,A',ext)::env
+    A.TpDef(a,alphas,Ws_opt,vs,con,A',ext)::env
   end
 
 (* tp_name_subtp ctx con A env = (A', env')
@@ -304,7 +306,7 @@ and tp_name_subtp' tpctx ctx con (A as A.TpName(_,_,_)) env = (A, env)
   | tp_name_subtp' tpctx ctx con A env =
     let val (A', env') = tp_name_subtp tpctx ctx con A env
         val new_tpname = fresh_name ()
-        val decl = A.TpDef(new_tpname,tpctx,ctx,con,A',NONE) (* we take here all type variables *)
+        val decl = A.TpDef(new_tpname,tpctx,NONE,ctx,con,A',NONE) (* we take here all type variables *)
     in
       (A.TpName(new_tpname, List.map A.TpVar tpctx, List.map R.Var ctx), decl::env')
     end
@@ -341,7 +343,7 @@ fun subst_chans (yt::D) (x::xs)  = (subst_chan yt x)::(subst_chans D xs)
  * are checked for the validity of the types used.
  *)
 fun elab_tps env nil = nil
-  | elab_tps env ((decl as A.TpDef(a,alphas,vs,con,A,ext))::decls) =
+  | elab_tps env ((decl as A.TpDef(a,alphas,NONE,vs,con,A,ext))::decls) =
     let
         val () = if !Flags.verbosity >= 1
                   then TextIO.print (postponed decl ^ PP.pp_decl env decl ^ "\n")
@@ -354,7 +356,7 @@ fun elab_tps env nil = nil
         val () = validR env alphas vs con A' ext
         val () = if TV.contractive env A' then () (* do not abbreviate type! *)
                  else ERROR ext ("type " ^ PP.pp_tp env A' ^ " not contractive")
-        val decl' = A.TpDef(a,alphas,vs,con,A',ext)
+        val decl' = A.TpDef(a,alphas,NONE,vs,con,A',ext)
         val tp_defs = tp_naming decl'
     in
          tp_defs @ elab_tps env decls
@@ -415,8 +417,13 @@ val tc_time : LargeInt.int ref = ref (LargeInt.fromInt 0)
  * Assumes that types have already been elaborated in the first pass
  *)
 fun elab_exps' env nil = nil
-  | elab_exps' env (decls as A.TpDef _::_) = (* do not print type definition again *)
-    elab_exps env decls
+  | elab_exps' env (decls as (decl as A.TpDef(a,alphas,Ws_opt,vs,phi,A,ext))::_) =
+    ( if (!Flags.verbosity >= 2 andalso not (is_internal a))
+         orelse !Flags.verbosity >= 3
+      (* print with variance annotations *)
+      then TextIO.print (PP.pp_decl env decl ^ "\n")
+      else () ;
+      elab_exps env decls )
   | elab_exps' env (decls as decl::_) =
     ( if !Flags.verbosity >= 1
       then TextIO.print (postponed decl ^ PP.pp_decl env decl ^ "\n")
@@ -514,6 +521,7 @@ fun elab_decls env decls =
     let val () = recon_time := LargeInt.fromInt 0
         val () = tc_time := LargeInt.fromInt 0
         val env' = elab_tps env decls
+        val env' = TEQ.update_variances env'  (* compute variances of type constructors *)
         val () = PP.Abbrev.reset ()
         (* second pass: perform reconstruction and type checking *)
         (* pass env' which has types with internal names as first argument *)
@@ -542,7 +550,7 @@ fun is_expdec env f = case A.lookup_expdec env f of NONE => false | SOME _ => tr
 fun is_expdef env f = case A.lookup_expdef env f of NONE => false | SOME _ => true
 
 fun check_redecl env nil = ()
-  | check_redecl env (A.TpDef(a,_,_,_,_,ext)::decls) =
+  | check_redecl env (A.TpDef(a,_,_,_,_,_,ext)::decls) =
     if is_tpdef env a orelse is_tpdef decls a
     then ERROR ext ("type name " ^ a ^ " defined more than once")
     else check_redecl env decls

@@ -389,7 +389,7 @@ and r_chan (S $ Chans(args, r1) $ Tok(T.IDENT(id), r2)) = S $ Chans(args @ [id],
 and r_decl S = r_decl_1 S
 and r_decl_1 (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(l,_) $ Tok(T.EQ,_) $ Tp(tp,r2)) =
     (* 'type' <id> <parm_seq> = <type> *)
-    S $ Decl(A.TpDef(id,alphas,vars l,phis l,tp,PS.ext(join r1 r2)))
+    S $ Decl(A.TpDef(id,alphas,NONE,vars l,phis l,tp,PS.ext(join r1 r2)))
   | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Tps(As1,_) $ Indices(es1,_)
                 $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),r2) $ Tps(As2,r3opt) $ Indices(es2, r4opt)) =
     (* 'eqtype' <id> <arg_seq> = <id> <arg_seq> *)

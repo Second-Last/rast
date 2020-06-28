@@ -20,6 +20,7 @@
 signature TYPE_EQUALITY =
 sig
 
+    val update_variances : Ast.env -> Ast.env
     val eq_tp : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.tp -> bool
 
 end  (* signature TYPE_EQUALITY *)
@@ -40,44 +41,101 @@ structure C = Constraints
 (* tpdef env a = (a, alphas, B) if a[alphas]{...} = B in env *)
 fun tp_def env a =
     case A.lookup_tp env a
-     of SOME(alphas, vs, con, B) => (a, alphas, B)
+     of SOME(alphas, Ws_opt, vs, con, B) => (a, alphas, B)
         (* NONE should be impossible *)
 
-fun invariant env seen alpha (A.Plus(choices)) = invariant_choices env seen alpha choices
-  | invariant env seen alpha (A.With(choices)) = invariant_choices env seen alpha choices
-  | invariant env seen alpha (A.Tensor(A,B)) = invariant env seen alpha A andalso invariant env seen alpha B
-  | invariant env seen alpha (A.Lolli(A,B)) = invariant env seen alpha A andalso invariant env seen alpha B
-  | invariant env seen alpha (A.One) = true
-  | invariant env seen alpha (A.Exists(phi,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.Forall(phi,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.ExistsNat(v,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.ForallNat(v,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.ExistsTp(alpha',A)) = alpha = alpha' orelse invariant env seen alpha A
-  | invariant env seen alpha (A.ForallTp(alpha',A)) = alpha = alpha' orelse invariant env seen alpha A
-  | invariant env seen alpha (A.PayPot(p,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.GetPot(p,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.Next(t,A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.Dia(A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.Box(A)) = invariant env seen alpha A
-  | invariant env seen alpha (A.TpVar(beta)) = (alpha <> beta)
-  | invariant env seen alpha (A.TpName(a,As,es)) =
-    invariant_list env seen alpha (tp_def env a) As
-and invariant_choices env seen alpha nil = true
-  | invariant_choices env seen alpha ((l,Al)::choices) =
-    invariant env seen alpha Al andalso invariant_choices env seen alpha choices
-and invariant_list env seen alpha (a, nil, B) nil = true
-  | invariant_list env seen alpha (a, beta::betas, B) (A::As) =
-    ( List.exists (fn (a',beta') => (a,beta) = (a',beta')) seen
-      orelse invariant env ((a,beta)::seen) beta B )
-    andalso invariant_list env seen alpha (a, betas, B) As
+(* tpctx only for locally quantified variables; currently unused *)
+fun variance env tpctx seen alpha (A.Plus(choices)) = variance_choices env tpctx seen alpha choices
+  | variance env tpctx seen alpha (A.With(choices)) = variance_choices env tpctx seen alpha choices
+  | variance env tpctx seen alpha (A.Tensor(A,B)) =
+    A.lub (variance env tpctx seen alpha A) (variance env tpctx seen alpha B)
+  | variance env tpctx seen alpha (A.Lolli(A,B)) =
+    A.lub (A.neg (variance env tpctx seen alpha A)) (variance env tpctx seen alpha B)
+  | variance env tpctx seen alpha (A.One) = A.NonVar
+  | variance env tpctx seen alpha (A.Exists(phi,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.Forall(phi,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.ExistsNat(v,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.ForallNat(v,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.ExistsTp(alpha',A)) =
+    if alpha = alpha' then A.NonVar
+    else variance env (alpha'::tpctx) seen alpha A
+  | variance env tpctx seen alpha (A.ForallTp(alpha',A)) =
+    if alpha = alpha' then A.NonVar
+    else variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.PayPot(p,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.GetPot(p,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.Next(t,A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.Dia(A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.Box(A)) = variance env tpctx seen alpha A
+  | variance env tpctx seen alpha (A.TpVar(beta)) =
+    if alpha = beta then A.CoVar else A.NonVar
+  | variance env tpctx seen alpha (A as A.TpName(b,As,es)) =
+    variance_list env tpctx seen alpha (tp_def env b) As
+and variance_choices env tpctx seen alpha nil = A.NonVar
+  | variance_choices env tpctx seen alpha ((l,Al)::choices) =
+    A.lub (variance env tpctx seen alpha Al) (variance_choices env tpctx seen alpha choices)
+and variance_list env tpctx seen alpha (b, nil, B) nil = A.NonVar
+  | variance_list env tpctx seen alpha (b, beta::betas, B) (A::As) =
+    let val V_betaB = variance_name env tpctx seen (b, beta, B)
+        val V_alphaA = variance env tpctx seen alpha A
+    in A.lub (A.cmp V_alphaA V_betaB) (variance_list env tpctx seen alpha (b, betas, B) As) end
+and variance_name env tpctx seen (b, beta, B) =
+    case List.find (fn (b',beta',W,B') => (b,beta) = (b',beta')) seen (* B = B' by invariant *)
+     of SOME(_,_,W,_) => W
+        (* NONE is impossible *)
 
-(*
-val invariant = fn env => fn seen => fn alpha => fn A =>
-    let val () = TextIO.print ("%inv " ^ alpha ^ " in " ^ A.Print.pp_tp A)
-        val r = invariant env seen alpha A
-        val () = TextIO.print (" == " ^ (if r then "true" else "false") ^ "\n")
-    in r end
-*)
+(* round-robin iteration to find least fixed point *)
+(* keep items in order just for sake of cleanliness *)
+fun iter changed env (old as ((a, alpha, W, A)::old')) new =
+    let val W' = variance env nil (List.revAppend (new, old)) alpha A
+    in if W' = W (* no change *)
+       then iter changed env old' ((a,alpha,W,A)::new)
+       else iter true env old' ((a,alpha,W',A)::new)
+    end
+  | iter true env nil new = iter false env (List.rev new) nil
+  | iter false env nil new = new (* found least fixed point *)
+
+(* init env = seen_init, start of least fixed point iteration *)
+(* can be called before or after internal names are created *)
+fun init (A.TpDef(a,alphas,NONE,vs,phi,A,ext)::env') =
+    List.map (fn alpha => (a, alpha, A.NonVar, A)) alphas
+    @ init env'
+  | init (A.TpDef(a,alphas,SOME _,vs,phi,A,ext)::env') =
+    raise Match
+  | init (_ :: env') = init env'
+  | init nil = nil
+
+fun extract_variances (a, nil) seen = nil
+  | extract_variances (a, alpha::alphas) seen =
+    case List.find (fn (b, beta, W, B) => (a,alpha) = (b,beta)) seen
+     of SOME(_, _, W, _) => W::extract_variances (a, alphas) seen
+        (* NONE should be impossible at fixed point *)
+
+fun update_env (A.TpDef(a,alphas,NONE,vs,phi,A,ext)::env') seen =
+    let val Vs = extract_variances (a, alphas) seen
+        val decl' = A.TpDef(a,alphas,SOME(Vs),vs,phi,A,ext)
+    in decl'::update_env env' seen end
+  | update_env (A.TpDef(a,alphas,SOME _,vs,phi,A,ext)::env') seen =
+    raise Match
+  | update_env (decl::env') seen = decl::update_env env' seen
+  | update_env nil seen = nil
+
+fun update_variances env =
+    let val seen_init = init env
+        val seen = iter false env seen_init nil
+    in update_env env seen end
+
+(* just for testing purposes *)
+fun retrieve_variance alpha (beta::betas) (W::Ws) =
+    if alpha = beta then W else retrieve_variance alpha betas Ws
+(* nil should be impossible *)
+
+fun invariant env a alpha =
+    case A.lookup_tp env a
+     of SOME(alphas, SOME(Ws), vs, phi, A) =>
+        let val W = retrieve_variance alpha alphas Ws
+        in W = A.NonVar end
+        (* NONE should be impossible *)
 
 (*****************)
 (* Type equality *)
@@ -277,11 +335,11 @@ and match_tp env tpctx exvars locals ctx con theta (A.Plus(choice)) (A.Plus(choi
  *)
 and match_tp_list env tpctx exvars locals ctx con theta (a, nil, B) nil nil = SOME(theta)
   | match_tp_list env tpctx exvars locals ctx con theta (a, alpha::alphas, B) (A::As) (A'::As') =
-    (if invariant env [(a,alpha)] alpha B
-     then match_tp_list env tpctx exvars locals ctx con theta (a, alphas, B) As As'
-     else case match_tp' env tpctx exvars locals ctx con theta A A'
-           of NONE => NONE
-            | SOME(theta1) => match_tp_list env tpctx exvars locals ctx con theta1 (a, alphas, B) As As')
+    if invariant env a alpha
+    then match_tp_list env tpctx exvars locals ctx con theta (a, alphas, B) As As'
+    else case match_tp' env tpctx exvars locals ctx con theta A A'
+          of NONE => NONE
+           | SOME(theta1) => match_tp_list env tpctx exvars locals ctx con theta1 (a, alphas, B) As As'
 
 and match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A') =
     let val sigma = R.zip ctx (R.create_idx ctx)
@@ -405,8 +463,8 @@ and eq_tp env tpctx ctx con seen (A.Plus(choice)) (A.Plus(choice')) =
 and eq_tp_list env tpctx ctx con seen (a, nil, B) nil nil = true
   | eq_tp_list env tpctx ctx con seen (a, alpha::alphas, B) (A::As) (A'::As') =
     ( () (* TextIO.print ("checking args!\n") *)
-    ; eq_tp' env tpctx ctx con seen A A'               (* A = A' *)
-     orelse invariant env [(a,alpha)] alpha B)  (* or a[..,alpha,...] = B does not depend on alpha *)
+    ; invariant env a alpha  (* or a[..,alpha,...] = B does not depend on alpha *)
+      orelse eq_tp' env tpctx ctx con seen A A' )               (* A = A' *)
     andalso eq_tp_list env tpctx ctx con seen (a, alphas, B) As As'
 
 and eq_tp_bind env tpctx ctx con seen (v,A) (v',A') =

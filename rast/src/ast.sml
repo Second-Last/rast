@@ -38,6 +38,7 @@ datatype tp =
 type choices = (label * tp) list
 
 type tp_ctx = tpvarname list
+datatype variance = NonVar | CoVar | ContraVar | BiVar
 
 type chan = string
 type chan_tp = chan * tp
@@ -99,7 +100,7 @@ type branches = (label * ext * exp) list             (* (l1 => P1 | ... | ln => 
 (* Declarations *)
 datatype decl =
          Pragma of string * string * ext                     (* #options, #test *)
-       | TpDef of tpname * tp_ctx * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
+       | TpDef of tpname * tp_ctx * variance list option * Arith.ctx * Arith.prop * tp * ext (* type a[..]{..} = A *)
        | TpEq of tp_ctx * Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a[..]{..} = b[..]{..} *)
        | ExpDec of expname * tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
                                                              (* decl f{..} : Delta |{p}- (z : C) *)
@@ -125,8 +126,13 @@ val subst_context : tp_subst -> context -> context (* [theta]Delta *)
 val free_tpvars : tp_ctx -> tp -> tp_ctx
 val fresh_tpvar : tp_subst -> tpvarname -> tpvarname
 
+(* Variance *)
+val lub : variance -> variance -> variance
+val neg : variance -> variance
+val cmp : variance -> variance -> variance
+
 (* Environment lookup *)
-val lookup_tp : env -> tpname -> (tp_ctx * Arith.ctx * Arith.prop * tp) option
+val lookup_tp : env -> tpname -> (tp_ctx * variance list option * Arith.ctx * Arith.prop * tp) option
 val lookup_expdec : env -> expname -> (tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp)) option
 val lookup_expdef : env -> expname -> (tp_ctx * Arith.ctx * (chan list * exp * chan)) option
 
@@ -149,6 +155,7 @@ sig
     val pp_prop : Arith.prop -> string
     val pp_con : Arith.prop -> string
     val pp_alphas : tp_ctx -> string
+    val pp_variance : variance -> string
     val pp_tp : tp -> string
     val pp_exp : exp -> string
     val pp_decl : decl -> string
@@ -197,6 +204,7 @@ datatype tp =
 type choices = (label * tp) list
 
 type tp_ctx = tpvarname list
+datatype variance = NonVar | CoVar | ContraVar | BiVar
 
 type chan = string
 type chan_tp = chan * tp
@@ -256,7 +264,7 @@ type branches = (label * ext * exp) list       (* (l1 => P1 | ... | ln => Pn) *)
 
 datatype decl =
          Pragma of string * string * ext                     (* #options, #test *)
-       | TpDef of tpname * tp_ctx * Arith.ctx * Arith.prop * tp * ext (* type a{..} = A *)
+       | TpDef of tpname * tp_ctx * variance list option * Arith.ctx * Arith.prop * tp * ext (* type a[..]{..} = A *)
        | TpEq of tp_ctx * Arith.ctx * Arith.prop * tp * tp * ext      (* eqtype a[..]{..} = b[..]{..} *)
        | ExpDec of expname * tp_ctx * Arith.ctx * Arith.prop * (context * pot * chan_tp) * ext
                                                              (* decl f{..} : Delta |{p}- (z : C) *)
@@ -441,12 +449,38 @@ fun fresh_tpvar theta alpha =
     then fresh_tpvar theta (next_name alpha)
     else alpha
 
+(************************)
+(* Constructor Variance *)
+(************************)
+
+fun lub NonVar W = W
+  | lub V NonVar = V
+  | lub BiVar W = BiVar
+  | lub V BiVar = BiVar
+  | lub CoVar CoVar = CoVar
+  | lub CoVar ContraVar = BiVar
+  | lub ContraVar CoVar = BiVar
+  | lub ContraVar ContraVar = ContraVar
+
+fun neg NonVar = NonVar
+  | neg BiVar = BiVar
+  | neg CoVar = ContraVar
+  | neg ContraVar = CoVar
+
+fun cmp NonVar W = NonVar
+  | cmp V NonVar = NonVar
+  | cmp BiVar W = BiVar (* W <> NonVar *)
+  | cmp V BiVar = BiVar (* V <> NonVar *)
+  | cmp CoVar W = CoVar (* W = CoVar, ContraVar *)
+  | cmp V CoVar = CoVar (* W = CoVar, ContraVar *)
+  | cmp ContraVar W = neg W (* W = CoVar, ContraVar *)
+
 (**********************)
 (* Environment Lookup *)
 (**********************)
 
-fun lookup_tp (TpDef(a',alphas,vs,con,A,_)::env') a  =
-    if a = a' then SOME(alphas,vs,con,A) else lookup_tp env' a
+fun lookup_tp (TpDef(a',alphas,Ws_opt,vs,con,A,_)::env') a  =
+    if a = a' then SOME(alphas,Ws_opt,vs,con,A) else lookup_tp env' a
   | lookup_tp (_ ::env') a = lookup_tp env' a
   | lookup_tp (nil) a = NONE
 
@@ -488,7 +522,7 @@ fun lookup_branch ((l:label,_,P)::branches) k =
  *)
 fun expd_tp env (a,As,es) =
     case lookup_tp env a
-     of SOME(alphas,vs,con,A) => subst_tp (ListPair.zipEq (alphas, As))
+     of SOME(alphas,Ws_opt,vs,con,A) => subst_tp (ListPair.zipEq (alphas, As))
                                           (apply_tp (R.zip vs es) A)
         (* cannot return NONE *)
 
@@ -536,6 +570,11 @@ fun pp_time (R.Int(1)) = ""
 
 fun pp_alphas nil = ""
   | pp_alphas (alpha::alphas) = "[" ^ alpha ^ "]" ^ pp_alphas alphas
+
+fun pp_variance NonVar = "@"
+  | pp_variance CoVar = "+"
+  | pp_variance ContraVar = "-"
+  | pp_variance BiVar = "*"
 
 fun pp_tpvar alpha = "[" ^ alpha ^ "]"
 
@@ -616,8 +655,8 @@ fun pp_context nil = "."
   | pp_context [xA] = pp_chan_tp xA
   | pp_context (xA::D) = pp_chan_tp xA ^ " " ^ pp_context D
 
-fun pp_decl (TpDef(a,alphas,vs,R.True,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ " = " ^ pp_tp A
-  | pp_decl (TpDef(a,alphas,vs,con,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
+fun pp_decl (TpDef(a,alphas,Ws_opt,vs,R.True,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ " = " ^ pp_tp A
+  | pp_decl (TpDef(a,alphas,Ws_opt,vs,con,A,_)) = "type " ^ a ^ pp_alphas alphas ^ pp_vars vs ^ pp_prop con ^ " = " ^ pp_tp A
   | pp_decl (TpEq(tpctx,ctx,con,TpName(a,As,es),TpName(a',As',es'),_)) = "eqtype " ^ a ^ pp_tps As ^ pp_idx es ^ " = " ^ a' ^ pp_tps As' ^ pp_idx es'
   | pp_decl (ExpDec(f,alphas,vs,con,(D,pot,zC),_)) = "decl " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ pp_con con ^ " : " ^ pp_context D ^ " |" ^ pp_pot pot ^ "- " ^ pp_chan_tp zC
   | pp_decl (ExpDef(f,alphas,vs,(xs,P,x),_)) = "proc " ^ x ^ " <- " ^ f ^ pp_alphas alphas ^ pp_vars vs ^ " " ^ pp_chanlist xs ^ " = " ^ pp_exp P

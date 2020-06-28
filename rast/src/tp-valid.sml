@@ -166,7 +166,7 @@ fun valid_explicit env ctx con (A.Plus(choice)) ext = valid_choice env ctx con c
     (* allow forward references since 'env' is the full environment *)
     ( case A.lookup_tp env a
        of NONE => ERROR ext ("type name " ^ a ^ " undefined")
-        | SOME(alphas,vs,con',_) =>
+        | SOME(alphas,Ws_opt,vs,con',_) =>
           if not (List.length vs = List.length es)
           then E.error_index_number "type name" (List.length vs, List.length es) ext
           else if not (List.length alphas = List.length As)

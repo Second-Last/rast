@@ -226,6 +226,16 @@ fun pp_time (R.Int(1)) = ""
 fun pp_alphas nil = ""
   | pp_alphas (alpha::alphas) = "[" ^ alpha ^ "]" ^ pp_alphas alphas
 
+fun pp_variance A.NonVar = "@"
+  | pp_variance A.CoVar = "+"
+  | pp_variance A.ContraVar = "-"
+  | pp_variance A.BiVar = "*"
+
+fun pp_alphas_variance alphas NONE = pp_alphas alphas
+  | pp_alphas_variance nil (SOME(nil)) = ""
+  | pp_alphas_variance (alpha::alphas) (SOME(W::Ws)) =
+    "[" ^ alpha ^ pp_variance W ^ "]" ^ pp_alphas_variance alphas (SOME(Ws))
+
 (*******************************)
 (* Multiline Printing of Types *)
 (*******************************)
@@ -404,10 +414,10 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
 (* Declarations *)
 (****************)
 
-fun pp_decl env (A.TpDef(a,alphas,vs,R.True,A,_)) =
-    pp_tp_after 0 ("type " ^ a ^ P.pp_alphas alphas ^ P.pp_vars vs ^ " = ") (ext_tp env A)
-  | pp_decl env (A.TpDef(a,alphas,vs,con,A,_)) =
-    pp_tp_after 0 ("type " ^ a ^ P.pp_alphas alphas ^ P.pp_vars vs ^ P.pp_con con ^ " = ") (ext_tp env A)
+fun pp_decl env (A.TpDef(a,alphas,Ws_opt,vs,R.True,A,_)) =
+    pp_tp_after 0 ("type " ^ a ^ pp_alphas_variance alphas Ws_opt ^ P.pp_vars vs ^ " = ") (ext_tp env A)
+  | pp_decl env (A.TpDef(a,alphas,Ws_opt,vs,con,A,_)) =
+    pp_tp_after 0 ("type " ^ a ^ pp_alphas_variance alphas Ws_opt ^ P.pp_vars vs ^ P.pp_con con ^ " = ") (ext_tp env A)
   | pp_decl env (A.TpEq(tpctx,ctx,con,A.TpName(a,As,es),A.TpName(a',As',es'),_)) =
     "eqtype " ^ a ^ pp_tps env As ^ pp_idx es ^ " = " ^ a' ^ pp_tps env As' ^ pp_idx es'
   | pp_decl env (A.ExpDec(f,alphas,vs,con,(D,pot,zC),_)) =
