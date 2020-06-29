@@ -1,0 +1,32 @@
+#test success
+
+% currently fails, with type equality and subtyping
+
+type T[x] = +{L : T[T[x]], R : x}
+type D = +{L : T[D], $ : 1}
+
+type T'[x] = +{L : T'[T'[x]], R : x}
+type D' = +{L : T'[D], $ : 1}
+
+eqtype D = D'
+eqtype T[x] = T'[x]
+eqtype T[T[x]] = T'[T'[x]]
+
+(*
+eqtype D <= D'
+eqtype T[x] <= T'[x]
+eqtype T[T[x]] <= T'[T'[x]]
+*)
+
+decl DtoD' : (d : D) |- (d' : D')
+proc d' <- DtoD' d = d' <-> d
+
+(*
+type S[x] = +{L : S[S[x]], L' : S'[S[x]], R : x}
+type S'[x] = +{L : S[S'[x]], L' : S'[S'[x]], R' : x}
+type E = +{L : S[E], L' : S'[E], $ : 1}
+
+decl DtoE : (d : D) |- (e : E)
+
+proc e <- DtoE d = e <-> d
+*)

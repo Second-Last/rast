@@ -175,6 +175,10 @@ fun aexp2arith r (Arith(e)) = e
 fun precedes_infix (S $ AExp _) = true
   | precedes_infix _ = false
 
+(* For eqtype declarations *)
+fun rel (T.EQ) = A.BiVar
+  | rel (T.LEQ) = A.CoVar
+
 (* arithmetic prefix and infix operators *)
 (* each with precedence, associativity, region, and abstract syntax constructor *)
 fun opr (S, t, r) = case t of
@@ -336,7 +340,11 @@ and p_eq_type ST = case first ST of
   | t => error_expected (here ST, T.EQ, t)
 
 (* <id> <arg_seq> '=' <id> <arg_seq> *)
-and p_eqtype ST = ST |> p_id_arg_seq >> p_terminal T.EQ >> p_id_arg_seq
+and p_eqtype ST = ST |> p_id_arg_seq >> p_rel >> p_id_arg_seq
+and p_rel ST = case first ST of
+    T.EQ => ST |> shift
+  | T.LEQ => ST |> shift
+  | t => error_expected_list (here ST, [T.EQ,T.LEQ], t)
 
 (* ':' ( <ctx> | '.' ) <turnstile> '(' <id> ':' <type> ')' *)
 and p_exp_decl ST = case first ST of
@@ -391,9 +399,9 @@ and r_decl_1 (S $ Tok(T.TYPE,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(
     (* 'type' <id> <parm_seq> = <type> *)
     S $ Decl(A.TpDef(id,alphas,NONE,vars l,phis l,tp,PS.ext(join r1 r2)))
   | r_decl_1 (S $ Tok(T.EQTYPE,r1) $ Tok(T.IDENT(id1),_) $ Tps(As1,_) $ Indices(es1,_)
-                $ Tok(T.EQ,_) $ Tok(T.IDENT(id2),r2) $ Tps(As2,r3opt) $ Indices(es2, r4opt)) =
-    (* 'eqtype' <id> <arg_seq> = <id> <arg_seq> *)
-    S $ Decl(A.TpEq([],[],R.True,A.TpName(id1,As1,es1),A.BiVar,A.TpName(id2,As2,es2),PS.ext(joinOpt (joinOpt r2 r3opt) r4opt)))
+                $ Tok(relsym,_) $ Tok(T.IDENT(id2),r2) $ Tps(As2,r3opt) $ Indices(es2, r4opt)) =
+    (* 'eqtype' <id> <arg_seq> (= | <=) <id> <arg_seq> *)
+    S $ Decl(A.TpEq([],[],R.True,A.TpName(id1,As1,es1),rel relsym,A.TpName(id2,As2,es2),PS.ext(joinOpt (joinOpt r2 r3opt) r4opt)))
   | r_decl_1 (S $ Tok(T.DECL,r1) $ Tok(T.IDENT(id),_) $ TpVars(alphas,_) $ Vars(l,_) $ Tok(T.COLON,_)
                 $ Context(ctx,_) $ Tok(T.TURNSTILE,_)
                 $ Tok(T.LPAREN,_) $ Tok(T.IDENT(c),_) $ Tok(T.COLON,_) $ Tp(tp,_) $ Tok(T.RPAREN,r2)) =
