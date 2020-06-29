@@ -1,0 +1,10 @@
+#test error
+
+type nat = +{z : 1, s : nat}
+type zero = +{z : 1}
+type pos = +{s : nat}
+type even = +{z : 1, s : odd}
+type odd = +{s : even}
+
+decl id : (x : even) |- (y : odd)
+proc y <- id x = y <-> x

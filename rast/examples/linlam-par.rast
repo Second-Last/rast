@@ -1,0 +1,90 @@
+#test success
+#options --work=none --time=none --syntax=implicit
+
+% linear lambda-calculus with "subtyping"
+% this evaluates the body of a function in parallel
+% with its argument
+
+(*
+eval (lam f) = lam f
+eval (app e1 e2) = 
+  v2 <- eval e2
+  case eval e1 ( lam f => eval (f v2) ) % no case for app needed
+*)
+
+type exp = +{ val : val ,
+              app : exp * exp }
+              
+              
+type val = +{ lam : val -o exp }
+
+decl apply : (e1 : exp) (e2 : exp) |- (e : exp)
+proc e <- apply e1 e2 =
+  e.app ; send e e1 ; e <-> e2
+
+decl lambda : (f : val -o exp) |- (v : val)
+proc v <- lambda f =
+  v.lam ; v <-> f
+
+decl value : (v : val) |- (e : exp)
+proc e <- value v =
+  e.val ; e <-> v
+
+decl eval : (e : exp) |- (v : val)
+proc v <- eval e =
+  case e ( val => v <-> e
+         | app => e1 <- recv e ; % e = e2
+                  v1 <- eval e1 ;
+                  v2 <- eval e ;
+                  case v1 ( lam => send v1 v2 ;
+                                   v <- eval v1 ) )
+
+(*
+decl norm_lam : (e : exp -o exp) |- (n : exp -o exp)
+proc n <- norm_lam e =
+  x <- recv n ;  % x : exp, f : exp, e : exp -o exp
+  send e x ;     % f : exp, e : exp
+  n <- norm e
+
+decl norm : (e : exp) |- (n : exp)
+proc n <- norm e =
+  case e ( lam => % e : exp -o exp
+                  n' <- norm_lam e ;
+                  n <- lambda' n'
+         | app => e1 <- recv e ; % e = e2
+                  n1 <- norm e1 ;
+                  case n1 ( lam => send n1 e ;  % n1 : exp -o exp
+                                   n <- norm n1
+                          | app => n11 <- recv n1 ;  % n1 = n12
+                                   n1' <- apply n11 n1 ;
+                                   n2 <- norm e ;
+                                   n <- apply n1' n2 ) )
+*)
+
+(* id = \x. x *)
+decl id : . |- (e : exp)
+proc e <- id =
+  e.val ; e.lam ; x <- recv e ; e.val ; e <-> x
+
+(* id id *)
+decl idid : . |- (e : exp)
+proc e <- idid =
+  i1 <- id ;
+  i2 <- id ;
+  e <- apply i1 i2
+
+(* swap = \f. \x. \y. (f y) x *)
+decl swap : . |- (e : exp)
+proc e <- swap =
+  e.val ; e.lam ; f <- recv e ; fexp <- value f ;
+  e.val ; e.lam ; x <- recv e ; xexp <- value x ;
+  e.val ; e.lam ; y <- recv e ; yexp <- value y ;
+  fy <- apply fexp yexp ;
+  e <- apply fy xexp
+
+decl idid_val : . |- (v : val)
+proc v <- idid_val =
+  e <- idid ;
+  v <- eval e
+
+exec idid_val

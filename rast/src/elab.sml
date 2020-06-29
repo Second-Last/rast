@@ -433,14 +433,14 @@ and elab_exps env nil = nil
   | elab_exps env ((decl as A.TpDef _)::decls) =
     (* already checked validity during first pass *)
     decl::elab_exps' env decls
-  | elab_exps env ((decl as A.TpEq(tpctx,ctx,con,A as A.TpName(a,As,es),A.BiVar,A' as A.TpName(a',As',es'), ext))::decls) =
+  | elab_exps env ((decl as A.TpEq(tpctx,ctx,con,A as A.TpName(a,As,es),rel,A' as A.TpName(a',As',es'), ext))::decls) =
     (* already checked validity during first pass; now check type equality *)
     let
         val B = A.expd_tp env (a,As,es)
         val B' = A.expd_tp env (a',As',es')
-        val () = if TEQ.eq_tp env tpctx ctx con B B'
+        val () = if TEQ.eq_tp env tpctx ctx con B rel B'
                  then ()
-                 else ERROR ext ("type " ^ PP.pp_tp env A ^ " not equal " ^ PP.pp_tp env A')
+                 else ERROR ext ("type " ^ PP.pp_tp env A ^ " not " ^ PP.pp_rel rel ^ " " ^ PP.pp_tp env A')
     in 
         decl::elab_exps' env decls
     end

@@ -35,6 +35,7 @@ sig
     val pp_exp_prefix : Ast.env -> Ast.exp -> string (* pp_exp_prefix P = "<top action in P>" *)
 
     (* declarations *)
+    val pp_rel : Ast.variance -> string
     val pp_decl : Ast.env -> Ast.decl -> string
 
     (* abbreviations, for compact printing *)

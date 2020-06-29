@@ -1,0 +1,57 @@
+#test success
+
+type nat = +{z : 1, s : nat}
+type zero = +{z : 1}
+type pos = +{s : nat}
+type even = +{z : 1, s : odd}
+type odd = +{s : even}
+
+decl id01 : (x : zero) |- (y : nat)
+proc y <- id01 x = y <-> x
+
+decl id02 : (x : pos) |- (y : nat)
+proc y <- id02 x = y <-> x
+
+decl id03 : (x : even) |- (y : nat)
+proc y <- id03 x = y <-> x
+
+decl id04 : (x : odd) |- (y : nat)
+proc y <- id04 x = y <-> x
+
+decl id05 : (x : zero) |- (y : even)
+proc y <- id05 x = y <-> x
+
+% list[A] is covariant in A
+% empty[A] is nonvariant in A
+type list[A] = +{nil : 1, cons : A * list[A]}
+type empty[A] = +{nil : 1}
+type nonempty[A] = +{cons : A * list[A]}
+
+decl id06[A] : (x : empty[A]) |- (y : list[A])
+proc y <- id06[A] x = y <-> x
+
+decl id07[A] : (x : nonempty[A]) |- (y : list[A])
+proc y <- id07[A] x = y <-> x
+
+decl id08 : (x : nonempty[even]) |- (y : list[nat])
+proc y <- id08 x = y <-> x
+
+decl id09 : (x : empty[even]) |- (y : empty[odd])
+proc y <- id09 x = y <-> x
+
+% stack[A] is bivariant in A
+
+type stack[A] = &{push : A -o stack[A],
+                  pop : +{none : 1, some : A * stack[A]}}
+type emptyStack[A] = &{push : A -o nonemptyStack[A],
+                       pop : +{none : 1}}
+type nonemptyStack[A] = &{push : A -o nonemptyStack[A],
+                          pop : +{some : A * stack[A]}}
+
+decl id10[A] : (t : nonemptyStack[A]) |- (s : stack[A])
+proc s <- id10[A] t = s <-> t
+decl id11[A] : (t : emptyStack[A]) |- (s : stack[A])
+proc s <- id11[A] t = s <-> t
+
+decl id12[A] : (t : emptyStack[even]) |- (s : stack[even])
+proc s <- id12[A] t = s <-> t

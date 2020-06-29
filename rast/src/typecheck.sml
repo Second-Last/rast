@@ -67,9 +67,10 @@ fun eventually_box_context env [] ext = ()
  * Order should match, types should match, channel names may be different
  * match_contexts' env tpctx ctx con D D' ext
  * requires |D| = |D'|
+ * with subtyping, for each matching pairs of type A <: A'
  *)
 fun match_contexts' env tpctx ctx con ((x,A)::D) ((x',A')::D') ext =
-    if TEQ.eq_tp env tpctx ctx con A A'
+    if TEQ.eq_tp env tpctx ctx con A A.CoVar A' (* check A <: A' *)
     then match_contexts' env tpctx ctx con D D' ext
     else E.error_type_mismatch env "call" ((x',A'), (x,A)) ext
   | match_contexts' env tpctx ctx con nil nil ext = ()
@@ -121,7 +122,7 @@ and fwd trace env tpctx ctx con D pot (A.Id(x,y)) (zC as (z,C)) ext =
         val D' = TCU.remove_chan y D ext
         val () = case D' of nil => ()
                           | _ => E.error_channels_open "forward" D' ext
-        val () = if TEQ.eq_tp env tpctx ctx con A C then ()
+        val () = if TEQ.eq_tp env tpctx ctx con A A.CoVar C then ()  (* check A <: C *)
                  else E.error_type_mismatch env "forward" ((y,C), (y,A)) ext
         val () = if not (C.entails ctx con (R.Eq(pot, R.Int(0))))
                  then ERROR ext ("unconsumed potential: " ^ C.pp_jfail con (R.Eq(pot, R.Int(0))))
@@ -166,7 +167,7 @@ and expname trace env tpctx ctx con D pot (A.ExpName(x,f,As,es,xs)) (z,C) ext =
                  else E.error_channel_number "tail call" (List.length D', List.length xs) ext
         val cutD = gen_context env xs D ext
         val () = match_contexts env tpctx ctx con cutD D' ext
-        val () = if TEQ.eq_tp env tpctx ctx con C' C then ()
+        val () = if TEQ.eq_tp env tpctx ctx con C' A.CoVar C then () (* C' <: C *)
                  else E.error_type_mismatch env "tail call" ((z,C), (z,C')) ext
         val () = if not (C.entails ctx con (R.Eq(pot, pot')))
                  then ERROR ext ("potential mismatch: " ^ C.pp_jfail con (R.Eq(pot, pot')))
@@ -232,7 +233,7 @@ and plusL trace env tpctx ctx con D (A.Plus(choices)) pot (A.Case(x,branches)) z
 
 and tensorR trace env tpctx ctx con D pot (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext (* z = x *) =
     let val A' = TCU.lookup_context env w D ext
-        val () = if TEQ.eq_tp env tpctx ctx con A A' then ()
+        val () = if TEQ.eq_tp env tpctx ctx con A' A.CoVar A then ()  (* check A' <: A *)
                  else E.error_type_mismatch env "channel send" (("<id>", A), (w, A')) ext
     in
         check_exp' trace env tpctx ctx con (TCU.remove_chan w D ext) pot P (z,B) ext
@@ -242,7 +243,7 @@ and tensorR trace env tpctx ctx con D pot (A.Send(x,w,P)) (z,A.Tensor(A,B)) ext 
 
 and lolliL trace env tpctx ctx con D (A.Lolli(A,B)) pot (A.Send(x,w,Q)) zC ext (* z != x *) =
     let val A' = TCU.lookup_context env w D ext
-        val () = if TEQ.eq_tp env tpctx ctx con A A' then ()
+        val () = if TEQ.eq_tp env tpctx ctx con A' A.CoVar A then () (* check A' <: A *)
                  else E.error_type_mismatch env "channel send" (("<id>",A), (w, A')) ext
     in
         check_exp' trace env tpctx ctx con (TCU.update_tp (x,B) (TCU.remove_chan w D ext)) pot Q zC ext

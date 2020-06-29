@@ -21,7 +21,7 @@ signature TYPE_EQUALITY =
 sig
 
     val update_variances : Ast.env -> Ast.env
-    val eq_tp : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.tp -> bool
+    val eq_tp : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.variance -> Ast.tp -> bool
 
 end  (* signature TYPE_EQUALITY *)
 
@@ -549,6 +549,6 @@ and eq_name_name_eqs env tpctx ctx con seen nil A rel A' = false (* do not recur
 
 (* interface *)
 (* start algorithm with seen = nil *)
-fun eq_tp env tpctx ctx con A B = eq_tp' env tpctx ctx con nil A A.BiVar B
+fun eq_tp env tpctx ctx con A rel B = eq_tp' env tpctx ctx con nil A rel B
 
 end  (* structure TypeEquality *)

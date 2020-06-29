@@ -76,7 +76,8 @@ fun error_type_mismatch env msg ((x,A), (y,B)) ext =
     in
         ERROR ext ("type mismatch in " ^ msg ^ ":\n"
                    ^ "expected " ^ x_str ^ " : " ^ PP.pp_tp_compact env A ^ "\n"
-                   ^ "found    " ^ y_str ^ " : " ^ PP.pp_tp_compact env B)
+                   ^ "found    " ^ y_str ^ " : " ^ PP.pp_tp_compact env B ^ "\n"
+                   ^ "which is not a subtype\n")
     end
 
 fun error_channel_type_mismatch env (expected, (x,A)) ext =

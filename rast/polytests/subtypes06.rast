@@ -1,0 +1,23 @@
+#test error
+
+type nat = +{z : 1, s : nat}
+type zero = +{z : 1}
+type pos = +{s : nat}
+type even = +{z : 1, s : odd}
+type odd = +{s : even}
+
+type list[A] = +{nil : 1, cons : A * list[A]}
+type empty[A] = +{nil : 1}
+type nonempty[A] = +{cons : A * list[A]}
+
+type stack[A] = &{push : A -o stack[A],
+                  pop : +{none : 1, some : A * stack[A]}}
+type emptyStack[A] = &{push : A -o nonemptyStack[A],
+                       pop : +{none : 1}}
+type nonemptyStack[A] = &{push : A -o nonemptyStack[A],
+                          pop : +{some : A * stack[A]}}
+
+decl id : (x : nonemptyStack[even]) |- (y : stack[nat])
+proc y <- id x = y <-> x
+
+

@@ -1,0 +1,15 @@
+#test error
+
+type nat = +{z : 1, s : nat}
+type zero = +{z : 1}
+type pos = +{s : nat}
+type even = +{z : 1, s : odd}
+type odd = +{s : even}
+
+type list[A] = +{nil : 1, cons : A * list[A]}
+type empty[A] = +{nil : 1}
+type nonempty[A] = +{cons : A * list[A]}
+
+decl id : (x : list[even]) |- (y : nonempty[nat])
+proc y <- id x = y <-> x
+
