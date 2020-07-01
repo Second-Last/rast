@@ -1,0 +1,182 @@
+#test success
+
+%%% adapted from Henry, email of June 19, 2020
+
+%%% like stack-nested-subtp, except that stacks
+%%% are implemented less tersely as lists
+
+%%% Lists, tracking length
+
+type Cons[A][alpha] = +{ cons : A * alpha }
+type Nil[A] = +{ nil : 1 }
+
+decl nil[A] : . |- (l : Nil[A])
+proc l <- nil[A] = l.nil ; close l
+
+decl cons[A][alpha] : (x : A) (l : alpha) |- (k : Cons[A][alpha])
+proc k <- cons[A][alpha] x l =
+  k.cons ; send k x ; k <-> l
+
+type List[A] = +{ nil : 1, cons : A * List[A] }
+
+%%% Verifying some obvious subtyping
+%%% this is not needed for the development
+
+eqtype Cons[A][List[A]] <= List[A]
+eqtype Nil[A] <= List[A]
+
+%%% Stacks
+
+type Stack[A][alpha] = &{ push : A -o Stack[A][Some[A][alpha]],
+                          pop : alpha }
+type Some[A][alpha] = +{ some : A * Stack[A][alpha] }
+type None           = +{ none : 1 }
+
+type Either[A]      = +{ none : 1, some : A * Stack[A][Either[A]] }
+
+%%% Maps to relate list types to stack types
+
+decl liftSome[A][alpha][beta] : (f : alpha -o Stack[A][beta]) |- (g : Cons[A][alpha] -o Stack[A][Some[A][beta]])
+decl liftNone[A] : . |- (f : Nil[A] -o Stack[A][None])
+
+proc g <- liftSome[A][alpha][beta] f =
+  l <- recv g ;  % l : Cons[A][alpha], g : Stack[A][Some[A][beta]]
+  case l ( cons => x <- recv l ;  % x : A, l : alpha, g : Stack[A][Some[A][beta]]
+                   send f l    ;  % x : A, f : Stack[A][beta], g : Stack[A][Some[A][beta]]
+                   f.push ; send f x ;  % f : Stack[A][Some[A][beta]], g : Stack[A][Some[A][beta]]
+                   g <-> f )
+
+proc g <- liftNone[A] =
+  l <- recv g ;
+  g <- noneStackList[A] l
+                  
+
+%%% Stacks as lists
+
+decl noneStackList[A] : (l : Nil[A]) |- (s : Stack[A][None])
+decl someStackList[A][alpha][beta] : (map : alpha -o Stack[A][beta]) (l : Cons[A][alpha]) |- (s : Stack[A][Some[A][beta]])
+
+proc s <- someStackList[A][alpha][beta] map l =
+  case s ( push => x <- recv s ; % s : Stack[A][Some[A][Some[A][beta]]]
+                   l' <- cons[A][Cons[A][alpha]] x l ; % l' : Cons[A][Cons[A][alpha]]
+                   % next line requires use to construct a new map
+                   map' <- liftSome[A][alpha][beta] map ;  % map' : Cons[A][alpha] -o Stack[A][Some[A][beta]]
+                   s <- someStackList[A][Cons[A][alpha]][Some[A][beta]] map' l'
+         | pop =>  % s : Some[A][beta]
+                   case l ( cons => x <- recv l ;  % l : alpha
+                                    s.some ; send s x ;  % s : Stack[A][beta]
+                                    send map l ;
+                                    s <-> map ))
+
+proc s <- noneStackList[A] l =
+  case s ( push => x <- recv s ;                % l : Nil[A], x : A, s : Stack[A][Some[A][None]]
+                   l' <- cons[A][Nil[A]] x l ;  % l : Cons[A][Nil[A]]
+                   mapNone <- liftNone[A] ;     % mapNone :  Nil[A] -o Stack[A][None]
+                   s <- someStackList[A][Nil[A]][None] mapNone l'
+         | pop => % s : None
+                  case l ( nil => s.none ;
+                                  wait l ; close s ))
+
+%%% Reversing "imprecise" stacks
+%%% hypothesizing a subtyping coercion
+
+decl rev[A] : (a : Stack[A][Either[A]]) (t : Stack[A][Either[A]]) |- (s : Stack[A][Either[A]])
+proc s <- rev[A] a t =
+  t.pop ;
+  case t ( none => wait t ; s <-> a
+         | some => x <- recv t ;            % t : Stack[A][Either[A]]
+                   a.push ; send a x ;      % a : Stack[A][Some[A][Either[A]]]
+                   % no coercion needed to witness subtyping in next line
+                   % a' <- stackSomeEither[A] a ;  % a' : Stack[A][Either[A]]
+                   s <- rev[A] a t )
+
+type nat = +{ z : 1, s : nat }
+
+decl zero : . |- (n : nat)
+decl one : . |- (n : nat)
+decl two : . |- (n : nat)
+
+proc n <- zero = n.z ; close n
+proc n <- one = n.s ; n.z ; close n
+proc n <- two = n.s ; n.s ; n.z ; close n
+
+decl s012 : . |- (s : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]])
+proc s <- s012 =
+  l <- nil[nat] ;
+  t <- noneStackList[nat] l ;
+  n0 <- zero ;
+  t.push ; send t n0 ;
+  n1 <- one ;
+  t.push ; send t n1 ;
+  n2 <- two ;
+  t.push ; send t n2 ;
+  s <-> t
+
+%%% Explicit type coercsion by forwarding
+%%%
+%%% Stack[A][Some[A][Either[A]]] <: Stack[A][Either[A]]
+%%% Stack[A][None]               <: Stack[A][Either[A]]
+decl stackSomeEither[A] : (a : Stack[A][Some[A][Either[A]]]) |- (s : Stack[A][Either[A]])
+decl stackNoneEither[A] : (a : Stack[A][None])               |- (s : Stack[A][Either[A]])
+
+proc s <- stackSomeEither[A] a = s <-> a
+proc s <- stackNoneEither[A] a = s <-> a
+
+% leaving out all the stackNoneEither identities
+% below fails right now because the algorithm does not
+% see that
+(*
+expected t : Stack[nat][Either[nat]]
+found    t : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]]
+which is not a subtype
+*)
+
+decl w012 : . |- (s : Stack[nat][Either[nat]])
+proc s <- w012 =
+  l <- nil[nat] ;
+  t <- noneStackList[nat] l ;
+  % t <- stackNoneEither[nat] t ; % optional
+  n0 <- zero ;
+  t.push ; send t n0 ;
+  % t <- stackSomeEither[nat] t ; % optional
+  n1 <- one ;
+  t.push ; send t n1 ;
+  t <- stackSomeEither[nat] t ;  % required
+  n2 <- two ;
+  t.push ; send t n2 ;
+  % t <- stackSomeEither[nat] t ;  % optional
+  s <-> t
+
+decl w210 : . |- (s : Stack[nat][Either[nat]])
+proc s <- w210 =
+  t <- w012 ;
+  l <- nil[nat] ;
+  e <- noneStackList[nat] l ;
+  % e <- stackNoneEither[nat] e ; % optional
+  s <- rev[nat] e t
+
+exec s012
+exec w012
+exec w210
+
+decl stackList[A] : (s : Stack[A][Either[A]]) |- (l : List[A])
+proc l <- stackList[A] s =
+  s.pop ;  % s : Either[A]
+  case s ( some => l.cons ;
+                   x <- recv s ; send l x ;
+                   l <- stackList[A] s
+         | none => l.nil ;
+                   wait s ; close l )
+
+decl l012 : . |- (l : List[nat])
+proc l <- l012 =
+  s <- w012 ;
+  l <- stackList[nat] s
+
+decl l210 : . |- (l : List[nat])
+proc l <- l210 =
+  s <- w210 ;
+  l <- stackList[nat] s
+
+exec l012
+exec l210
