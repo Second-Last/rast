@@ -10,5 +10,9 @@ type C[x] = +{ n : C[C[x]], l : D[x] }
 type D[z] = +{ l : z }
 type E[y] = +{ s : E[y] }
 
+% both of these invariants are required
+eqtype B[y] = E[y]
+eqtype A[x] = C[x]
+
 decl id : (d : A[B[1]]) |- (c : C[E[1]])
 proc c <- id d = c <-> d

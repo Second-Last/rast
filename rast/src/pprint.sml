@@ -416,8 +416,8 @@ fun pp_exp_prefix env (A.Spawn(P,Q)) = pp_exp_prefix env P ^ " ; ..."
 (****************)
 
 fun pp_rel A.BiVar = "="
-  | pp_rel A.CoVar = "<:"
-  | pp_rel A.ContraVar = ":>"
+  | pp_rel A.CoVar = "<="
+  | pp_rel A.ContraVar = ">="
 
 fun pp_decl env (A.TpDef(a,alphas,Ws_opt,vs,R.True,A,_)) =
     pp_tp_after 0 ("type " ^ a ^ pp_alphas_variance alphas Ws_opt ^ P.pp_vars vs ^ " = ") (ext_tp env A)

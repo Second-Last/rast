@@ -1,3 +1,7 @@
+#test error
+
+% for a working version of this, see stacks-nested-subtp.rast
+
 type S[a][x] = &{push : a -o S[a][S[a][x]],
                  pop : a * x}
 

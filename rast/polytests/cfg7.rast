@@ -9,6 +9,9 @@ A[x] = +{ l : x * A[A[x]] }
 A[x] is invariant if A[B] == A[C] for all B,C
 *)
 
+% invarint below is required, since it cannot be synthesized
+eqtype A[z] = B[z]
+
 decl id : (d : A[1]) |- (c : B[1])
 proc c <- id d = c <-> d
 

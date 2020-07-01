@@ -125,18 +125,6 @@ fun update_variances env =
         val seen = iter false env seen_init nil
     in update_env env seen end
 
-(* just for testing purposes *)
-fun retrieve_variance alpha (beta::betas) (W::Ws) =
-    if alpha = beta then W else retrieve_variance alpha betas Ws
-(* nil should be impossible *)
-
-fun invariant env a alpha =
-    case A.lookup_tp env a
-     of SOME(alphas, SOME(Ws), vs, phi, A) =>
-        let val W = retrieve_variance alpha alphas Ws
-        in W = A.NonVar end
-        (* NONE should be impossible *)
-
 fun variances env a =
     case A.lookup_tp env a
      of SOME(alphas, SOME(Ws), vs, phi, A) => Ws
@@ -150,9 +138,9 @@ fun variances env a =
 
 (* implies W V = true if variance W in memo pad implies variance V in goal *)
 (* W and V in CoVar, ContraVar, BiVar *)
-fun implies A.BiVar _ = true  (* A == B implies A <: B and A :> B *)
-  | implies A.CoVar A.CoVar = true (* A <: B implies A <: B *)
-  | implies A.ContraVar A.ContraVar = true  (* A :> B implies A :> B *)
+fun implies A.BiVar _ = true  (* A == B implies A <= B and A >= B *)
+  | implies A.CoVar A.CoVar = true (* A <= B implies A <= B *)
+  | implies A.ContraVar A.ContraVar = true  (* A >= B implies A >= B *)
   | implies _ _ = false
 
 (* nested W rel = rel' if a[A]... rel a[B]... where the
@@ -257,67 +245,67 @@ fun not_free_in betas A =
     in List.all (fn beta => not (List.exists (fn alpha => alpha = beta) alphas)) betas end
 
 (* main entry point *)
-fun match_tp' env tpctx exvars locals ctx con theta A A' =
+fun match_tp' env seen tpctx exvars locals ctx con theta A rel A' =
     ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
-    ; match_tp env tpctx exvars locals ctx con theta
+    ; match_tp env seen tpctx exvars locals ctx con theta
             (aggregate_nexts env ctx con A)
-            (aggregate_nexts env ctx con A')
+            rel (aggregate_nexts env ctx con A')
     )
 
-and match_tp env tpctx exvars locals ctx con theta (A.Plus(choice)) (A.Plus(choice')) =
-    match_choice env tpctx exvars locals ctx con theta choice choice'
-  | match_tp env tpctx exvars locals ctx con theta (A.With(choice)) (A.With(choice')) =
-    match_choice env tpctx exvars locals ctx con theta choice choice'
+and match_tp env seen tpctx exvars locals ctx con theta (A.Plus(choice)) rel (A.Plus(choice')) =
+    match_choice env seen tpctx exvars locals ctx con theta choice rel choice'
+  | match_tp env seen tpctx exvars locals ctx con theta (A.With(choice)) rel (A.With(choice')) =
+    match_choice env seen tpctx exvars locals ctx con theta choice rel choice'
   
-  | match_tp env tpctx exvars locals ctx con theta (A.Tensor(A,B)) (A.Tensor(A',B')) =
-    (case match_tp' env tpctx exvars locals ctx con theta A A'
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Tensor(A,B)) rel (A.Tensor(A',B')) =
+    (case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
       of NONE => NONE
-       | SOME(theta1) => match_tp' env tpctx exvars locals ctx con theta1 B B')
-  | match_tp env tpctx exvars locals ctx con theta (A.Lolli(A,B)) (A.Lolli(A',B')) =
-    (case match_tp' env tpctx exvars locals ctx con theta A A'
+       | SOME(theta1) => match_tp' env seen tpctx exvars locals ctx con theta1 B rel B')
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Lolli(A,B)) rel (A.Lolli(A',B')) =
+    (case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
       of NONE => NONE
-       | SOME(theta1) => match_tp' env tpctx exvars locals ctx con theta1 B B')
+       | SOME(theta1) => match_tp' env seen tpctx exvars locals ctx con theta1 B rel B')
 
-  | match_tp env tpctx exvars locals ctx con theta (A.One) (A.One) = SOME(theta)
+  | match_tp env seen tpctx exvars locals ctx con theta (A.One) rel (A.One) = SOME(theta)
 
-  | match_tp env tpctx exvars locals ctx con theta (A.Exists(phi,A)) (A.Exists(phi',A')) =
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Exists(phi,A)) rel (A.Exists(phi',A')) =
     if C.equiv ctx con phi phi'
-    then match_tp' env tpctx exvars locals ctx (R.And(con,phi)) theta A A'
+    then match_tp' env seen tpctx exvars locals ctx (R.And(con,phi)) theta A rel A'
     else NONE
-  | match_tp env tpctx exvars locals ctx con theta (A.Forall(phi,A)) (A.Forall(phi',A')) =
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Forall(phi,A)) rel (A.Forall(phi',A')) =
     if C.equiv ctx con phi phi'
-    then match_tp' env tpctx exvars locals ctx (R.And(con,phi)) theta A A'
+    then match_tp' env seen tpctx exvars locals ctx (R.And(con,phi)) theta A rel A'
     else NONE
 
-  | match_tp env tpctx exvars locals ctx con theta (A.ExistsNat(v,A)) (A.ExistsNat(v',A')) =
-    match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A')
-  | match_tp env tpctx exvars locals ctx con theta (A.ForallNat(v,A)) (A.ForallNat(v',A')) =
-    match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A')
+  | match_tp env seen tpctx exvars locals ctx con theta (A.ExistsNat(v,A)) rel (A.ExistsNat(v',A')) =
+    match_tp_bind env seen tpctx exvars locals ctx con theta (v,A) rel (v',A')
+  | match_tp env seen tpctx exvars locals ctx con theta (A.ForallNat(v,A)) rel (A.ForallNat(v',A')) =
+    match_tp_bind env seen tpctx exvars locals ctx con theta (v,A) rel (v',A')
 
-  | match_tp env tpctx exvars locals ctx con theta (A.ExistsTp(alpha,A)) (A.ExistsTp(alpha',A')) =
-    match_tp_tpbind env tpctx exvars locals ctx con theta (alpha,A) (alpha',A')
-  | match_tp env tpctx exvars locals ctx con theta (A.ForallTp(alpha,A)) (A.ForallTp(alpha',A')) =
-    match_tp_tpbind env tpctx exvars locals ctx con theta (alpha,A) (alpha',A')
+  | match_tp env seen tpctx exvars locals ctx con theta (A.ExistsTp(alpha,A)) rel (A.ExistsTp(alpha',A')) =
+    match_tp_tpbind env seen tpctx exvars locals ctx con theta (alpha,A) rel (alpha',A')
+  | match_tp env seen tpctx exvars locals ctx con theta (A.ForallTp(alpha,A)) rel (A.ForallTp(alpha',A')) =
+    match_tp_tpbind env seen tpctx exvars locals ctx con theta (alpha,A) rel (alpha',A')
 
-  | match_tp env tpctx exvars locals ctx con theta (A.PayPot(p,A)) (A.PayPot(p',A')) =
+  | match_tp env seen tpctx exvars locals ctx con theta (A.PayPot(p,A)) rel (A.PayPot(p',A')) =
     if eq_id ctx con p p'
-    then match_tp' env tpctx exvars locals ctx con theta A A'
+    then match_tp' env seen tpctx exvars locals ctx con theta A rel A'
     else NONE
-  | match_tp env tpctx exvars locals ctx con theta (A.GetPot(p,A)) (A.GetPot(p',A')) = 
+  | match_tp env seen tpctx exvars locals ctx con theta (A.GetPot(p,A)) rel (A.GetPot(p',A')) = 
     if eq_id ctx con p p'
-    then match_tp' env tpctx exvars locals ctx con theta A A'
+    then match_tp' env seen tpctx exvars locals ctx con theta A rel A'
     else NONE
 
-  | match_tp env tpctx exvars locals ctx con theta (A.Next(t,A)) (A.Next(t',A')) =
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Next(t,A)) rel (A.Next(t',A')) =
     if eq_id ctx con t t'
-    then match_tp' env tpctx exvars locals ctx con theta A A'
+    then match_tp' env seen tpctx exvars locals ctx con theta A rel A'
     else NONE
-  | match_tp env tpctx exvars locals ctx con theta (A.Box(A)) (A.Box(A')) =
-    match_tp' env tpctx exvars locals ctx con theta A A'
-  | match_tp env tpctx exvars locals ctx con theta (A.Dia(A)) (A.Dia(A')) =
-    match_tp' env tpctx exvars locals ctx con theta A A'
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Box(A)) rel (A.Box(A')) =
+    match_tp' env seen tpctx exvars locals ctx con theta A rel A'
+  | match_tp env seen tpctx exvars locals ctx con theta (A.Dia(A)) rel (A.Dia(A')) =
+    match_tp' env seen tpctx exvars locals ctx con theta A rel A'
     
-  | match_tp env tpctx exvars locals ctx con theta (A.TpVar(alpha)) A' =
+  | match_tp env seen tpctx exvars locals ctx con theta (A.TpVar(alpha)) rel A' =
     if List.exists (fn beta => beta = alpha) exvars
     then (* alpha is subject to instantiation! *)
         case List.find (fn (beta,B) => beta = alpha) theta
@@ -326,7 +314,7 @@ and match_tp env tpctx exvars locals ctx con theta (A.Plus(choice)) (A.Plus(choi
                     else NONE
           | SOME(beta,B) => (* B = A' required, no further instantiation for matching *)
             (* B should not depend on locals, but A' might *)
-            (case match_tp env tpctx [] locals ctx con [] B A'
+            (case match_tp env seen tpctx [] locals ctx con [] B rel A'
               of NONE => NONE
                | SOME [] => SOME(theta)
             (* SOME(_::_) should be impossible *)
@@ -339,53 +327,83 @@ and match_tp env tpctx exvars locals ctx con theta (A.Plus(choice)) (A.Plus(choi
                 | _ => NONE)
         else raise Match (* this should be impossible *)
 
-  | match_tp env tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) (A' as A.TpName(a',As',es')) =
+  | match_tp env seen tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
+    (* Q: could we call instance_of recursively here without getting into infinite
+     * loops as long as we never unfold? *)
     if a = a' andalso eq_idx ctx con es es'
-    then match_tp_list env tpctx exvars locals ctx con theta (tp_def env a) As As'
-    else NONE
+    then match_tp_list env seen tpctx exvars locals ctx con theta (variances env a) As rel As'
+    else (* was: NONE --- call instance_of ??? *)
+        (* was: A.BiVar instead of rel in next line ??? *)
+        if instance_of env seen tpctx ctx con (mem_seen env seen a rel a' @ mem_env env a rel a') A rel A'
+        then SOME(theta)
+        else NONE
 
-  | match_tp env tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) A' =
-    match_tp' env tpctx exvars locals ctx con theta (TU.expd env A) A'
-  | match_tp env tpctx exvars locals ctx con theta A (A' as A.TpName(a',As',es')) =
-    match_tp' env tpctx exvars locals ctx con theta A (TU.expd env A')
+(* shouldn't need the next two cases by the internal naming invariant? *)
+  | match_tp env seen tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) rel A' =
+    match_tp' env seen tpctx exvars locals ctx con theta (TU.expd env A) rel A'
+  | match_tp env seen tpctx exvars locals ctx con theta A rel (A' as A.TpName(a',As',es')) =
+    match_tp' env seen tpctx exvars locals ctx con theta A rel (TU.expd env A')
 
-  | match_tp env tpctx exvars locals ctx con theta A A' = NONE
+  | match_tp env seen tpctx exvars locals ctx con theta A rel A' = NONE
 
-(* match_tp_list env tpctx exvars locals ctx con theta (a, alphas, B) As As'
+(* match_tp_list env seen tpctx exvars locals ctx con theta (a, alphas, B) As As'
  * requires |alphas| = |As| = |As'| and a[alphas]{...} = B
  *)
-and match_tp_list env tpctx exvars locals ctx con theta (a, nil, B) nil nil = SOME(theta)
-  | match_tp_list env tpctx exvars locals ctx con theta (a, alpha::alphas, B) (A::As) (A'::As') =
-    if invariant env a alpha
-    then match_tp_list env tpctx exvars locals ctx con theta (a, alphas, B) As As'
-    else case match_tp' env tpctx exvars locals ctx con theta A A'
+and match_tp_list env seen tpctx exvars locals ctx con theta nil nil rel nil = SOME(theta)
+  | match_tp_list env seen tpctx exvars locals ctx con theta (W::Ws) (A::As) rel (A'::As') =
+    if W = A.NonVar
+    then match_tp_list env seen tpctx exvars locals ctx con theta Ws As rel As'
+    else case match_tp' env seen tpctx exvars locals ctx con theta A (nested W rel) A'  (* was: rel ??? *)
           of NONE => NONE
-           | SOME(theta1) => match_tp_list env tpctx exvars locals ctx con theta1 (a, alphas, B) As As'
+           | SOME(theta1) => match_tp_list env seen tpctx exvars locals ctx con theta1 Ws As rel As'
 
-and match_tp_bind env tpctx exvars locals ctx con theta (v,A) (v',A') =
+and match_tp_bind env seen tpctx exvars locals ctx con theta (v,A) rel (v',A') =
     let val sigma = R.zip ctx (R.create_idx ctx)
         val w = R.fresh_var sigma v
         val wA = A.apply_tp ((v, R.Var(w))::sigma) A
         val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
-    in match_tp' env tpctx exvars locals (w::ctx) con theta wA wA' end
+    in match_tp' env seen tpctx exvars locals (w::ctx) con theta wA rel wA' end
 
-and match_tp_tpbind env tpctx exvars locals ctx con theta (alpha,A) (alpha',A') =
+and match_tp_tpbind env seen tpctx exvars locals ctx con theta (alpha,A) rel (alpha',A') =
     let val allVars = tpctx @ exvars @ locals
         val dummy = ListPair.zipEq (allVars, List.map A.TpVar allVars)
         val beta = A.fresh_tpvar dummy alpha
         val B = A.subst_tp [(alpha, A.TpVar(beta))] A
         val B' = A.subst_tp [(alpha', A.TpVar(beta))] A'
-    in match_tp' env tpctx exvars (beta::locals) ctx con theta B B' end
+    in match_tp' env seen tpctx exvars (beta::locals) ctx con theta B rel B' end
 
-and match_choice env tpctx exvars locals ctx con theta ((l,A)::choices) choices' =
+and match_choice env seen tpctx exvars locals ctx con theta ((l,A)::choices) rel choices' =
     (case A.lookup_choice_rest choices' l
       of NONE => NONE
        | SOME(A',choices'') =>
-         case match_tp' env tpctx exvars locals ctx con theta A A'
+         case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
           of NONE => NONE
-           | SOME(theta1) => match_choice env tpctx exvars locals ctx con theta1 choices choices'')
-  | match_choice env tpctx exvars locals ctx con theta nil ((l',A')::choices') = NONE
-  | match_choice env tpctx exvars locals ctx con theta nil nil = SOME(theta)
+           | SOME(theta1) => match_choice env seen tpctx exvars locals ctx con theta1 choices rel choices'')
+  | match_choice env seen tpctx exvars locals ctx con theta nil rel ((l',A')::choices') = NONE
+  | match_choice env seen tpctx exvars locals ctx con theta nil rel nil = SOME(theta)
+
+(* to aid in termination, instance_of does not call on general type equality! *)
+and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
+  | instance_of env seen tpctx ctx con 
+                     ((TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), REL, W' as A.TpName(_,AS',ES')))::eqs)
+                     (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) = (* REL = rel *)
+    (* check for substitution instance on types; entailment on constraints *)
+    (* !!! use of ctx and con here is suspicious/wrong !!! *)
+    (case match_tp_list env seen tpctx TPCTX [] ctx con [] (variances env a) AS rel As
+      of NONE => instance_of env seen tpctx ctx con eqs A rel A'
+       | SOME(theta1) => case match_tp_list env seen tpctx TPCTX [] ctx con theta1 (variances env a') AS' rel As'
+                          of NONE => instance_of env seen tpctx ctx con eqs A rel A'
+                           | SOME(theta2) => 
+                             (* As = AS andalso As' = AS' *)
+                             let val (FCTX,sigma) = gen_fresh CTX
+                                 val FCON = R.apply_prop sigma CON
+                                 val FES = R.apply_list sigma ES
+                                 val FES' = R.apply_list sigma ES'
+                                 val phi = gen_prop_eq FCTX FCON FES es FES' es'
+                                 val result = C.entails ctx con phi (* could be trusting non-linear *)
+                             in
+                                 result orelse instance_of env seen tpctx ctx con eqs A rel A'
+                             end)
 
 (* eq_tp' env con seen A A' = true if (A == A') *)
 
@@ -519,33 +537,12 @@ and eq_echoice env tpctx ctx con seen (A.With((l,A)::choices)) rel (A.With(choic
 and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     eq_name_name_seen env tpctx ctx con seen (mem_seen env seen a rel a') A rel A'
 and eq_name_name_seen env tpctx ctx con seen nil (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
-    eq_name_name_eqs env tpctx ctx con seen (mem_env env a rel a') A rel A' (* an instance of global eq decls *)
+    instance_of env seen tpctx ctx con (mem_env env a rel a') A rel A' (* an instance of global eq decls *)
     orelse eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen) (* or a local equality loop *)
                   (TU.expd env A) rel (TU.expd env A')
   | eq_name_name_seen env tpctx ctx con seen seen_eqs (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     (* seen_eqs <> nil, so don't add another equality to help termination issues *)
-    eq_name_name_eqs env tpctx ctx con seen (seen_eqs @ mem_env env a rel a') A rel A'
-and eq_name_name_eqs env tpctx ctx con seen nil A rel A' = false (* do not recurse *)
-  | eq_name_name_eqs env tpctx ctx con seen
-                     ((TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), REL, W' as A.TpName(_,AS',ES')))::eqs)
-                     (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) = (* REL = rel *)
-    (* check for substitution instance on types; entailment on constraints *)
-    (* !!! use of ctx and con here is suspicious/wrong !!! *)
-    (case match_tp_list env tpctx TPCTX [] ctx con [] (tp_def env a) AS As
-      of NONE => eq_name_name_eqs env tpctx ctx con seen eqs A rel A'
-       | SOME(theta1) => case match_tp_list env tpctx TPCTX [] ctx con theta1 (tp_def env a') AS' As'
-                          of NONE => eq_name_name_eqs env tpctx ctx con seen eqs A rel A'
-                           | SOME(theta2) => 
-                             (* As = AS andalso As' = AS' *)
-                             let val (FCTX,sigma) = gen_fresh CTX
-                                 val FCON = R.apply_prop sigma CON
-                                 val FES = R.apply_list sigma ES
-                                 val FES' = R.apply_list sigma ES'
-                                 val phi = gen_prop_eq FCTX FCON FES es FES' es'
-                                 val result = C.entails ctx con phi (* could be trusting non-linear *)
-                             in
-                                 result orelse eq_name_name_eqs env tpctx ctx con seen eqs A rel A'
-                             end)
+    instance_of env seen tpctx ctx con (seen_eqs @ mem_env env a rel a') A rel A'
 
 (* interface *)
 (* start algorithm with seen = nil *)

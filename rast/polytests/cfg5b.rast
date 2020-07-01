@@ -11,8 +11,10 @@ type D[z] = +{ l : z }
 type E[y] = +{ s : E[y] }
 
 eqtype B[y] = E[y]
-eqtype A[B[y]] = C[E[y]]
-eqtype A[A[B[y]]] = C[C[E[y]]]
+eqtype A[x] = C[x]
+% replacing the previous with the next two fails
+% eqtype A[B[y]] = C[E[y]]
+% eqtype A[A[B[y]]] = C[C[E[y]]]
 
 decl id : (d : A[B[1]]) |- (c : C[E[1]])
 proc c <- id d = c <-> d
