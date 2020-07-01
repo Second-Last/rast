@@ -328,15 +328,12 @@ and match_tp env seen tpctx exvars locals ctx con theta (A.Plus(choice)) rel (A.
         else raise Match (* this should be impossible *)
 
   | match_tp env seen tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
-    (* Q: could we call instance_of recursively here without getting into infinite
-     * loops as long as we never unfold? *)
+    (* Q: should this be stronger, as in eq_tp but without type unfolding? *)
     if a = a' andalso eq_idx ctx con es es'
     then match_tp_list env seen tpctx exvars locals ctx con theta (variances env a) As rel As'
-    else (* was: NONE --- call instance_of ??? *)
-        (* was: A.BiVar instead of rel in next line ??? *)
-        if instance_of env seen tpctx ctx con (mem_seen env seen a rel a' @ mem_env env a rel a') A rel A'
-        then SOME(theta)
-        else NONE
+    else if instance_of env seen tpctx ctx con (mem_seen env seen a rel a' @ mem_env env a rel a') A rel A'
+    then SOME(theta)
+    else NONE
 
 (* shouldn't need the next two cases by the internal naming invariant? *)
   | match_tp env seen tpctx exvars locals ctx con theta (A as A.TpName(a,As,es)) rel A' =
@@ -389,7 +386,7 @@ and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
                      (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) = (* REL = rel *)
     (* check for substitution instance on types; entailment on constraints *)
     (* !!! use of ctx and con here is suspicious/wrong !!! *)
-    (case match_tp_list env seen tpctx TPCTX [] ctx con [] (variances env a) AS rel As
+    (case match_tp_list env seen tpctx TPCTX [] ctx con [] (variances env a) AS (A.neg rel) As (* A.neg here ??? *)
       of NONE => instance_of env seen tpctx ctx con eqs A rel A'
        | SOME(theta1) => case match_tp_list env seen tpctx TPCTX [] ctx con theta1 (variances env a') AS' rel As'
                           of NONE => instance_of env seen tpctx ctx con eqs A rel A'
