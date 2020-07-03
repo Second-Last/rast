@@ -252,10 +252,10 @@ fun match_tp' env seen tpctx exvars locals ctx con theta A rel A' =
             rel (aggregate_nexts env ctx con A')
     )
 
-and match_tp env seen tpctx exvars locals ctx con theta (A.Plus(choice)) rel (A.Plus(choice')) =
-    match_choice env seen tpctx exvars locals ctx con theta choice rel choice'
-  | match_tp env seen tpctx exvars locals ctx con theta (A.With(choice)) rel (A.With(choice')) =
-    match_choice env seen tpctx exvars locals ctx con theta choice rel choice'
+and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) rel (A' as A.Plus(choice')) =
+    match_ichoice env seen tpctx exvars locals ctx con theta A rel A'
+  | match_tp env seen tpctx exvars locals ctx con theta (A as A.With(choice)) rel (A' as A.With(choice')) =
+    match_echoice env seen tpctx exvars locals ctx con theta A rel A'
   
   | match_tp env seen tpctx exvars locals ctx con theta (A.Tensor(A,B)) rel (A.Tensor(A',B')) =
     (case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
@@ -369,15 +369,32 @@ and match_tp_tpbind env seen tpctx exvars locals ctx con theta (alpha,A) rel (al
         val B' = A.subst_tp [(alpha', A.TpVar(beta))] A'
     in match_tp' env seen tpctx exvars (beta::locals) ctx con theta B rel B' end
 
-and match_choice env seen tpctx exvars locals ctx con theta ((l,A)::choices) rel choices' =
+and match_ichoice env seen tpctx exvars locals ctx con theta (A.Plus((l,A)::choices)) rel (A.Plus(choices')) =
     (case A.lookup_choice_rest choices' l
-      of NONE => NONE
+      of NONE => if rel = A.ContraVar
+                 then match_ichoice env seen tpctx exvars locals ctx con theta (A.Plus(choices)) rel (A.Plus(choices'))
+                 else NONE
        | SOME(A',choices'') =>
          case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
           of NONE => NONE
-           | SOME(theta1) => match_choice env seen tpctx exvars locals ctx con theta1 choices rel choices'')
-  | match_choice env seen tpctx exvars locals ctx con theta nil rel ((l',A')::choices') = NONE
-  | match_choice env seen tpctx exvars locals ctx con theta nil rel nil = SOME(theta)
+           | SOME(theta1) => match_ichoice env seen tpctx exvars locals ctx con theta1 (A.Plus(choices)) rel (A.Plus(choices'')))
+  | match_ichoice env seen tpctx exvars locals ctx con theta (A.Plus(nil)) rel (A.Plus((l',A')::choices')) =
+    if rel = A.CoVar then SOME(theta) else NONE
+  | match_ichoice env seen tpctx exvars locals ctx con theta (A.Plus(nil)) rel (A.Plus(nil)) = SOME(theta)
+
+and match_echoice env seen tpctx exvars locals ctx con theta (A.With((l,A)::choices)) rel (A.With(choices')) =
+    (case A.lookup_choice_rest choices' l
+      of NONE => if rel = A.CoVar
+                 then match_ichoice env seen tpctx exvars locals ctx con theta (A.With(choices)) rel (A.With(choices'))
+                 else NONE
+       | SOME(A',choices'') =>
+         case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
+          of NONE => NONE
+           | SOME(theta1) => match_echoice env seen tpctx exvars locals ctx con theta1 (A.With(choices)) rel (A.With(choices'')))
+  | match_echoice env seen tpctx exvars locals ctx con theta (A.With(nil)) rel (A.With((l',A')::choices')) =
+    if rel = A.ContraVar then SOME(theta) else NONE
+  | match_echoice env seen tpctx exvars locals ctx con theta (A.With(nil)) rel (A.With(nil)) = SOME(theta)
+
 
 (* to aid in termination, instance_of does not call on general type equality! *)
 and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
