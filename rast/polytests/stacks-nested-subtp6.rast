@@ -1,0 +1,132 @@
+#test success
+#options --expd_depth=3
+
+%%% This version explores whether an increased expansion
+%%% depth allows terser programs. 
+%%% See !!! below
+
+type Stack[A][alpha] = &{ push : A -o Stack[A][Some[A][alpha]],
+                          pop : alpha }
+type Some[A][alpha] = +{ some : A * Stack[A][alpha] }
+type None           = +{ none : 1 }
+
+type Either[A]      = +{ none : 1, some : A * Stack[A][Either[A]] }
+
+%%% Stacks as chains
+
+decl emp[A] : . |- (s : Stack[A][None])
+proc s <- emp[A] =
+  case s ( push => x <- recv s ;
+                   s' <- emp[A] ;
+                   s <- elem[A][None] x s'
+         | pop => s.none ; close s )
+
+decl elem[A][alpha] : (x : A) (t : Stack[A][alpha]) |- (s : Stack[A][Some[A][alpha]])
+proc s <- elem[A][alpha] x t =
+  case s ( push => y <- recv s ;
+                   s' <- elem[A][alpha] x t ;
+                   s <- elem[A][Some[A][alpha]] y s'
+         | pop => s.some ; send s x ; s <-> t )
+
+%%% Reversing "imprecise" stacks
+%%% hypothesizing a subtyping coercion
+
+decl rev[A] : (a : Stack[A][Either[A]]) (t : Stack[A][Either[A]]) |- (s : Stack[A][Either[A]])
+proc s <- rev[A] a t =
+  t.pop ;
+  case t ( none => wait t ; s <-> a
+         | some => x <- recv t ;            % t : Stack[A][Either[A]]
+                   a.push ; send a x ;      % a : Stack[A][Some[A][Either[A]]]
+                   % a' <- stackSomeEither[A] a ;  % a' : Stack[A][Either[A]]
+                   s <- rev[A] a t )
+
+type nat = +{ z : 1, s : nat }
+
+decl zero : . |- (n : nat)
+decl one : . |- (n : nat)
+decl two : . |- (n : nat)
+
+proc n <- zero = n.z ; close n
+proc n <- one = n.s ; n.z ; close n
+proc n <- two = n.s ; n.s ; n.z ; close n
+
+decl s012 : . |- (s : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]])
+proc s <- s012 =
+  t <- emp[nat] ;
+  n0 <- zero ;
+  t.push ; send t n0 ;
+  n1 <- one ;
+  t.push ; send t n1 ;
+  n2 <- two ;
+  t.push ; send t n2 ;
+  s <-> t
+
+%%% Subtype coercions as per Henry's email, June 22
+%%%
+%%% Stack[A][Some[A][Either[A]]] <: Stack[A][Either[A]]
+%%% Stack[A][None]               <: Stack[A][Either[A]]
+decl stackSomeEither[A] : (a : Stack[A][Some[A][Either[A]]]) |- (s : Stack[A][Either[A]])
+decl stackNoneEither[A] : (a : Stack[A][None])               |- (s : Stack[A][Either[A]])
+
+proc s <- stackSomeEither[A] a = s <-> a
+proc s <- stackNoneEither[A] a = s <-> a
+
+% leaving out all the stackNoneEither identities
+% below works only with --expd_depth=3 or greater
+% see that
+(*
+expected t : Stack[nat][Either[nat]]
+found    t : Stack[nat][Some[nat][Some[nat][Some[nat][None]]]]
+which is not a subtype
+*)
+
+decl w012 : . |- (s : Stack[nat][Either[nat]])
+proc s <- w012 =
+  t <- emp[nat] ;
+  % t <- stackNoneEither[nat] t ; % optional
+  n0 <- zero ;
+  t.push ; send t n0 ;
+  % t <- stackSomeEither[nat] t ; % optional
+  n1 <- one ;
+  t.push ; send t n1 ;
+  % next line required with --expd_depth=1; optional with --expd_depth=3
+  % t <- stackSomeEither[nat] t ;
+  n2 <- two ;
+  t.push ; send t n2 ;
+  % t <- stackSomeEither[nat] t ;  % optional
+  s <-> t
+
+decl w210 : . |- (s : Stack[nat][Either[nat]])
+proc s <- w210 =
+  t <- w012 ;
+  e <- emp[nat] ;
+  % e' <- stackNoneEither[nat] e ;
+  s <- rev[nat] e t
+
+exec s012
+exec w012
+exec w210
+
+type list[A] = +{nil : 1, cons : A * list[A]}
+
+decl stackList[A] : (s : Stack[A][Either[A]]) |- (l : list[A])
+proc l <- stackList[A] s =
+  s.pop ;  % s : Either[A]
+  case s ( some => l.cons ;
+                   x <- recv s ; send l x ;
+                   l <- stackList[A] s
+         | none => l.nil ;
+                   wait s ; close l )
+
+decl l012 : . |- (l : list[nat])
+proc l <- l012 =
+  s <- w012 ;
+  l <- stackList[nat] s
+
+decl l210 : . |- (l : list[nat])
+proc l <- l210 =
+  s <- w210 ;
+  l <- stackList[nat] s
+
+exec l012
+exec l210

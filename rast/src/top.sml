@@ -31,6 +31,7 @@ datatype option =
        | Work of string
        | Syntax of string
        | Equality of string
+       | ExpdDepth of string
        | Verbose of int
        | Help of bool
 
@@ -67,7 +68,10 @@ val options : option G.opt_descr list =
       help = "Syntax, one of 'implicit' (default) or 'explicit'"},
      {short = "u", long = ["equality"],
       desc = G.ReqArg ((fn r => Equality(r)), "<algo>"),
-      help = "Type equality algorithm, one of 'subsumerefl' (default), 'subsume', or 'refl'"}
+      help = "Type equality algorithm, one of 'subsumerefl' (default), 'subsume', or 'refl'"},
+     {short = "x", long = ["expd_depth"],
+      desc = G.ReqArg ((fn cm => ExpdDepth(cm)), "<depth>"),
+      help = "Maximal expansion depth for type equality; default is 1"}
     ]
 
 val usage_info = G.usageInfo {header = header, options = options}
@@ -100,6 +104,10 @@ fun process_option (Time(s)) =
     (case Flags.parseEquality r
       of NONE => exit_failure ("type equality algorithm " ^ r ^ " not recognized")
        | SOME(equality) => Flags.equality := equality )
+  | process_option (ExpdDepth(d)) =
+    (case Flags.parseExpdDepth(d)
+      of NONE => exit_failure ("maximal expansion depth " ^ d ^ " not a natural number")
+       | SOME(n) => Flags.expd_depth := n)
   | process_option (Verbose(level)) = Flags.verbosity := level
   | process_option (Help(true)) = exit_success usage_info
   | process_option (Help(false)) = ()

@@ -532,6 +532,15 @@ and eq_echoice env tpctx ctx con seen (A.With((l,A)::choices)) rel (A.With(choic
   | eq_echoice env tpctx ctx con seen (A.With(nil)) rel (A.With(nil)) = true
 
 and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
+    let val seen_eqs = mem_seen env seen a rel a' (* relevant co-inductive hypotheses *)
+        val global_eqs = mem_env env a rel a' (* relevant global assertions *)
+        val subsumed = instance_of env seen tpctx ctx con (seen_eqs @ global_eqs) A rel A'
+    in subsumed orelse (List.length seen_eqs < !Flags.expd_depth
+                        andalso eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen)
+                                       (TU.expd env A) rel (TU.expd env A'))
+    end
+
+(*
     eq_name_name_seen env tpctx ctx con seen (mem_seen env seen a rel a') A rel A'
 and eq_name_name_seen env tpctx ctx con seen nil (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     instance_of env seen tpctx ctx con (mem_env env a rel a') A rel A' (* an instance of global eq decls *)
@@ -540,6 +549,7 @@ and eq_name_name_seen env tpctx ctx con seen nil (A as A.TpName(a,As,es)) rel (A
   | eq_name_name_seen env tpctx ctx con seen seen_eqs (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     (* seen_eqs <> nil, so don't add another equality to help termination issues *)
     instance_of env seen tpctx ctx con (seen_eqs @ mem_env env a rel a') A rel A'
+ *)
 
 (* interface *)
 (* start algorithm with seen = nil *)

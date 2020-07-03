@@ -23,12 +23,15 @@ sig
     datatype equality = SubsumeRefl | Subsume | Refl
     val parseEquality : string -> equality option
     val pp_equality : equality -> string
+    val parseExpdDepth : string -> int option
+    val pp_expdDepth : int -> string
 
     (* cost model parameters *)
     val time : cost ref
     val work : cost ref
     val syntax : syntax ref
     val equality : equality ref
+    val expd_depth : int ref
     val verbosity : int ref
     val help : bool ref
 
@@ -86,11 +89,18 @@ fun pp_equality SubsumeRefl = "subsumerefl"
   | pp_equality Subsume = "subsume"
   | pp_equality Refl = "refl"
 
+fun parseExpdDepth s =
+    (case Int.fromString s
+      of NONE => NONE
+       | SOME(n) => if n < 0 then NONE else SOME(n))
+fun pp_expdDepth n = Int.toString n
+
 (* Default values *)
 val time = ref None
 val work = ref None
 val syntax = ref Implicit
 val equality = ref SubsumeRefl
+val expd_depth = ref 1          (* 1 = admit rule expd once in type equality algorithm *)
 val verbosity = ref 1           (* ~1 = print nothing, 0 = quiet, 1 = normal, 2 = verbose, 3 = debug *)
 val help = ref false
 
@@ -99,6 +109,7 @@ fun reset () =
     ; work := None
     ; syntax := Implicit
     ; equality := SubsumeRefl
+    ; expd_depth := 1
     ; verbosity := 1
     ; help := false )
 
