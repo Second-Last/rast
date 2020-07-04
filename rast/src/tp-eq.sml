@@ -419,157 +419,170 @@ and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
                                  result orelse instance_of env seen tpctx ctx con eqs A rel A'
                              end)
 
+
+datatype path = Root
+              | Plus of A.label * path
+              | With of A.label * path
+              | Tensor1 of path
+              | Tensor2 of path
+              | Lolli1 of path
+              | Lolli2 of path
+              | Exists of Arith.prop * path
+              | Forall of Arith.prop * path
+              | ExistsNat of Arith.varname * path
+              | ForallNat of Arith.varname * path
+              | ExistsTp of A.tpvarname * path
+              | ForallTp of A.tpvarname * path
+              | PayPot of A.pot * path
+              | GetPot of A.pot * path
+              | Next of A.time * path
+              | Dia of path
+              | Box of path
+
 (* eq_tp' env con seen A A' = true if (A == A') *)
 
 (* main entry point *)
-fun eq_tp' env tpctx ctx con seen A rel A' =
+fun eq_tp' path env tpctx ctx con seen A rel A' =
     ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
-    ; eq_tp env tpctx ctx con seen
+    ; eq_tp path env tpctx ctx con seen
             (aggregate_nexts env ctx con A) rel
             (aggregate_nexts env ctx con A')
     )
 
-and eq_tp env tpctx ctx con seen (A as A.Plus(choice)) rel (A' as A.Plus(choice')) =
-    eq_ichoice env tpctx ctx con seen A rel A'
-  | eq_tp env tpctx ctx con seen (A as A.With(choice)) rel (A' as A.With(choice')) =
-    eq_echoice env tpctx ctx con seen A rel A'
+and eq_tp path env tpctx ctx con seen (A as A.Plus(choice)) rel (A' as A.Plus(choice')) =
+    eq_ichoice path env tpctx ctx con seen A rel A'
+  | eq_tp path env tpctx ctx con seen (A as A.With(choice)) rel (A' as A.With(choice')) =
+    eq_echoice path env tpctx ctx con seen A rel A'
   
-  | eq_tp env tpctx ctx con seen (A.Tensor(A,B)) rel (A.Tensor(A',B')) =
-    eq_tp' env tpctx ctx con seen A rel A'
-    andalso eq_tp' env tpctx ctx con seen B rel B'
-  | eq_tp env tpctx ctx con seen (A.Lolli(A,B)) rel (A.Lolli(A',B')) =
-    eq_tp' env tpctx ctx con seen A (A.neg rel) A'
-    andalso eq_tp' env tpctx ctx con seen B rel B'
+  | eq_tp path env tpctx ctx con seen (A.Tensor(A,B)) rel (A.Tensor(A',B')) =
+    eq_tp' (Tensor1(path)) env tpctx ctx con seen A rel A'
+    andalso eq_tp' (Tensor2(path)) env tpctx ctx con seen B rel B'
+  | eq_tp path env tpctx ctx con seen (A.Lolli(A,B)) rel (A.Lolli(A',B')) =
+    eq_tp' (Lolli1(path)) env tpctx ctx con seen A (A.neg rel) A'
+    andalso eq_tp' (Lolli2(path)) env tpctx ctx con seen B rel B'
 
-  | eq_tp env tpctx ctx con seen (A.One) rel (A.One) = true
+  | eq_tp path env tpctx ctx con seen (A.One) rel (A.One) = true
 
-  | eq_tp env tpctx ctx con seen (A.Exists(phi,A)) rel (A.Exists(phi',A')) =
+  | eq_tp path env tpctx ctx con seen (A.Exists(phi,A)) rel (A.Exists(phi',A')) =
     C.equiv ctx con phi phi'
-    andalso eq_tp' env tpctx ctx (R.And(con,phi)) seen A rel A'
+    andalso eq_tp' (Exists(phi,path)) env tpctx ctx (R.And(con,phi)) seen A rel A'
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
-  | eq_tp env tpctx ctx con seen (A.Forall(phi,A)) rel (A.Forall(phi',A')) =
+  | eq_tp path env tpctx ctx con seen (A.Forall(phi,A)) rel (A.Forall(phi',A')) =
     C.equiv ctx con phi phi'
-    andalso eq_tp' env tpctx ctx (R.And(con,phi)) seen A rel A'
+    andalso eq_tp' (Forall(phi,path)) env tpctx ctx (R.And(con,phi)) seen A rel A'
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
 
-  | eq_tp env tpctx ctx con seen (A.ExistsNat(v,A)) rel (A.ExistsNat(v',A')) =
-    eq_tp_bind env tpctx ctx con seen (v,A) rel (v',A')
-  | eq_tp env tpctx ctx con seen (A.ForallNat(v,A)) rel (A.ForallNat(v',A')) =
-    eq_tp_bind env tpctx ctx con seen (v,A) rel (v',A')
+  | eq_tp path env tpctx ctx con seen (A.ExistsNat(v,A)) rel (A.ExistsNat(v',A')) =
+    eq_tp_bind (ExistsNat(v,path)) env tpctx ctx con seen (v,A) rel (v',A')
+  | eq_tp path env tpctx ctx con seen (A.ForallNat(v,A)) rel (A.ForallNat(v',A')) =
+    eq_tp_bind (ForallNat(v,path)) env tpctx ctx con seen (v,A) rel (v',A')
 
-  | eq_tp env tpctx ctx con seen (A.ExistsTp(alpha,A)) rel (A.ExistsTp(alpha',A')) =
-    eq_tp_tpbind env tpctx ctx con seen (alpha,A) rel (alpha',A')
-  | eq_tp env tpctx ctx con seen (A.ForallTp(alpha,A)) rel (A.ForallTp(alpha',A')) =
-    eq_tp_tpbind env tpctx ctx con seen (alpha,A) rel (alpha',A')
+  | eq_tp path env tpctx ctx con seen (A.ExistsTp(alpha,A)) rel (A.ExistsTp(alpha',A')) =
+    eq_tp_tpbind (ExistsTp(alpha,path)) env tpctx ctx con seen (alpha,A) rel (alpha',A')
+  | eq_tp path env tpctx ctx con seen (A.ForallTp(alpha,A)) rel (A.ForallTp(alpha',A')) =
+    eq_tp_tpbind (ForallTp(alpha,path)) env tpctx ctx con seen (alpha,A) rel (alpha',A')
 
-  | eq_tp env tpctx ctx con seen (A.PayPot(p,A)) rel (A.PayPot(p',A')) =
-    eq_id ctx con p p' andalso eq_tp' env tpctx ctx con seen A rel A'
-  | eq_tp env tpctx ctx con seen (A.GetPot(p,A)) rel (A.GetPot(p',A')) = 
-    eq_id ctx con p p' andalso eq_tp' env tpctx ctx con seen A rel A'
+  | eq_tp path env tpctx ctx con seen (A.PayPot(p,A)) rel (A.PayPot(p',A')) =
+    eq_id ctx con p p' andalso eq_tp' (PayPot(p,path)) env tpctx ctx con seen A rel A'
+  | eq_tp path env tpctx ctx con seen (A.GetPot(p,A)) rel (A.GetPot(p',A')) = 
+    eq_id ctx con p p' andalso eq_tp' (GetPot(p,path)) env tpctx ctx con seen A rel A'
 
-  | eq_tp env tpctx ctx con seen (A.Next(t,A)) rel (A.Next(t',A')) =
-    eq_id ctx con t t' andalso eq_tp' env tpctx ctx con seen A rel A'
-  | eq_tp env tpctx ctx con seen (A.Box(A)) rel (A.Box(A')) =
-    eq_tp' env tpctx ctx con seen A rel A'
-  | eq_tp env tpctx ctx con seen (A.Dia(A)) rel (A.Dia(A')) =
-    eq_tp' env tpctx ctx con seen A rel A'
-  | eq_tp env tpctx ctx con seen (A.TpVar(alpha)) rel (A.TpVar(alpha')) =
+  | eq_tp path env tpctx ctx con seen (A.Next(t,A)) rel (A.Next(t',A')) =
+    eq_id ctx con t t' andalso eq_tp' (Next(t,path)) env tpctx ctx con seen A rel A'
+  | eq_tp path env tpctx ctx con seen (A.Box(A)) rel (A.Box(A')) =
+    eq_tp' (Box(path)) env tpctx ctx con seen A rel A'
+  | eq_tp path env tpctx ctx con seen (A.Dia(A)) rel (A.Dia(A')) =
+    eq_tp' (Dia(path)) env tpctx ctx con seen A rel A'
+  | eq_tp path env tpctx ctx con seen (A.TpVar(alpha)) rel (A.TpVar(alpha')) =
     alpha = alpha'
 
   (* case prior to polymorphism untouched *)
-  | eq_tp env tpctx ctx con seen (A as A.TpName(a,nil,es)) rel (A' as A.TpName(a',nil,es')) =
+  (*
+  | eq_tp path env tpctx ctx con seen (A as A.TpName(a,nil,es)) rel (A' as A.TpName(a',nil,es')) =
     if a = a'
     (* reflexivity *)
     then case !Flags.equality
           of Flags.SubsumeRefl => eq_idx ctx con es es'
-                                  orelse eq_name_name env tpctx ctx con seen A rel A' (* both *)
-           | Flags.Subsume => eq_name_name env tpctx ctx con seen A rel A' (* only coinductive equality *)
+                                  orelse eq_name_name path env tpctx ctx con seen A rel A' (* both *)
+           | Flags.Subsume => eq_name_name path env tpctx ctx con seen A rel A' (* only coinductive equality *)
            | Flags.Refl => eq_idx ctx con es es'                 (* only reflexivity *)
-    else eq_name_name env tpctx ctx con seen A rel A' (* coinductive type equality *)
+    else eq_name_name path env tpctx ctx con seen A rel A' (* coinductive type equality *)
+  *)
 
   (* new case for polymorphism *)
-  | eq_tp env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
+  | eq_tp path env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     if a = a'
     (* reflexivity *)
     then case !Flags.equality
-          of Flags.SubsumeRefl => eq_tp_list env tpctx ctx con seen (variances env a) As rel As'
-                                  orelse eq_name_name env tpctx ctx con seen A rel A'
-           | Flags.Subsume => eq_name_name env tpctx ctx con seen A rel A'
-           | Flags.Refl => eq_tp_list env tpctx ctx con seen (variances env a) As rel As'
-    else eq_name_name env tpctx ctx con seen A rel A'
+          of Flags.SubsumeRefl => (eq_idx ctx con es es'
+                                   andalso eq_tp_list path env tpctx ctx con seen (variances env a) As rel As')
+                                  orelse eq_name_name path env tpctx ctx con seen A rel A'
+           | Flags.Subsume => eq_name_name path env tpctx ctx con seen A rel A'
+           | Flags.Refl => (eq_idx ctx con es es'
+                            andalso eq_tp_list path env tpctx ctx con seen (variances env a) As rel As')
+    else eq_name_name path env tpctx ctx con seen A rel A'
 
-  | eq_tp env tpctx ctx con seen (A as A.TpName(a,As,es)) rel A' =
-    eq_tp' env tpctx ctx con seen (TU.expd env A) rel A'
-  | eq_tp env tpctx ctx con seen A rel (A' as A.TpName(a',As',es')) =
-    eq_tp' env tpctx ctx con seen A rel (TU.expd env A')
+  | eq_tp path env tpctx ctx con seen (A as A.TpName(a,As,es)) rel A' =
+    eq_tp' path env tpctx ctx con seen (TU.expd env A) rel A'
+  | eq_tp path env tpctx ctx con seen A rel (A' as A.TpName(a',As',es')) =
+    eq_tp' path env tpctx ctx con seen A rel (TU.expd env A')
 
-  | eq_tp env tpctx ctx con seen A rel A' = false
+  | eq_tp path env tpctx ctx con seen A rel A' = false
 
-(* eq_tp_list env tpctx ctx con seen (a, alphas, B) As As'
+(* eq_tp_list path env tpctx ctx con seen (a, alphas, B) As As'
  * requires |alphas| = |As| = |As'| and a[alphas]{...} = B
  *)
-and eq_tp_list env tpctx ctx con seen nil nil rel nil = true
-  | eq_tp_list env tpctx ctx con seen (W::Ws) (A::As) rel (A'::As') =
+and eq_tp_list path env tpctx ctx con seen nil nil rel nil = true
+  | eq_tp_list path env tpctx ctx con seen (W::Ws) (A::As) rel (A'::As') =
     ( W = A.NonVar              (* don't require nonvariant argument to be related *)
-      orelse eq_tp' env tpctx ctx con seen A (nested W rel) A' )
-    andalso eq_tp_list env tpctx ctx con seen Ws As rel As'
+      orelse eq_tp' path env tpctx ctx con seen A (nested W rel) A' )
+    andalso eq_tp_list path env tpctx ctx con seen Ws As rel As'
 
-and eq_tp_bind env tpctx ctx con seen (v,A) rel (v',A') =
+and eq_tp_bind path env tpctx ctx con seen (v,A) rel (v',A') =
     let val sigma = R.zip ctx (R.create_idx ctx)
         val w = R.fresh_var sigma v
         val wA = A.apply_tp ((v, R.Var(w))::sigma) A
         val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
-    in eq_tp' env tpctx (w::ctx) con seen wA rel wA' end
+    in eq_tp' path env tpctx (w::ctx) con seen wA rel wA' end
 
-and eq_tp_tpbind env tpctx ctx con seen (alpha,A) rel (alpha',A') =
+and eq_tp_tpbind path env tpctx ctx con seen (alpha,A) rel (alpha',A') =
     let val theta = ListPair.zipEq (tpctx, List.map A.TpVar tpctx) (* create identity type subst *)
         val beta = A.fresh_tpvar theta alpha
         val B = A.subst_tp ((alpha, A.TpVar(beta))::theta) A
         val B' = A.subst_tp ((alpha', A.TpVar(beta))::theta) A'
-    in eq_tp' env (beta::tpctx) ctx con seen B rel B' end
+    in eq_tp' path env (beta::tpctx) ctx con seen B rel B' end
 
-and eq_ichoice env tpctx ctx con seen (A.Plus((l,A)::choices)) rel (A.Plus(choices')) =
+and eq_ichoice path env tpctx ctx con seen (A.Plus((l,A)::choices)) rel (A.Plus(choices')) =
     (case A.lookup_choice_rest choices' l
-      of NONE => rel = A.ContraVar andalso eq_ichoice env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'))
-       | SOME(A',choices'') => eq_tp' env tpctx ctx con seen A rel A'
-                               andalso eq_ichoice env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'')))
-  | eq_ichoice env tpctx ctx con seen (A.Plus(nil)) rel (A.Plus((l',A')::choices')) =
-    rel = A.CoVar (* andalso eq_ichoice env tpctx ctx con seen (A.With(nil)) rel (A.With(choices')) *)
-  | eq_ichoice env tpctx ctx con seen (A.Plus(nil)) rel (A.Plus(nil)) = true
+      of NONE => rel = A.ContraVar andalso eq_ichoice path env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'))
+       | SOME(A',choices'') => eq_tp' (Plus(l,path)) env tpctx ctx con seen A rel A'
+                               andalso eq_ichoice path env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'')))
+  | eq_ichoice path env tpctx ctx con seen (A.Plus(nil)) rel (A.Plus((l',A')::choices')) =
+    rel = A.CoVar (* andalso eq_ichoice path env tpctx ctx con seen (A.With(nil)) rel (A.With(choices')) *)
+  | eq_ichoice path env tpctx ctx con seen (A.Plus(nil)) rel (A.Plus(nil)) = true
 
-and eq_echoice env tpctx ctx con seen (A.With((l,A)::choices)) rel (A.With(choices')) =
+and eq_echoice path env tpctx ctx con seen (A.With((l,A)::choices)) rel (A.With(choices')) =
     (case A.lookup_choice_rest choices' l
-      of NONE => rel = A.CoVar andalso eq_echoice env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'))
-       | SOME(A',choices'') => eq_tp' env tpctx ctx con seen A rel A'
-                               andalso eq_echoice env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'')))
-  | eq_echoice env tpctx ctx con seen (A.With(nil)) rel (A.With((l',A')::choices')) =
-    rel = A.ContraVar (* andalso eq_echoice env tpctx ctx con seen (A.With(nil)) rel (A.With(choices')) *)
-  | eq_echoice env tpctx ctx con seen (A.With(nil)) rel (A.With(nil)) = true
+      of NONE => rel = A.CoVar andalso eq_echoice path env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'))
+       | SOME(A',choices'') => eq_tp' (With(l,path)) env tpctx ctx con seen A rel A'
+                               andalso eq_echoice path env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'')))
+  | eq_echoice path env tpctx ctx con seen (A.With(nil)) rel (A.With((l',A')::choices')) =
+    rel = A.ContraVar (* andalso eq_echoice path env tpctx ctx con seen (A.With(nil)) rel (A.With(choices')) *)
+  | eq_echoice path env tpctx ctx con seen (A.With(nil)) rel (A.With(nil)) = true
 
-and eq_name_name env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
+and eq_name_name path env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     let val seen_eqs = mem_seen env seen a rel a' (* relevant co-inductive hypotheses *)
         val global_eqs = mem_env env a rel a' (* relevant global assertions *)
         val subsumed = instance_of env seen tpctx ctx con (seen_eqs @ global_eqs) A rel A'
     in subsumed orelse (List.length seen_eqs < !Flags.expd_depth
-                        andalso eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen)
+                        andalso eq_tp' path env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen)
                                        (TU.expd env A) rel (TU.expd env A'))
     end
 
-(*
-    eq_name_name_seen env tpctx ctx con seen (mem_seen env seen a rel a') A rel A'
-and eq_name_name_seen env tpctx ctx con seen nil (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
-    instance_of env seen tpctx ctx con (mem_env env a rel a') A rel A' (* an instance of global eq decls *)
-    orelse eq_tp' env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen) (* or a local equality loop *)
-                  (TU.expd env A) rel (TU.expd env A')
-  | eq_name_name_seen env tpctx ctx con seen seen_eqs (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
-    (* seen_eqs <> nil, so don't add another equality to help termination issues *)
-    instance_of env seen tpctx ctx con (seen_eqs @ mem_env env a rel a') A rel A'
- *)
-
 (* interface *)
 (* start algorithm with seen = nil *)
-fun eq_tp env tpctx ctx con A rel B = eq_tp' env tpctx ctx con nil A rel B
+fun eq_tp env tpctx ctx con A rel B = eq_tp' Root env tpctx ctx con nil A rel B
 
 end  (* structure TypeEquality *)
