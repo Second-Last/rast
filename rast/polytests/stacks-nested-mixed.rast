@@ -1,0 +1,107 @@
+#test success
+#options --expd_depth=3
+
+%%% from Henry, email of June 19, 2020
+%%% amended to track stack size and list size
+%%% to test mix of polymorphic and indexed types
+
+type Stack[A][alpha]{n} = &{ push : A -o Stack[A][Some[A][alpha]{n+1}]{n+1},
+                             pop : alpha }
+type Some[A][alpha]{n} = +{ some : ?{n > 0}. A * Stack[A][alpha]{n-1} }
+type None{n}           = +{ none : ?{n = 0}. 1 }
+
+type Either[A]{n}      = +{ none : ?{n = 0}. 1,
+                            some : ?{n > 0}. A * Stack[A][Either[A]{n-1}]{n-1} }
+
+%%% Stacks as chains
+
+decl emp[A] : . |- (s : Stack[A][None{0}]{0})
+proc s <- emp[A] =
+  case s ( push => x <- recv s ;
+                   s' <- emp[A] ;
+                   s <- elem[A][None{0}]{0} x s'
+         | pop => s.none ; close s )
+
+decl elem[A][alpha]{n} : (x : A) (t : Stack[A][alpha]{n}) |- (s : Stack[A][Some[A][alpha]{n+1}]{n+1})
+proc s <- elem[A][alpha]{n} x t =
+  case s ( push => y <- recv s ;
+                   s' <- elem[A][alpha]{n} x t ;
+                   s <- elem[A][Some[A][alpha]{n+1}]{n+1} y s'
+         | pop => s.some ; send s x ; s <-> t )
+
+%%% Reversing "imprecise" stacks
+%%% hypothesizing a subtyping coercion
+
+decl rev[A]{k}{n} : (a : Stack[A][Either[A]{k}]{k}) (t : Stack[A][Either[A]{n}]{n}) |- (s : Stack[A][Either[A]{n+k}]{n+k})
+proc s <- rev[A]{k}{n} a t =
+  t.pop ;
+  case t ( none => wait t ; s <-> a
+         | some => x <- recv t ;            % t : Stack[A][Either[A]{n-1}]{n-1}
+                   a.push ; send a x ;      % a : Stack[A][Some[A][Either[A]]{k+1}]{k+1}
+                   s <- rev[A]{k+1}{n-1} a t )
+
+type nat = +{ z : 1, s : nat }
+
+decl zero : . |- (n : nat)
+decl one : . |- (n : nat)
+decl two : . |- (n : nat)
+
+proc n <- zero = n.z ; close n
+proc n <- one = n.s ; n.z ; close n
+proc n <- two = n.s ; n.s ; n.z ; close n
+
+decl s012 : . |- (s : Stack[nat][Some[nat][Some[nat][Some[nat][None{0}]{1}]{2}]{3}]{3})
+proc s <- s012 =
+  t <- emp[nat] ;
+  n0 <- zero ;
+  t.push ; send t n0 ;
+  n1 <- one ;
+  t.push ; send t n1 ;
+  n2 <- two ;
+  t.push ; send t n2 ;
+  s <-> t
+
+decl w012 : . |- (s : Stack[nat][Either[nat]{3}]{3})
+proc s <- w012 =
+  t <- emp[nat] ;
+  n0 <- zero ;
+  t.push ; send t n0 ;
+  n1 <- one ;
+  t.push ; send t n1 ;
+  n2 <- two ;
+  t.push ; send t n2 ;
+  s <-> t
+
+decl w210 : . |- (s : Stack[nat][Either[nat]{3}]{3})
+proc s <- w210 =
+  t <- w012 ;
+  e <- emp[nat] ;
+  s <- rev[nat]{0}{3} e t
+
+exec s012
+exec w012
+exec w210
+
+type list[A]{n} = +{nil : ?{n = 0}. 1, cons : ?{n > 0}. A * list[A]{n-1}}
+
+decl stackList[A]{n} : (s : Stack[A][Either[A]{n}]{n}) |- (l : list[A]{n})
+proc l <- stackList[A]{n} s =
+  s.pop ;  % s : Either[A]{n}
+  case s ( some => l.cons ;
+                   x <- recv s ; send l x ;
+                   l <- stackList[A]{n-1} s
+         | none => l.nil ;
+                   wait s ; close l )
+
+decl l012 : . |- (l : list[nat]{3})
+proc l <- l012 =
+  s <- w012 ;
+  l <- stackList[nat]{3} s
+
+decl l210 : . |- (l : list[nat]{3})
+proc l <- l210 =
+  s <- w210 ;
+  l <- stackList[nat]{3} s
+
+exec l012
+exec l210
