@@ -22,6 +22,7 @@ sig
 
     val update_variances : Ast.env -> Ast.env
     val eq_tp : Ast.env -> Ast.tp_ctx -> Arith.ctx -> Arith.prop -> Ast.tp -> Ast.variance -> Ast.tp -> bool
+    val pp_reason : unit -> string  (* a message regarding the failure of type equality *)
 
 end  (* signature TYPE_EQUALITY *)
 
@@ -419,7 +420,6 @@ and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
                                  result orelse instance_of env seen tpctx ctx con eqs A rel A'
                              end)
 
-
 datatype path = Root
               | Plus of A.label * path
               | With of A.label * path
@@ -438,6 +438,17 @@ datatype path = Root
               | Next of A.time * path
               | Dia of path
               | Box of path
+
+datatype reason = Mismatch of path * A.tp * A.variance * A.tp
+                | BoundExceeded of path * A.tp * A.variance * A.tp
+
+val latest_reason : reason option ref = ref NONE
+
+fun pp_r (SOME(Mismatch _)) = "since the types clash"
+  | pp_r (SOME(BoundExceeded _)) = "since the type expansion bound is exceeded"
+  | pp_r (NONE) = "for no discernible reason"
+
+fun pp_reason () = pp_r (!latest_reason)
 
 (* eq_tp' env con seen A A' = true if (A == A') *)
 
@@ -529,7 +540,9 @@ and eq_tp path env tpctx ctx con seen (A as A.Plus(choice)) rel (A' as A.Plus(ch
   | eq_tp path env tpctx ctx con seen A rel (A' as A.TpName(a',As',es')) =
     eq_tp' path env tpctx ctx con seen A rel (TU.expd env A')
 
-  | eq_tp path env tpctx ctx con seen A rel A' = false
+  | eq_tp path env tpctx ctx con seen A rel A' =
+    ( latest_reason := SOME(Mismatch(path,A,rel,A'))
+    ; false )
 
 (* eq_tp_list path env tpctx ctx con seen (a, alphas, B) As As'
  * requires |alphas| = |As| = |As'| and a[alphas]{...} = B
@@ -554,35 +567,47 @@ and eq_tp_tpbind path env tpctx ctx con seen (alpha,A) rel (alpha',A') =
         val B' = A.subst_tp ((alpha', A.TpVar(beta))::theta) A'
     in eq_tp' path env (beta::tpctx) ctx con seen B rel B' end
 
-and eq_ichoice path env tpctx ctx con seen (A.Plus((l,A)::choices)) rel (A.Plus(choices')) =
+and eq_ichoice path env tpctx ctx con seen (A as A.Plus((l,A1)::choices)) rel (A' as A.Plus(choices')) =
     (case A.lookup_choice_rest choices' l
-      of NONE => rel = A.ContraVar andalso eq_ichoice path env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'))
-       | SOME(A',choices'') => eq_tp' (Plus(l,path)) env tpctx ctx con seen A rel A'
-                               andalso eq_ichoice path env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'')))
-  | eq_ichoice path env tpctx ctx con seen (A.Plus(nil)) rel (A.Plus((l',A')::choices')) =
-    rel = A.CoVar (* andalso eq_ichoice path env tpctx ctx con seen (A.With(nil)) rel (A.With(choices')) *)
+      of NONE => if rel = A.ContraVar
+                 then eq_ichoice path env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'))
+                 else ( latest_reason := SOME(Mismatch(path, A, rel, A')) ; false )
+       | SOME(A1',choices'') => eq_tp' (Plus(l,path)) env tpctx ctx con seen A1 rel A1'
+                                andalso eq_ichoice path env tpctx ctx con seen (A.Plus(choices)) rel (A.Plus(choices'')))
+  | eq_ichoice path env tpctx ctx con seen (A as A.Plus(nil)) rel (A' as A.Plus((l',A1')::choices')) =
+    if rel = A.CoVar
+    then true
+    else ( latest_reason := SOME(Mismatch(path, A, rel, A')) ; false )
   | eq_ichoice path env tpctx ctx con seen (A.Plus(nil)) rel (A.Plus(nil)) = true
 
-and eq_echoice path env tpctx ctx con seen (A.With((l,A)::choices)) rel (A.With(choices')) =
+and eq_echoice path env tpctx ctx con seen (A as A.With((l,A1)::choices)) rel (A' as A.With(choices')) =
     (case A.lookup_choice_rest choices' l
-      of NONE => rel = A.CoVar andalso eq_echoice path env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'))
-       | SOME(A',choices'') => eq_tp' (With(l,path)) env tpctx ctx con seen A rel A'
+      of NONE => if rel = A.CoVar
+                 then eq_echoice path env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'))
+                 else ( latest_reason := SOME(Mismatch(path, A, rel, A')) ; false )
+       | SOME(A1',choices'') => eq_tp' (With(l,path)) env tpctx ctx con seen A1 rel A1'
                                andalso eq_echoice path env tpctx ctx con seen (A.With(choices)) rel (A.With(choices'')))
-  | eq_echoice path env tpctx ctx con seen (A.With(nil)) rel (A.With((l',A')::choices')) =
-    rel = A.ContraVar (* andalso eq_echoice path env tpctx ctx con seen (A.With(nil)) rel (A.With(choices')) *)
+  | eq_echoice path env tpctx ctx con seen (A as A.With(nil)) rel (A' as A.With((l',A1')::choices')) =
+    if rel = A.ContraVar
+    then true
+    else ( latest_reason := SOME(Mismatch(path, A, rel, A')) ; false )
   | eq_echoice path env tpctx ctx con seen (A.With(nil)) rel (A.With(nil)) = true
 
 and eq_name_name path env tpctx ctx con seen (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) =
     let val seen_eqs = mem_seen env seen a rel a' (* relevant co-inductive hypotheses *)
         val global_eqs = mem_env env a rel a' (* relevant global assertions *)
         val subsumed = instance_of env seen tpctx ctx con (seen_eqs @ global_eqs) A rel A'
-    in subsumed orelse (List.length seen_eqs < !Flags.expd_depth
-                        andalso eq_tp' path env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen)
-                                       (TU.expd env A) rel (TU.expd env A'))
+    in subsumed
+       orelse if List.length seen_eqs < !Flags.expd_depth
+              then eq_tp' path env tpctx ctx con ((tpctx,ctx,con,(A,rel,A'))::seen)
+                          (TU.expd env A) rel (TU.expd env A')
+              else ( latest_reason := SOME(BoundExceeded(path,A,rel,A')) ; false )
     end
 
 (* interface *)
 (* start algorithm with seen = nil *)
-fun eq_tp env tpctx ctx con A rel B = eq_tp' Root env tpctx ctx con nil A rel B
+fun eq_tp env tpctx ctx con A rel B =
+    ( latest_reason := NONE
+    ; eq_tp' Root env tpctx ctx con nil A rel B )
 
 end  (* structure TypeEquality *)

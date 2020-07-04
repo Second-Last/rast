@@ -30,6 +30,7 @@ struct
 
 structure A = Ast
 structure PP = PPrint
+structure TEQ = TypeEquality
 val ERROR = ErrorMsg.ERROR
 
 fun error_undeclared (f, ext) =
@@ -77,7 +78,7 @@ fun error_type_mismatch env msg ((x,A), (y,B)) ext =
         ERROR ext ("type mismatch in " ^ msg ^ ":\n"
                    ^ "expected " ^ x_str ^ " : " ^ PP.pp_tp_compact env A ^ "\n"
                    ^ "found    " ^ y_str ^ " : " ^ PP.pp_tp_compact env B ^ "\n"
-                   ^ "which is not a subtype\n")
+                   ^ "which is not a subtype " ^ TEQ.pp_reason() ^ "\n")
     end
 
 fun error_channel_type_mismatch env (expected, (x,A)) ext =

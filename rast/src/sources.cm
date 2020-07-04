@@ -21,10 +21,10 @@ Group is
       normalize.sml
       constraints.sml
       
-      tp-error.sml
       tp-util.sml
-      tp-valid.sml
       tp-eq.sml
+      tp-error.sml
+      tp-valid.sml
       tc-util.sml
       typecheck.sml
 
