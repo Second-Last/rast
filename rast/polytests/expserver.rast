@@ -1,4 +1,5 @@
 #test success
+#options --expd_depth=0
 
 % from Thiemann & Vasconcelos, ICFP 2016
 

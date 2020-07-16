@@ -39,64 +39,71 @@
 %
 %%
 
-type D[alpha] = +{ L : D[D[alpha]] , R : alpha }
-type D0       = +{ L : D[D0] , E : 1 }
+(*
+type D[alpha]{n} = +{ L : ?{n > 0}. ?k. ?{n-k-2 >= 0}. D[D[alpha]{k}]{n-k-2} , R : alpha }
+type D0{n}       = +{ L : ?{n > 0}. ?k. ?{n-k-2 >= 0}. D[D0{k}]{n-k-2} , E : ?{n = 0}. 1 }
+*)
 
-decl fmap[alpha][beta] : (f : alpha -o beta) |- (v : D[alpha] -o D[beta])
-proc v <- fmap[alpha][beta] f =
-  w <- recv v ;
-  case w ( L => v.L ;
-                g <- fmap[alpha][beta] f ;
-                h <- fmap[D[alpha]][D[beta]] g ;
+type D[alpha]{n} = +{ L : ?{n > 1}. ?k. ?{n-k-1 >= 0}. D[D[alpha]{n-k-1}]{k} , R : ?{n = 1}. alpha }
+type D0{n}       = +{ L : ?{n > 0}. ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k} , E : ?{n = 0}. 1 }
+
+decl fmap[alpha][beta]{n} : (f : alpha -o beta) |- (v : D[alpha]{n} -o D[beta]{n})
+proc v <- fmap[alpha][beta]{n} f =
+  w <- recv v ;   % w : D[alpha]{n}
+  case w ( L => {k} <- recv w ;
+                v.L ; send v {k} ;
+                g <- fmap[alpha][beta]{n-k-1} f ;
+                h <- fmap[D[alpha]{n-k-1}][D[beta]{n-k-1}]{k} g ;
                 send h w ; v <-> h
          | R => v.R ;
                 send f w ; v <-> f )
 
-decl append_R : . |- (v : D0 -o D[D0])
-proc v <- append_R =
-  w <- recv v ;
-  case w ( L => v.L ;
-                f <- append_R ;
-                g <- fmap[D0][D[D0]] f ;
-                send g w ; v <-> g
+decl append_R{n} : . |- (v : D0{n} -o D[D0{0}]{n+1})
+proc v <- append_R{n} =
+  w <- recv v ;                 % v : D[D0{0}]{n+1} 
+  case w ( L => v.L ;           % v : ?k. ?{n+1-k-1 >= 0}. D[D[D0{0}]{n-k}]{k}, w : ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k}
+                {k} <- recv w ;
+                f <- append_R{n-k-1} ;
+                g <- fmap[D0{n-k-1}][D[D0{0}]{n-k}]{k} f ;
+                send g w ; send v {k} ;
+                v <-> g
          | E => v.R ; v.E ;
                 wait w ; close v )
-                
-decl surround : (w : D0) |- (v : D0)
-proc v <- surround w =
-  v.L ;
-  f <- append_R ;
+
+decl surround{n} : (w : D0{n}) |- (v : D0{n+2})
+proc v <- surround{n} w =
+  v.L ; send v {n+1} ;
+  f <- append_R{n} ;
   send f w ; v <-> f
 
 
 % Trying it out
-decl emp : . |- (w : D0)
-decl one : . |- (w : D0)
-decl two : . |- (w : D0)
+decl emp : . |- (w : D0{0})
+decl one : . |- (w : D0{2})
+decl two : . |- (w : D0{4})
 
 proc w <- emp = w.E ; close w
-proc w <- one = w.L ; w.R ; w.E ; close w
-proc w <- two = w.L ; w.R ; w.L ; w.R ; w.E ; close w
+proc w <- one = w.L ; send w {1} ; w.R ; w.E ; close w
+proc w <- two = w.L ; send w {1} ; w.R ; w.L ; send w {1} ; w.R ; w.E ; close w
 
-decl surround_emp : . |- (v : D0)
+decl surround_emp : . |- (v : D0{2})
 proc v <- surround_emp =
   w <- emp ;
-  v <- surround w
+  v <- surround{0} w
 
-decl surround_one : . |- (v : D0)
+decl surround_one : . |- (v : D0{4})
 proc v <- surround_one =
   w <- one ;
-  v <- surround w
+  v <- surround{2} w
 
-decl surround_two : . |- (v : D0)
+decl surround_two : . |- (v : D0{6})
 proc v <- surround_two =
   w <- two ;
-  v <- surround w
+  v <- surround{4} w
 
 exec surround_emp
 exec surround_one
 exec surround_two
-
 
 %%% Concatenating two words
 
@@ -117,6 +124,7 @@ exec surround_two
 %
 %%
 
+(*
 decl append : (w2 : D0) |- (v : D0 -o D0)
 proc v <- append w2 =
   w1 <- recv v ;
@@ -141,3 +149,4 @@ proc v <- cs2s1 =
   v <- concat w1 w2
 
 exec cs2s1
+*)
