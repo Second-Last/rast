@@ -5,6 +5,10 @@
 %%% Henry DeYoung
 %%% June 23 2020
 
+%%% This version mixes nested polymorphism for the Dyck
+%%% language and arithmetic indexing to track the length
+%%% of the word
+
 %%% Surrounding a word from the Dyck language
 
 %% Pseudocode sketch
@@ -39,11 +43,8 @@
 %
 %%
 
-(*
-type D[alpha]{n} = +{ L : ?{n > 0}. ?k. ?{n-k-2 >= 0}. D[D[alpha]{k}]{n-k-2} , R : alpha }
-type D0{n}       = +{ L : ?{n > 0}. ?k. ?{n-k-2 >= 0}. D[D0{k}]{n-k-2} , E : ?{n = 0}. 1 }
-*)
-
+% D[alpha]{n} where n length of word, not counting length of alpha
+% We count n down to 1 to model that 'R' implicitly counts as 1
 type D[alpha]{n} = +{ L : ?{n > 1}. ?k. ?{n-k-1 >= 0}. D[D[alpha]{n-k-1}]{k} , R : ?{n = 1}. alpha }
 type D0{n}       = +{ L : ?{n > 0}. ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k} , E : ?{n = 0}. 1 }
 
@@ -124,29 +125,27 @@ exec surround_two
 %
 %%
 
-(*
-decl append : (w2 : D0) |- (v : D0 -o D0)
-proc v <- append w2 =
-  w1 <- recv v ;
-  case w1 ( L => v.L ;
-                 f <- append w2 ;
-                 g <- fmap[D0][D0] f ;
+decl append{n1}{n2} : (w2 : D0{n2}) |- (v : D0{n1} -o D0{n1+n2})
+proc v <- append{n1}{n2} w2 =
+  w1 <- recv v ;                        % (w1 : D0{n1}) (w2 : D0{n2}) |- (v : D0{n2+n1})
+  case w1 ( L => {n1'} <- recv w1 ;     % (w1 : D[D0{n1-n1'-1}]{n1'})
+                 v.L ; send v {n1'} ;   % (w1 : D[D0{n1-n1'-1}]{n1'}) (w2 : D0{n2}) |- (v : D[D0{n2+n1-n1'-1}]{n1'})
+                 f <- append{n1-n1'-1}{n2} w2 ;
+                 g <- fmap[D0{n1-n1'-1}][D0{n1-n1'-1+n2}]{n1'} f ;
                  send g w1 ; v <-> g
          | E => wait w1 ; v <-> w2 )
-                
-decl concat : (w1 : D0) (w2 : D0) |- (v : D0)
-proc v <- concat w1 w2 =
-  f <- append w2 ;
-  send f w1 ; v <-> f
 
+decl concat{n1}{n2} : (w1 : D0{n1}) (w2 : D0{n2}) |- (v : D0{n1+n2})
+proc v <- concat{n1}{n2} w1 w2 =
+  f <- append{n1}{n2} w2 ;
+  send f w1 ; v <-> f
 
 % Trying it out
 
-decl cs2s1 : . |- (v : D0)
+decl cs2s1 : . |- (v : D0{6+4})
 proc v <- cs2s1 =
   w1 <- surround_two ;
   w2 <- surround_one ;
-  v <- concat w1 w2
+  v <- concat{6}{4} w1 w2
 
 exec cs2s1
-*)
