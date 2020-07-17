@@ -11,42 +11,11 @@
 
 %%% Surrounding a word from the Dyck language
 
-%% Pseudocode sketch
-% 
-% D₀ = ⊕{ <: D D₀ , $: 1 }
-% D α = ⊕{ <: D (D α) , >: α }
-% 
-% f : α -o β ⊢ fmap :: v : D α -o D β =
-%   w <- recv v ;
-%   w.case (
-%     < => v.< ;             % w : D (D α) , v : D (D β)
-%          g <- fmap <- f ;  % g : D α -o D β
-%          h <- fmap <- g ;  % h : D (D α) -o D (D β)
-%          send h w ; v <- h
-%   | > => v.> ;
-%          send f w ; v <- f )
-% 
-% ⊢ append_> :: v : D₀ -o D D₀ =
-%   w <- recv v ;
-%   w.case (
-%     < => v.< ;             % w : D D₀ , v : D (D D₀)
-%          f <- append_> ;   % f : D₀ -o D D₀
-%          g <- fmap <- f ;  % g : D D₀ -o D (D D₀)
-%          send g w ; v <- g
-%   | $ => v.> ; v.$ ;
-%          wait w ; close v )
-% 
-% w : D₀ ⊢ surround :: v : D₀ =
-%   v.< ;
-%   f <- append_> ;
-%   send f w ; v <- f
-%
-%%
-
 % D[alpha]{n} where n length of word, not counting length of alpha
 % We count n down to 1 to model that 'R' implicitly counts as 1
-type D[alpha]{n} = +{ L : ?{n > 1}. ?k. ?{n-k-1 >= 0}. D[D[alpha]{n-k-1}]{k} , R : ?{n = 1}. alpha }
-type D0{n}       = +{ L : ?{n > 0}. ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k} , E : ?{n = 0}. 1 }
+% The bounds on n indicate minimal sizes based on the Dyck language
+type D[alpha]{n} = +{ L : ?{n >= 3}. ?k. ?{n-k-1 >= 0}. D[D[alpha]{n-k-1}]{k} , R : ?{n = 1}. alpha }
+type D0{n}       = +{ L : ?{n >= 2}. ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k} , E : ?{n = 0}. 1 }
 
 decl fmap[alpha][beta]{n} : (f : alpha -o beta) |- (v : D[alpha]{n} -o D[beta]{n})
 proc v <- fmap[alpha][beta]{n} f =
