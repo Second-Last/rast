@@ -1,0 +1,120 @@
+#test success
+
+%%% Examples using Dyck language
+%%% Henry DeYoung
+%%% June 23 2020
+
+%%% This version mixes nested polymorphism for the Dyck
+%%% language and arithmetic indexing to track the length
+%%% of the word
+
+%%% Surrounding a word from the Dyck language
+
+% D[alpha]{n} where n length of word, not counting length of alpha
+% We count n down to 1 to model that 'R' implicitly counts as 1
+% The bounds on n indicate minimal sizes based on the Dyck language
+type D[alpha]{n} = +{ L : ?{n >= 3}. ?k. ?{n-k-1 >= 0}. D[D[alpha]{n-k-1}]{k} , R : ?{n = 1}. alpha }
+type D0{n}       = +{ L : ?{n >= 2}. ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k} , E : ?{n = 0}. 1 }
+type E           = +{ E : ?{0 = 0}. 1 }
+
+decl fmap[alpha][beta]{n} : (f : alpha -o beta) |- (v : D[alpha]{n} -o D[beta]{n})
+proc v <- fmap[alpha][beta]{n} f =
+  w <- recv v ;   % w : D[alpha]{n}
+  case w ( L => {k} <- recv w ;
+                v.L ; send v {k} ;
+                g <- fmap[alpha][beta]{n-k-1} f ;
+                h <- fmap[D[alpha]{n-k-1}][D[beta]{n-k-1}]{k} g ;
+                send h w ; v <-> h
+         | R => v.R ;
+                send f w ; v <-> f )
+
+decl append_R{n} : . |- (v : D0{n} -o D[E]{n+1})
+proc v <- append_R{n} =
+  w <- recv v ;                 % v : D[E]{n+1} 
+  case w ( L => v.L ;           % v : ?k. ?{n+1-k-1 >= 0}. D[D[E]{n-k}]{k}, w : ?k. ?{n-k-1 >= 0}. D[D0{n-k-1}]{k}
+                {k} <- recv w ;
+                f <- append_R{n-k-1} ;
+                g <- fmap[D0{n-k-1}][D[E]{n-k}]{k} f ;
+                send g w ; send v {k} ;
+                v <-> g
+         | E => v.R ; v.E ;
+                wait w ; close v )
+
+decl surround{n} : (w : D0{n}) |- (v : D0{n+2})
+proc v <- surround{n} w =
+  v.L ; send v {n+1} ;
+  f <- append_R{n} ;
+  send f w ; v <-> f
+
+
+% Trying it out
+decl emp : . |- (w : D0{0})
+decl one : . |- (w : D0{2})
+decl two : . |- (w : D0{4})
+
+proc w <- emp = w.E ; close w
+proc w <- one = w.L ; send w {1} ; w.R ; w.E ; close w
+proc w <- two = w.L ; send w {1} ; w.R ; w.L ; send w {1} ; w.R ; w.E ; close w
+
+decl surround_emp : . |- (v : D0{2})
+proc v <- surround_emp =
+  w <- emp ;
+  v <- surround{0} w
+
+decl surround_one : . |- (v : D0{4})
+proc v <- surround_one =
+  w <- one ;
+  v <- surround{2} w
+
+decl surround_two : . |- (v : D0{6})
+proc v <- surround_two =
+  w <- two ;
+  v <- surround{4} w
+
+exec surround_emp
+exec surround_one
+exec surround_two
+
+%%% Concatenating two words
+
+%% Pseudocode sketch
+% 
+% w₂ : D₀ ⊢ append :: v : D₀ -o D₀ =
+%   w₁ <- recv v ;
+%   w₁.case (
+%     < => v.< ;             % w : D D₀ , v : D D₀
+%          f <- append w₂ ;  % f : D₀ -o D₀
+%          g <- fmap <- f ;  % g : D D₀ -o D D₀
+%          send g w₁ ; v <- g
+%   | $ => wait w₁ ; v <- w₂ )
+% 
+% w₁ : D₀ , w₂ : D₀ ⊢ concat :: v : D₀ =
+%   f <- append w₂ ;
+%   send f w₁ ; v <- f
+%
+%%
+
+decl append{n1}{n2} : (w2 : D0{n2}) |- (v : D0{n1} -o D0{n1+n2})
+proc v <- append{n1}{n2} w2 =
+  w1 <- recv v ;                        % (w1 : D0{n1}) (w2 : D0{n2}) |- (v : D0{n2+n1})
+  case w1 ( L => {n1'} <- recv w1 ;     % (w1 : D[D0{n1-n1'-1}]{n1'})
+                 v.L ; send v {n1'} ;   % (w1 : D[D0{n1-n1'-1}]{n1'}) (w2 : D0{n2}) |- (v : D[D0{n2+n1-n1'-1}]{n1'})
+                 f <- append{n1-n1'-1}{n2} w2 ;
+                 g <- fmap[D0{n1-n1'-1}][D0{n1-n1'-1+n2}]{n1'} f ;
+                 send g w1 ; v <-> g
+         | E => wait w1 ; v <-> w2 )
+
+decl concat{n1}{n2} : (w1 : D0{n1}) (w2 : D0{n2}) |- (v : D0{n1+n2})
+proc v <- concat{n1}{n2} w1 w2 =
+  f <- append{n1}{n2} w2 ;
+  send f w1 ; v <-> f
+
+% Trying it out
+
+decl cs2s1 : . |- (v : D0{6+4})
+proc v <- cs2s1 =
+  w1 <- surround_two ;
+  w2 <- surround_one ;
+  v <- concat{6}{4} w1 w2
+
+exec cs2s1

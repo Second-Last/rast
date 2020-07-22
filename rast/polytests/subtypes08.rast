@@ -1,0 +1,10 @@
+#test error
+
+type nat{n} = +{ z : ?{n = 0}. 1,
+                 s : ?{n > 0}. nat{n-1} }
+
+type gt3{n} = ?{n > 3}. nat{n}
+type gt4{n} = ?{n > 4}. nat{n}
+
+eqtype gt3{n} <= gt4{n}
+% eqtype gt4{n} <= gt3{n}

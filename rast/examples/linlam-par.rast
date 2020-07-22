@@ -12,9 +12,8 @@ eval (app e1 e2) =
   case eval e1 ( lam f => eval (f v2) ) % no case for app needed
 *)
 
-type exp = +{ val : val ,
-              app : exp * exp }
-              
+type exp = +{ app : exp * exp ,
+              val : val }
               
 type val = +{ lam : val -o exp }
 

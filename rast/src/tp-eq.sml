@@ -153,6 +153,19 @@ fun nested A.BiVar rel = A.BiVar
   | nested A.CoVar rel = rel
   | nested A.ContraVar rel = A.neg rel
 
+(* entailment, based on relation *)
+(* con |- ?{x > 6}. A <= ?{x > 5}. B if con /\ x > 6 |- A <= B *)
+(* con |- !{x > 5}. A <= !{x > 6}. B if con /\ x > 6 |- A <= B *)
+fun entail ctx con phi (A.BiVar) phi' = C.equiv ctx con phi phi'
+  | entail ctx con phi (A.CoVar) phi' = C.entails ctx (R.And(con,phi)) phi'
+  | entail ctx con phi (A.ContraVar) phi' = C.entails ctx (R.And(con,phi')) phi
+
+(* pick the assumption that makes both types well-formed *)
+(* we assume entail ctx con phi rel phi' == true *)
+fun stronger ctx con phi (A.BiVar) phi' = phi (* either okay here *)
+  | stronger ctx con phi (A.CoVar) phi' = phi
+  | stronger ctx con phi (A.ContraVar) phi' = phi'
+
 (* eq_id ctx con e e' iff ctx ; con |= e = e' *)
 fun eq_id ctx con e e' = C.entails ctx con (R.Eq(e,e'))
 
@@ -270,12 +283,12 @@ and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) re
   | match_tp env seen tpctx exvars locals ctx con theta (A.One) rel (A.One) = SOME(theta)
 
   | match_tp env seen tpctx exvars locals ctx con theta (A.Exists(phi,A)) rel (A.Exists(phi',A')) =
-    if C.equiv ctx con phi phi'
-    then match_tp' env seen tpctx exvars locals ctx (R.And(con,phi)) theta A rel A'
+    if entail ctx con phi rel phi'
+    then match_tp' env seen tpctx exvars locals ctx (R.And(con,stronger ctx con phi rel phi')) theta A rel A'
     else NONE
   | match_tp env seen tpctx exvars locals ctx con theta (A.Forall(phi,A)) rel (A.Forall(phi',A')) =
-    if C.equiv ctx con phi phi'
-    then match_tp' env seen tpctx exvars locals ctx (R.And(con,phi)) theta A rel A'
+    if entail ctx con phi (A.neg rel) phi'
+    then match_tp' env seen tpctx exvars locals ctx (R.And(con,stronger ctx con phi (A.neg rel) phi')) theta A rel A'
     else NONE
 
   | match_tp env seen tpctx exvars locals ctx con theta (A.ExistsNat(v,A)) rel (A.ExistsNat(v',A')) =
@@ -475,13 +488,13 @@ and eq_tp path env tpctx ctx con seen (A as A.Plus(choice)) rel (A' as A.Plus(ch
   | eq_tp path env tpctx ctx con seen (A.One) rel (A.One) = true
 
   | eq_tp path env tpctx ctx con seen (A.Exists(phi,A)) rel (A.Exists(phi',A')) =
-    C.equiv ctx con phi phi'
-    andalso eq_tp' (Exists(phi,path)) env tpctx ctx (R.And(con,phi)) seen A rel A'
+    entail ctx con phi rel phi'
+    andalso eq_tp' (Exists(phi,path)) env tpctx ctx (R.And(con,stronger ctx con phi rel phi')) seen A rel A'
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
   | eq_tp path env tpctx ctx con seen (A.Forall(phi,A)) rel (A.Forall(phi',A')) =
-    C.equiv ctx con phi phi'
-    andalso eq_tp' (Forall(phi,path)) env tpctx ctx (R.And(con,phi)) seen A rel A'
+    entail ctx con phi (A.neg rel) phi'
+    andalso eq_tp' (Forall(phi,path)) env tpctx ctx (R.And(con,stronger ctx con phi rel phi')) seen A rel A'
     (* for now, require equality even in the presence of contradictory constraints *)
     (* orelse C.contradictory ctx con phi *)
 
