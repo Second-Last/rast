@@ -197,6 +197,7 @@ fun mem_seen env ((E as (TPCTX,CTX,CON,(A as A.TpName(B,AS,ES), REL, A' as A.TpN
   | mem_seen env nil a rel a' = nil
 
 (* fresh internal name generation, in the arithmetic layer *)
+(*
 fun fresh v = "%" ^ v
 
 fun gen_fresh nil = (nil, nil)
@@ -206,17 +207,33 @@ fun gen_fresh nil = (nil, nil)
     in
       (fv::fvs,(v, R.Var(fv))::sigma)
     end
+*)
+fun next v = v ^ "^"
+
+fun fresh used v =
+    if List.exists (fn u => v = u) used
+    then fresh used (next v)
+    else v
+
+fun gen_fresh used nil = (nil, nil)
+  | gen_fresh used (v::vs) =
+    let val fv = fresh used v
+        val (fvs, rho) = gen_fresh used vs
+    in (fv::fvs, (v,R.Var(fv))::rho) end
 
 fun gen_eq nil nil = R.True
   | gen_eq (E::ES) (e::es) = R.And(R.Eq(E,e), gen_eq ES es)
 
-(* gen_prop_eq FCTX FCON FES es FES' es' => FCTX |= FCON /\ FES = es /\ FES' = es' *)
-fun gen_prop_eq FCTX FCON FES es FES' es' =
+(* gen_prop_eq FCON FES es FES' es' ==> FCON /\ FES = es /\ FES' = es' *)
+fun gen_eqs_prop FCON FES es FES' es' =
     let val eqs = gen_eq FES es
         val eqs' = gen_eq FES' es'
-        val and_prop = R.And(FCON, R.And(eqs, eqs'))
-        (* val () = TextIO.print (PP.pp_prop and_prop ^ "\n") *)
-        val nnf_prop = R.nnf and_prop
+        val eqs_prop = R.And(FCON, R.And(eqs, eqs'))
+    in eqs_prop end
+
+fun gen_exists_prop FCTX eqs_prop =
+    let
+        val nnf_prop = R.nnf eqs_prop
         val exists_prop = R.elim_vars FCTX nnf_prop (* exists_prop is in NNF, but not using it *)
     in
         exists_prop
@@ -249,22 +266,23 @@ fun aggregate_nexts env ctx con (A as A.Next(t,A')) =
     aggregate_nexts' env ctx con t A'
   | aggregate_nexts env ctx con A = A
 
-(* match_tp env exvars tpctx ctx con seen theta A A' = theta'
- * if theta' extends theta and [theta']A === [theta']A'
- * where === is syntactic equality
+(* match_tp env seen tpctx exvars locals ctx con theta A rel A' = theta'
+ * (tpctx, exvars, locals) ; ctx ; con |- A type
+ * (tpctx, _     , locals) ; ctx ; con |- A' type [no exvars in A']
+ * theta' extends theta
+ * tpctx |- theta' : exvars  [theta' may not depend on locals]
+ * (tpctx, locals) ; ctx ; con |- [theta']A rel A'
+ * for 'rel' one of <= (A.CoVar), >= (A.ContraVar), == (A.BiVar)
  *)
-
 fun not_free_in betas A =
     let val alphas = A.free_tpvars nil A
     in List.all (fn beta => not (List.exists (fn alpha => alpha = beta) alphas)) betas end
 
 (* main entry point *)
 fun match_tp' env seen tpctx exvars locals ctx con theta A rel A' =
-    ( () (* TextIO.print (A.Print.pp_tp A ^ " =?= " ^ A.Print.pp_tp A' ^ "\n") *)
-    ; match_tp env seen tpctx exvars locals ctx con theta
-            (aggregate_nexts env ctx con A)
-            rel (aggregate_nexts env ctx con A')
-    )
+    match_tp env seen tpctx exvars locals ctx con theta
+             (aggregate_nexts env ctx con A)
+             rel (aggregate_nexts env ctx con A')
 
 and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) rel (A' as A.Plus(choice')) =
     match_ichoice env seen tpctx exvars locals ctx con theta A rel A'
@@ -276,7 +294,7 @@ and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) re
       of NONE => NONE
        | SOME(theta1) => match_tp' env seen tpctx exvars locals ctx con theta1 B rel B')
   | match_tp env seen tpctx exvars locals ctx con theta (A.Lolli(A,B)) rel (A.Lolli(A',B')) =
-    (case match_tp' env seen tpctx exvars locals ctx con theta A rel A'
+    (case match_tp' env seen tpctx exvars locals ctx con theta A (A.neg rel) A'
       of NONE => NONE
        | SOME(theta1) => match_tp' env seen tpctx exvars locals ctx con theta1 B rel B')
 
@@ -323,7 +341,7 @@ and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) re
     if List.exists (fn beta => beta = alpha) exvars
     then (* alpha is subject to instantiation! *)
         case List.find (fn (beta,B) => beta = alpha) theta
-         of NONE => if not_free_in locals A'
+         of NONE => if not_free_in locals A'  (* check that A' does not depend on local type variables *)
                     then SOME((alpha,A')::theta)
                     else NONE
           | SOME(beta,B) => (* B = A' required, no further instantiation for matching *)
@@ -334,7 +352,7 @@ and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) re
             (* SOME(_::_) should be impossible *)
             )
     else (* alpha is not subject to instantiation! *)
-        (* this means it should be in locals or tpctx *)
+        (* this means it should be in locals or tpctx and A = A' required *)
         if List.exists (fn beta => beta = alpha) (tpctx @ locals)
         then (case A'
                of A.TpVar(alpha') => if alpha = alpha' then SOME(theta) else NONE
@@ -345,7 +363,9 @@ and match_tp env seen tpctx exvars locals ctx con theta (A as A.Plus(choice)) re
     (* Q: should this be stronger, as in eq_tp but without type unfolding? *)
     if a = a' andalso eq_idx ctx con es es'
     then match_tp_list env seen tpctx exvars locals ctx con theta (variances env a) As rel As'
-    else if instance_of env seen tpctx ctx con (mem_seen env seen a rel a' @ mem_env env a rel a') A rel A'
+    else if instance_of env seen (tpctx @ locals) ctx con
+                        (mem_seen env seen a rel a' @ mem_env env a rel a')
+                        A rel A'
     then SOME(theta)
     else NONE
 
@@ -364,12 +384,12 @@ and match_tp_list env seen tpctx exvars locals ctx con theta nil nil rel nil = S
   | match_tp_list env seen tpctx exvars locals ctx con theta (W::Ws) (A::As) rel (A'::As') =
     if W = A.NonVar
     then match_tp_list env seen tpctx exvars locals ctx con theta Ws As rel As'
-    else case match_tp' env seen tpctx exvars locals ctx con theta A (nested W rel) A'  (* was: rel ??? *)
+    else case match_tp' env seen tpctx exvars locals ctx con theta A (nested W rel) A'
           of NONE => NONE
            | SOME(theta1) => match_tp_list env seen tpctx exvars locals ctx con theta1 Ws As rel As'
 
 and match_tp_bind env seen tpctx exvars locals ctx con theta (v,A) rel (v',A') =
-    let val sigma = R.zip ctx (R.create_idx ctx)
+    let val sigma = R.zip ctx (R.create_idx ctx) (* necessary? *)
         val w = R.fresh_var sigma v
         val wA = A.apply_tp ((v, R.Var(w))::sigma) A
         val wA' = A.apply_tp ((v', R.Var(w))::sigma) A'
@@ -416,22 +436,28 @@ and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
                      ((TPCTX,CTX,CON, (W as A.TpName(_,AS,ES), REL, W' as A.TpName(_,AS',ES')))::eqs)
                      (A as A.TpName(a,As,es)) rel (A' as A.TpName(a',As',es')) = (* REL = rel *)
     (* check for substitution instance on types; entailment on constraints *)
-    (* !!! use of ctx and con here is suspicious/wrong !!! *)
-    (case match_tp_list env seen tpctx TPCTX [] ctx con [] (variances env a) AS (A.neg rel) As (* A.neg here ??? *)
-      of NONE => instance_of env seen tpctx ctx con eqs A rel A'
-       | SOME(theta1) => case match_tp_list env seen tpctx TPCTX [] ctx con theta1 (variances env a') AS' rel As'
-                          of NONE => instance_of env seen tpctx ctx con eqs A rel A'
-                           | SOME(theta2) => 
-                             (* As = AS andalso As' = AS' *)
-                             let val (FCTX,sigma) = gen_fresh CTX
-                                 val FCON = R.apply_prop sigma CON
-                                 val FES = R.apply_list sigma ES
-                                 val FES' = R.apply_list sigma ES'
-                                 val phi = gen_prop_eq FCTX FCON FES es FES' es'
-                                 val result = C.entails ctx con phi (* could be trusting non-linear *)
-                             in
-                                 result orelse instance_of env seen tpctx ctx con eqs A rel A'
-                             end)
+    (* first, check that there is an entailment of arithmetic constraints *)
+    (* then verify that *all* solutions to the constraint entailment makes the type arguments equal *)
+    let val (FCTX,rho) = gen_fresh ctx CTX (* rename away from ctx *)
+        val FCON = R.apply_prop rho CON
+        val FES = R.apply_list rho ES
+        val FES' = R.apply_list rho ES'
+        val eqs_prop = gen_eqs_prop FCON FES es FES' es'  (* FCON /\ FES = es /\ FES' = es' *)
+        val exists_prop = gen_exists_prop FCTX eqs_prop   (* exists FCTX. FCON /\ FES = es /\ FES' = es' *)
+        val idx_entailed = C.entails ctx con exists_prop  (* ctx ; con |= exists FCTX. FCON /\ FES = es /\ FES' = es' *)
+                                                          (* could be trusting non-linear *)
+        val joint_ctx = ctx @ FCTX
+        val joint_con = R.And(con,eqs_prop)               (* but not existentially quantified *)
+    in
+        (idx_entailed
+         (* exvars = TPCTX, locals = [], theta = [] *)
+         andalso (case match_tp_list env seen tpctx TPCTX [] joint_ctx joint_con [] (variances env a) AS (A.neg rel) As
+                   of NONE => instance_of env seen tpctx ctx con eqs A rel A'
+                    | SOME(theta1) => case match_tp_list env seen tpctx TPCTX [] joint_ctx joint_con theta1 (variances env a') AS' rel As'
+                                       of NONE => instance_of env seen tpctx ctx con eqs A rel A'
+                                        | SOME(theta2) => true))
+        orelse instance_of env seen tpctx ctx con eqs A rel A'
+    end
 
 datatype path = Root
               | Plus of A.label * path
