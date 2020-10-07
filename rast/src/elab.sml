@@ -373,6 +373,10 @@ fun elab_tps env nil = nil
                  else ()
         val Ar = resolve env [] A
         val Ar' = resolve env [] A'
+        val () = case (Ar,Ar')
+                  of (A.TpVar _, _) => ERROR ext ("type " ^ PP.pp_tp env Ar ^ " not defined")
+                   | (_, A.TpVar _) => ERROR ext ("type " ^ PP.pp_tp env Ar' ^ " not defined")
+                   | (_, _) => ()
         val tpctx0 = A.free_tpvars [] Ar
         val tpctx1 = A.free_tpvars tpctx0 Ar'
         val ctx0 = R.free_prop con nil (* always nil, in current syntax *)

@@ -1,0 +1,4 @@
+#test error
+
+type T[x] = +{L : 1}
+eqtype T[x] <= x
