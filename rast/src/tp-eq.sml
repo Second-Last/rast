@@ -459,6 +459,12 @@ and instance_of env seen tpctx ctx con nil A rel A' = false (* do not recurse *)
         orelse instance_of env seen tpctx ctx con eqs A rel A'
     end
 
+(*
+ * Paths through types in order to support better
+ * error messages on mismatched types.  This is currently
+ * not used, although the information is maintained
+ * by the algorithm
+ *)
 datatype path = Root
               | Plus of A.label * path
               | With of A.label * path

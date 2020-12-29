@@ -206,7 +206,7 @@ fun exit_on_empty_files nil = exit_success Flags.version
   | exit_on_empty_files (_::_) = ()
 
 (* main function to run file *)
-fun test args =
+fun test raise_exn args =
     (* reset flags *)
     let val () = Flags.reset()
         val () = Constraints.approx := false
@@ -217,7 +217,8 @@ fun test args =
         (* parse and load file, i.e., generate an environment *)
         val env = load nil filenames
             handle ErrorMsg.Error => exit_failure "% parsing or type-checking failed"
-                 | e => raise e (* exit_failure "% internal error (uncaught exception)" *)
+                 | e => if raise_exn then raise e (* when run in SML read/eval/print loop *)
+                        else exit_failure "% internal error (uncaught exception)"
         val () = run env env  (* run all 'exec' decls in env *)
             handle Eval.DynError => exit_failure "% execution failed"
     in
@@ -225,7 +226,7 @@ fun test args =
     end handle OS_SUCCESS => OS.Process.success
              | OS_FAILURE => OS.Process.failure
 
-fun rast argstring = test (String.tokens Char.isSpace argstring)
-fun main (name, args) = test args
+fun rast argstring = test true (String.tokens Char.isSpace argstring)
+fun main (name, args) = test false args
 
 end (* structure Top *)
