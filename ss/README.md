@@ -53,6 +53,7 @@ For regression testing:
 - `binarith/*.ss`  - binary arithmetic
 - `modarith/*.ss`  - modular binary arithmetic
 - `turing/*.ss`    - some primitive recursive functions as Turing machines
+- `lmcs21/*.ss`    - termination, see https://arxiv.org/abs/1908.01909
 
 ## Tests
 
