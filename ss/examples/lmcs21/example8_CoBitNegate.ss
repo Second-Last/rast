@@ -2,7 +2,7 @@
 #test success
 
 
-type cobits=&{nu_cobits:+{b0:cobits, b1:cobits}}
+type cobits=&{nu_cobits:&{b0:cobits, b1:cobits}}
 
 
 proc CoBitNegate: cobits |- cobits
