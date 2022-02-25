@@ -53,7 +53,7 @@ For regression testing:
 - `binarith/*.ss`  - binary arithmetic
 - `modarith/*.ss`  - modular binary arithmetic
 - `turing/*.ss`    - some primitive recursive functions as Turing machines
-- `lmcs21/*.ss`    - termination, see https://arxiv.org/abs/1908.01909
+- `lmcs22/*.ss`    - termination, see https://arxiv.org/abs/1908.01909
 
 ## Tests
 
@@ -92,6 +92,17 @@ For regression testing:
 Currently, the implementation cannot perform both time
 and work reconstruction on the same source: with `--syntax=implicit`
 either time or work must be `none`
+
+## Termination checking
+
+The termination checker (implementing the system in [Circular proofs as session-typed processes: A local validity condition] (https://arxiv.org/pdf/1908.01909.pdf)) uses backtracking,
+trying various priority orders, so it may explicitly reject some
+orderings before ultimately either succeeding or failing.  These intermediate
+"error" messages explicitly exhibit some information about why the program is
+not valid for an attempted order.
+
+The switch --terminate=equi means that the termination checker performs on the equirecursive code by silently converting it to an isorecursive implementation, while --terminate=iso means that the termination checker performs on the isorecursive code.
+See the files examples/misc/pluse.ss and examples/lmcs22/example6_Copy.ss  for examples, respectively.
 
 ## Grammar 
 
